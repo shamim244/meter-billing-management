@@ -38,12 +38,26 @@ class UserPanelTest extends TestCase
     public function test_user_can_view_subscription_page(): void
     {
         $user = User::factory()->create(['status' => 'active']);
+        $plan = \App\Models\Plan::create([
+            'name' => 'Pro Operator',
+            'base_price' => 499.00,
+            'included_mrus' => 10,
+            'included_consumers' => 5000,
+            'extra_mru_rate' => 100.00,
+            'extra_consumer_rate' => 0.20,
+            'is_active' => true,
+        ]);
+        $plan->durations()->create([
+            'duration_months' => 1,
+            'discount_percent' => 0,
+            'final_price' => 499.00,
+        ]);
 
         $response = $this->actingAs($user)->get('/user-panel/subscription');
 
         $response->assertStatus(200);
-        $response->assertSee('Physical Storage');
-        $response->assertSee('Free Starter');
+        $response->assertSeeText('Subscription & Quota Management');
+        $response->assertSee('Available Subscription Plans');
         $response->assertSee('Pro Operator');
     }
 

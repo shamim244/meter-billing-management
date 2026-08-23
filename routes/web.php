@@ -100,6 +100,11 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
     Route::get('/wallet', [\App\Http\Controllers\WalletController::class, 'index'])->name('wallet.index');
     Route::get('/wallet/export', [\App\Http\Controllers\WalletController::class, 'export'])->name('wallet.export');
 
+    // Subscription Checkout & Purchase Flow
+    Route::get('/subscription/purchase/{plan}/{duration}', [\App\Http\Controllers\SubscriptionCheckoutController::class, 'show'])->name('subscription.purchase');
+    Route::post('/subscription/purchase/{plan}/{duration}/process', [\App\Http\Controllers\SubscriptionCheckoutController::class, 'process'])->name('subscription.purchase.process');
+    Route::post('/subscription/subscribe-wallet', [\App\Http\Controllers\SubscriptionCheckoutController::class, 'subscribeWallet'])->name('subscription.subscribe_wallet');
+
     // User Panel & Operator Control Center (Overview, Subscription, Shortcuts, Preferences, Profile)
     Route::prefix('user-panel')->name('user-panel.')->group(function () {
         Route::get('/', [\App\Http\Controllers\UserPanelController::class, 'index'])->name('index');

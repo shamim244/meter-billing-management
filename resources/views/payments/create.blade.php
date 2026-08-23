@@ -6,7 +6,7 @@
 
     <div x-data="{
         mode: '{{ $settings['pg_enabled'] ? 'pg' : ($settings['manual_upi_enabled'] ? 'manual_upi' : 'bank_transfer') }}',
-        purpose: '{{ $defaultPurpose }}',
+        purpose: 'wallet_topup',
         amount: {{ $presetAmount }},
         minAmount: {{ $settings['min_amount'] }},
         activePgDriver: '{{ $settings['active_pg_driver'] }}',
@@ -56,7 +56,7 @@
                     },
                     body: JSON.stringify({
                         mode: 'pg',
-                        purpose: this.purpose,
+                        purpose: 'wallet_topup',
                         amount: this.amount
                     })
                 });
@@ -75,7 +75,7 @@
                         amount: data.order.amount_paise,
                         currency: 'INR',
                         name: data.order.name || 'NBPDCL SaaS Billing',
-                        description: data.order.description || data.order.purpose,
+                        description: data.order.description || 'Wallet Top-up',
                         order_id: data.order.order_id,
                         prefill: {
                             name: data.order.customer_name,
@@ -98,20 +98,19 @@
                         const rzp = new Razorpay(options);
                         rzp.on('payment.failed', function (resp) {
                             _this.isSubmitting = false;
-                            _this.errorMessage = (resp.error && resp.error.description) ? resp.error.description : 'Payment failed at Razorpay.';
+                            _this.errorMessage = resp.error.description || 'Payment was declined.';
                         });
                         rzp.open();
                     } else {
-                        window.location.href = '{{ route('payments.index') }}';
+                        throw new Error('Razorpay checkout library failed to load.');
                     }
                     return;
                 }
 
-                // 2. Cashfree Checkout Flow
+                // 2. Cashfree Drop Checkout Flow
                 if (data.order && data.order.gateway === 'cashfree') {
-                    if (window.Cashfree && data.order.payment_session_id) {
-                        const cfMode = (data.order.environment === 'production') ? 'production' : 'sandbox';
-                        const cashfree = Cashfree({ mode: cfMode });
+                    if (window.Cashfree) {
+                        const cashfree = Cashfree({ mode: data.order.environment === 'production' ? 'production' : 'sandbox' });
                         cashfree.checkout({
                             paymentSessionId: data.order.payment_session_id,
                             redirectTarget: '_self'
@@ -139,9 +138,9 @@
                     </a>
                     <div>
                         <h1 class="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-                            <span>⚡</span> Add Balance / Make Payment
+                            <span>👛</span> Add Funds / Wallet Top-Up
                         </h1>
-                        <p class="text-xs text-slate-500 dark:text-slate-400">Choose your preferred payment method and enter details.</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Add prepaid balance to your Agent Wallet for automated cycle audits, quota overage, and subscription renewals.</p>
                     </div>
                 </div>
 
@@ -181,34 +180,13 @@
 
             <form action="{{ route('payments.store') }}" method="POST" enctype="multipart/form-data" @submit="handleCheckout($event)" class="space-y-6">
                 @csrf
+                <input type="hidden" name="purpose" value="wallet_topup">
 
-                <!-- 1. Purpose & Amount Card -->
+                <!-- 1. Top-Up Amount Card -->
                 <div class="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-5">
                     <h2 class="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                        <span>1️⃣</span> Payment Purpose & Amount
+                        <span>1️⃣</span> Top-Up Amount
                     </h2>
-
-                    <!-- Purpose Selector -->
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">Payment For</label>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <label :class="purpose === 'wallet_topup' ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-300'" class="p-4 rounded-2xl border-2 cursor-pointer flex items-center gap-3 transition">
-                                <input type="radio" name="purpose" value="wallet_topup" x-model="purpose" class="text-indigo-600 focus:ring-indigo-500">
-                                <div>
-                                    <div class="font-bold text-xs">👛 Wallet Top-Up</div>
-                                    <div class="text-[11px] text-slate-500 dark:text-slate-400">Add prepaid credits for monthly bill audits</div>
-                                </div>
-                            </label>
-
-                            <label :class="purpose === 'direct_subscription' ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-300'" class="p-4 rounded-2xl border-2 cursor-pointer flex items-center gap-3 transition">
-                                <input type="radio" name="purpose" value="direct_subscription" x-model="purpose" class="text-indigo-600 focus:ring-indigo-500">
-                                <div>
-                                    <div class="font-bold text-xs">⭐ Direct Subscription Payment</div>
-                                    <div class="text-[11px] text-slate-500 dark:text-slate-400">Activate or renew a plan tier directly</div>
-                                </div>
-                            </label>
-                        </div>
-                    </div>
 
                     <!-- Amount Input & Quick Presets -->
                     <div>

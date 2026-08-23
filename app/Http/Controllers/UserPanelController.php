@@ -52,65 +52,26 @@ class UserPanelController extends Controller
             'storage_percent' => $user->getStorageUsagePercent(),
             'pdf_count' => $user->getPdfCount(),
             'mru_count' => $user->mrus()->count(),
+            'consumer_count' => $user->consumerAccounts()->count(),
             'bills_count' => BillRecord::where('user_id', $user->id)->count(),
         ];
 
-        $plans = [
-            [
-                'id' => 'free',
-                'name' => 'Free Starter',
-                'price' => '₹0',
-                'period' => 'Forever Free',
-                'storage' => '100 MB PDF Storage',
-                'mrus' => 'Up to 10 MRUs',
-                'concurrency' => '2 Parallel multi-cURL Downloaders',
-                'badge' => 'Active Default',
-                'features' => [
-                    'Standard NBPDCL Bill PDF Downloader',
-                    'Single-Key Card Review & Working Reading Ledger',
-                    'Basic Storage Cleaner & Cycle Purge',
-                    '100 MB Local Storage Quota',
-                ],
-            ],
-            [
-                'id' => 'pro',
-                'name' => 'Pro Operator',
-                'price' => '₹499',
-                'period' => 'per month',
-                'storage' => '2 GB PDF Storage',
-                'mrus' => 'Unlimited MRU Workspaces',
-                'concurrency' => '10 Parallel multi-cURL Turbo Downloaders',
-                'badge' => 'Most Popular',
-                'features' => [
-                    'Everything in Free Plan',
-                    '2 GB High-Speed PDF Document Storage',
-                    'Unlimited MRUs and Consumer Accounts',
-                    'Bulk ZIP Export & Auto-Extraction Batching',
-                    'AI Anomaly Detection & Meter Reading OCR Vision',
-                    'Priority 24/7 Technical Support',
-                ],
-            ],
-            [
-                'id' => 'enterprise',
-                'name' => 'Enterprise Division',
-                'price' => '₹1,999',
-                'period' => 'per month',
-                'storage' => '10 GB+ Dedicated Storage',
-                'mrus' => 'Multi-Subdivision Deployment',
-                'concurrency' => '25+ Parallel Multi-Thread Downloaders',
-                'badge' => 'Power Utility',
-                'features' => [
-                    'Everything in Pro Plan',
-                    '10 GB+ Dedicated Storage Allocation',
-                    'Dedicated Subdivision & Section Mapping',
-                    'Automated Nightly Cycle Reconciliation',
-                    'Custom PDF Audit & Revenue Recovery Reports',
-                    'Dedicated Account Manager & SLA Guarantee',
-                ],
-            ],
-        ];
+        $plans = \App\Models\Plan::where('is_active', true)
+            ->with(['durations' => function ($q) {
+                $q->orderBy('duration_months');
+            }])
+            ->orderBy('base_price')
+            ->get();
 
-        return view('user-panel.subscription', compact('user', 'stats', 'plans'));
+        $activeSubscription = $user->subscriptions()
+            ->where('status', 'active')
+            ->where('billing_end', '>', now())
+            ->latest('id')
+            ->first();
+
+        $walletBalance = (float) app(\App\Services\Wallet\WalletService::class)->getBalance($user);
+
+        return view('user-panel.subscription', compact('user', 'stats', 'plans', 'activeSubscription', 'walletBalance'));
     }
 
     /**

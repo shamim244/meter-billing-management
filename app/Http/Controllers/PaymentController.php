@@ -61,15 +61,20 @@ class PaymentController extends Controller
     }
 
     /**
-     * Show Checkout / Add Funds form.
+     * Show Checkout / Add Funds form (Dedicated to Wallet Top-Up only).
      */
-    public function create(Request $request): View
+    public function create(Request $request): View|RedirectResponse
     {
+        // If legacy direct_subscription parameter is passed, redirect to the subscription plan page
+        if ($request->query('purpose') === 'direct_subscription' || $request->input('purpose') === 'direct_subscription') {
+            return redirect()->route('user-panel.subscription')
+                ->with('info', 'Direct subscription purchases are now completed via the dedicated Subscription Confirmation page. Please select your plan.');
+        }
+
         $settings = $this->settingsService->getSettings();
-        $defaultPurpose = $request->query('purpose', PaymentPurpose::WALLET_TOPUP->value);
         $presetAmount = max((float) $request->query('amount', 500.0), $settings['min_amount']);
 
-        return view('payments.create', compact('settings', 'defaultPurpose', 'presetAmount'));
+        return view('payments.create', compact('settings', 'presetAmount'));
     }
 
     /**
