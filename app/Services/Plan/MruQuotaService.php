@@ -35,7 +35,7 @@ class MruQuotaService
     /**
      * Check how many included MRU slots are available for an agent.
      */
-    public function checkMruQuotaAvailable(User|int $user): int
+    public function checkMruQuotaAvailable(User|int $user, ?int $excludeMruId = null): int
     {
         $userId = $user instanceof User ? $user->id : $user;
         $subscription = $this->getActiveSubscription($userId);
@@ -44,10 +44,15 @@ class MruQuotaService
             return 0;
         }
 
-        $activeMrusCount = Mru::where('user_id', $userId)
+        $query = Mru::where('user_id', $userId)
             ->where('status', 'active')
-            ->where('is_over_quota', false)
-            ->count();
+            ->where('is_over_quota', false);
+
+        if ($excludeMruId) {
+            $query->where('id', '!=', $excludeMruId);
+        }
+
+        $activeMrusCount = $query->count();
 
         return max(0, $subscription->included_mrus_locked - $activeMrusCount);
     }
@@ -70,7 +75,7 @@ class MruQuotaService
             ];
         }
 
-        $availableSlots = $this->checkMruQuotaAvailable($userModel);
+        $availableSlots = $this->checkMruQuotaAvailable($userModel, $mru->id);
 
         // Case 1: Within included plan quota
         if ($availableSlots > 0) {
@@ -220,7 +225,7 @@ class MruQuotaService
             'status' => 'active',
             'locked_reason' => null,
             'unlocked_at' => now(),
-            'is_over_quota' => true,
+            'is_over_quota' => $payOverage,
         ]);
 
         event(new MruUnlockedEvent($mru, $payOverage ? $extraRate : 0.0));

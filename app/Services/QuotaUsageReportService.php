@@ -80,8 +80,11 @@ class QuotaUsageReportService
             ->whereYear('created_at', $year)
             ->get();
 
-        $mruTotal = (float) $charges->where('charge_type', 'mru')->sum('amount');
-        $consumerTotal = (float) $charges->where('charge_type', 'consumer')->sum('amount');
+        $mruTypes = ['mru_creation', 'mru_renewal', 'mru_unlock', 'mru'];
+        $consumerTypes = ['consumer_cycle', 'consumer_cycle_sync', 'consumer'];
+
+        $mruTotal = (float) $charges->whereIn('charge_type', $mruTypes)->sum('amount');
+        $consumerTotal = (float) $charges->whereIn('charge_type', $consumerTypes)->sum('amount');
 
         return [
             'mru_charges' => $mruTotal,

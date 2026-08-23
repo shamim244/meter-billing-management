@@ -20,13 +20,25 @@ class RenewalService
     ) {}
 
     /**
+     * Get renewable subscription for an agent (active, renewal_due, grace_period, or suspended).
+     */
+    public function getRenewableSubscription(User|int $user): ?AgentSubscription
+    {
+        $userId = $user instanceof User ? $user->id : $user;
+        return AgentSubscription::where('user_id', $userId)
+            ->whereIn('lifecycle_status', ['active', 'renewal_due', 'grace_period', 'suspended'])
+            ->latest('id')
+            ->first() ?? AgentSubscription::where('user_id', $userId)->latest('id')->first();
+    }
+
+    /**
      * Calculate renewal summary data for prompt screen.
      * Enforces PRD invariant: Consumer overage is NEVER included in renewal calculation.
      */
     public function calculateRenewalSummary(User|int $user): array
     {
         $userModel = $user instanceof User ? $user : User::findOrFail($user);
-        $subscription = $this->mruQuotaService->getActiveSubscription($userModel);
+        $subscription = $this->getRenewableSubscription($userModel);
 
         if (!$subscription) {
             return [
@@ -80,7 +92,7 @@ class RenewalService
         array $selectedMrusToLock = []
     ): array {
         $userModel = $user instanceof User ? $user : User::findOrFail($user);
-        $subscription = $this->mruQuotaService->getActiveSubscription($userModel);
+        $subscription = $this->getRenewableSubscription($userModel);
 
         if (!$subscription) {
             return [

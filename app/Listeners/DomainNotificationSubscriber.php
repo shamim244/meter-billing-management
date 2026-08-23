@@ -45,12 +45,16 @@ class DomainNotificationSubscriber
     public function handlePaymentSuccess(PaymentSuccessEvent $event): void
     {
         $p = $event->payment;
+        $gatewayName = $p->gateway_payment_id ? 'Razorpay' : 'Payment Gateway';
+        $methodName = $p->mode ? $p->mode->label() : 'Online';
+        $txnId = $p->gateway_payment_id ?: ($p->utr_number ?: ($p->bank_reference ?: (string) $p->id));
+
         $this->dispatcher->dispatch('payment.success', $p->user, [
             'amount' => number_format($p->amount, 2),
-            'gateway' => ucfirst($p->gateway ?? 'Payment Gateway'),
-            'payment_method' => strtoupper($p->payment_method ?? 'ONLINE'),
-            'transaction_id' => $p->gateway_payment_id ?: (string) $p->id,
-            'purpose' => $p->purpose,
+            'gateway' => $gatewayName,
+            'payment_method' => $methodName,
+            'transaction_id' => $txnId,
+            'purpose' => $p->purpose?->value ?? (string) $p->purpose,
         ]);
     }
 
@@ -66,9 +70,10 @@ class DomainNotificationSubscriber
     public function handleManualPaymentSubmitted(ManualPaymentSubmittedEvent $event): void
     {
         $p = $event->payment;
+        $utr = $p->utr_number ?: ($p->bank_reference ?: 'Pending Verification');
         $this->dispatcher->dispatch('payment.manual_submitted', $p->user, [
             'amount' => number_format($p->amount, 2),
-            'utr_number' => $p->bank_reference_number ?: 'Pending Verification',
+            'utr_number' => $utr,
         ]);
     }
 
@@ -222,7 +227,7 @@ class DomainNotificationSubscriber
     public function handleSubscriptionRenewalDue(SubscriptionRenewalDueEvent $event): void
     {
         $sub = $event->subscription;
-        $days = (int) now()->diffInDays($sub->current_period_ends_at, false);
+        $days = (int) now()->diffInDays($sub->billing_end, false);
         $this->dispatcher->dispatch('subscription.renewal_due', $sub->user, [
             'plan_name' => $sub->plan?->name ?? 'Custom Plan',
             'days_remaining' => max(0, $days),
@@ -270,7 +275,7 @@ class DomainNotificationSubscriber
         $this->dispatcher->dispatch('subscription.upgraded', $sub->user, [
             'old_plan' => $event->fromPlan->name,
             'new_plan' => $event->toPlan->name,
-            'prorated_charge' => number_format($event->log->prorated_amount ?? 0, 2),
+            'prorated_charge' => number_format($event->log->amount_charged ?? 0, 2),
         ]);
     }
 
@@ -280,7 +285,7 @@ class DomainNotificationSubscriber
         $this->dispatcher->dispatch('subscription.downgraded', $sub->user, [
             'old_plan' => $event->fromPlan->name,
             'new_plan' => $event->toPlan->name,
-            'prorated_credit' => number_format($event->log->prorated_amount ?? 0, 2),
+            'prorated_credit' => number_format($event->log->amount_charged ?? 0, 2),
         ]);
     }
 
