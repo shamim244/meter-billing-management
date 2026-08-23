@@ -1,0 +1,3 @@
+Generates admin and user roles.
+Creates a default admin account (admin@nbpdcl-saas.com / AdminPass123!).
+Creates a default client account (test@example.com / password).

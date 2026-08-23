@@ -1,0 +1,328 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Enums\PaymentAuditAction;
+use App\Enums\PaymentMode;
+use App\Enums\PaymentPurpose;
+use App\Enums\PaymentStatus;
+use App\Events\ManualPaymentSubmittedEvent;
+use App\Events\PaymentFailedEvent;
+use App\Events\PaymentSuccessEvent;
+use App\Models\Payment;
+use App\Models\PaymentAuditLog;
+use App\Services\Payment\BankTransferPaymentService;
+use App\Services\Payment\ManualUpiPaymentService;
+use App\Services\Payment\OnlinePaymentGatewayService;
+use App\Services\Payment\PaymentSettingsService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\View\View;
+
+class PaymentController extends Controller
+{
+    public function __construct(
+        protected PaymentSettingsService $settingsService,
+        protected OnlinePaymentGatewayService $onlinePgService,
+        protected ManualUpiPaymentService $manualUpiService,
+        protected BankTransferPaymentService $bankTransferService
+    ) {}
+
+    /**
+     * Display billing agent payment history & current wallet/plan status.
+     */
+    public function index(Request $request): View
+    {
+        $user = $request->user();
+
+        $payments = Payment::where('user_id', $user->id)
+            ->latest('id')
+            ->paginate(15);
+
+        $stats = [
+            'total_paid' => (float) Payment::where('user_id', $user->id)
+                ->where('status', PaymentStatus::SUCCESS->value)
+                ->sum('amount'),
+            'pending_verification' => Payment::where('user_id', $user->id)
+                ->where('status', PaymentStatus::PENDING_VERIFICATION->value)
+                ->count(),
+            'recent_success' => Payment::where('user_id', $user->id)
+                ->where('status', PaymentStatus::SUCCESS->value)
+                ->latest('id')
+                ->first(),
+        ];
+
+        return view('payments.index', compact(
+            'payments',
+            'stats'
+        ));
+    }
+
+    /**
+     * Show Checkout / Add Funds form.
+     */
+    public function create(Request $request): View
+    {
+        $settings = $this->settingsService->getSettings();
+        $defaultPurpose = $request->query('purpose', PaymentPurpose::WALLET_TOPUP->value);
+        $presetAmount = max((float) $request->query('amount', 500.0), $settings['min_amount']);
+
+        return view('payments.create', compact('settings', 'defaultPurpose', 'presetAmount'));
+    }
+
+    /**
+     * Client Sandbox / Testing Payment Playground View.
+     */
+    public function sandbox(Request $request): View
+    {
+        $user = $request->user();
+        $settings = $this->settingsService->getSettings();
+        
+        $recentPayments = Payment::where('user_id', $user->id)
+            ->latest('id')
+            ->limit(5)
+            ->get();
+
+        $stats = [
+            'total_paid' => (float) Payment::where('user_id', $user->id)
+                ->where('status', PaymentStatus::SUCCESS->value)
+                ->sum('amount'),
+            'successful_count' => Payment::where('user_id', $user->id)
+                ->where('status', PaymentStatus::SUCCESS->value)
+                ->count(),
+            'pending_count' => Payment::where('user_id', $user->id)
+                ->where('status', PaymentStatus::PENDING_VERIFICATION->value)
+                ->count(),
+        ];
+
+        return view('payments.sandbox', compact('user', 'settings', 'recentPayments', 'stats'));
+    }
+
+    /**
+     * Process sandbox mock checkout for billing agent testing.
+     */
+    public function sandboxCheckout(Request $request): RedirectResponse|JsonResponse
+    {
+        $request->validate([
+            'test_mode' => 'required|string|in:pg_razorpay,pg_cashfree,manual_upi,bank_transfer',
+            'purpose' => 'required|string|in:wallet_topup,direct_subscription',
+            'amount' => 'required|numeric|min:1',
+            'outcome' => 'required|string|in:success,failed',
+        ]);
+
+        $user = $request->user();
+        $testMode = $request->input('test_mode');
+        $purpose = PaymentPurpose::from($request->input('purpose'));
+        $amount = (float) $request->input('amount');
+        $outcome = $request->input('outcome');
+
+        // 1. Mock Online PG (Razorpay or Cashfree)
+        if ($testMode === 'pg_razorpay' || $testMode === 'pg_cashfree') {
+            $gatewayName = ($testMode === 'pg_razorpay') ? 'Razorpay' : 'Cashfree';
+            $orderId = ($testMode === 'pg_razorpay' ? 'order_test_' : 'cf_ord_test_') . Str::random(10);
+            $paymentId = ($testMode === 'pg_razorpay' ? 'pay_test_' : 'cf_pay_test_') . Str::random(10);
+
+            if ($outcome === 'success') {
+                $payment = Payment::create([
+                    'user_id' => $user->id,
+                    'mode' => PaymentMode::PG,
+                    'purpose' => $purpose,
+                    'amount' => $amount,
+                    'currency' => 'INR',
+                    'status' => PaymentStatus::SUCCESS,
+                    'gateway_order_id' => $orderId,
+                    'gateway_payment_id' => $paymentId,
+                    'verified_at' => now(),
+                ]);
+
+                PaymentAuditLog::create([
+                    'payment_id' => $payment->id,
+                    'admin_id' => null,
+                    'action' => PaymentAuditAction::APPROVED,
+                    'notes' => "[SANDBOX] Client completed test payment via {$gatewayName} simulator (Ref: {$paymentId}).",
+                ]);
+
+                event(new PaymentSuccessEvent($payment, $paymentId));
+
+                return redirect()->route('payments.sandbox')->with('success', "🎉 Sandbox {$gatewayName} payment of ₹" . number_format($amount, 2) . " completed successfully! Balance credited to ledger.");
+            } else {
+                $payment = Payment::create([
+                    'user_id' => $user->id,
+                    'mode' => PaymentMode::PG,
+                    'purpose' => $purpose,
+                    'amount' => $amount,
+                    'currency' => 'INR',
+                    'status' => PaymentStatus::FAILED,
+                    'gateway_order_id' => $orderId,
+                    'gateway_payment_id' => $paymentId,
+                    'rejection_reason' => 'Simulated test card decline (Sandbox)',
+                ]);
+
+                PaymentAuditLog::create([
+                    'payment_id' => $payment->id,
+                    'admin_id' => null,
+                    'action' => PaymentAuditAction::REJECTED,
+                    'notes' => "[SANDBOX] Client simulated payment decline via {$gatewayName}.",
+                ]);
+
+                event(new PaymentFailedEvent($payment, 'Simulated test card decline (Sandbox)'));
+
+                return redirect()->route('payments.sandbox')->with('error', "❌ Simulated test payment was declined (Payment #{$payment->id}). This is expected in failure test mode.");
+            }
+        }
+
+        // 2. Mock Manual UPI Submission
+        if ($testMode === 'manual_upi') {
+            $mockUtr = '423' . rand(100000000, 999999999);
+            $payment = Payment::create([
+                'user_id' => $user->id,
+                'mode' => PaymentMode::MANUAL_UPI,
+                'purpose' => $purpose,
+                'amount' => $amount,
+                'currency' => 'INR',
+                'status' => PaymentStatus::PENDING_VERIFICATION,
+                'utr_number' => $mockUtr,
+            ]);
+
+            event(new ManualPaymentSubmittedEvent($payment));
+
+            return redirect()->route('payments.sandbox')->with('success', "📱 Test Manual UPI payment submitted with UTR: {$mockUtr}. It is now in the Admin Verification Queue!");
+        }
+
+        // 3. Mock Bank Transfer Submission
+        if ($testMode === 'bank_transfer') {
+            $mockRef = 'NEFT-SBIN-' . rand(100000, 999999);
+            $payment = Payment::create([
+                'user_id' => $user->id,
+                'mode' => PaymentMode::BANK_TRANSFER,
+                'purpose' => $purpose,
+                'amount' => $amount,
+                'currency' => 'INR',
+                'status' => PaymentStatus::PENDING_VERIFICATION,
+                'bank_reference' => $mockRef,
+            ]);
+
+            event(new ManualPaymentSubmittedEvent($payment));
+
+            return redirect()->route('payments.sandbox')->with('success', "🏦 Test Bank Transfer submitted with Reference: {$mockRef}. It is now in the Admin Verification Queue!");
+        }
+
+        return redirect()->route('payments.sandbox');
+    }
+
+    /**
+     * Process checkout submission across PG, Manual UPI, or Bank Transfer.
+     */
+    public function store(Request $request): RedirectResponse|JsonResponse
+    {
+        $settings = $this->settingsService->getSettings();
+        $minAmount = $settings['min_amount'];
+
+        $request->validate([
+            'mode' => 'required|string|in:' . implode(',', PaymentMode::values()),
+            'purpose' => 'required|string|in:' . implode(',', PaymentPurpose::values()),
+            'amount' => "required|numeric|min:{$minAmount}",
+            'utr_number' => 'required_if:mode,manual_upi|nullable|string|max:100',
+            'bank_reference' => 'required_if:mode,bank_transfer|nullable|string|max:100',
+            'screenshot' => 'nullable|image|max:5120', // Max 5MB image
+        ]);
+
+        $user = $request->user();
+        $mode = PaymentMode::from($request->input('mode'));
+        $purpose = PaymentPurpose::from($request->input('purpose'));
+        $amount = (float) $request->input('amount');
+
+        try {
+            switch ($mode) {
+                case PaymentMode::PG:
+                    $orderData = $this->onlinePgService->createOrder($user, $amount, $purpose);
+                    if ($request->wantsJson() || $request->ajax()) {
+                        return response()->json([
+                            'success' => true,
+                            'order' => $orderData['checkout_config'],
+                            'payment_id' => $orderData['payment']->id,
+                        ]);
+                    }
+                    return redirect()->route('payments.index')->with('info', "Online PG order #{$orderData['payment']->gateway_order_id} generated. Complete checkout to finalize.");
+
+                case PaymentMode::MANUAL_UPI:
+                    $payment = $this->manualUpiService->submitPayment(
+                        $user,
+                        $amount,
+                        $purpose,
+                        $request->input('utr_number'),
+                        $request->file('screenshot')
+                    );
+                    return redirect()->route('payments.index')->with('success', "Payment submitted with UTR: {$payment->utr_number}. Status is Pending Admin Verification.");
+
+                case PaymentMode::BANK_TRANSFER:
+                    $payment = $this->bankTransferService->submitPayment(
+                        $user,
+                        $amount,
+                        $purpose,
+                        $request->input('bank_reference'),
+                        $request->file('screenshot')
+                    );
+                    return redirect()->route('payments.index')->with('success', "Bank transfer submitted with Ref: {$payment->bank_reference}. Status is Pending Admin Verification.");
+            }
+        } catch (\Throwable $e) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'error' => $e->getMessage()], 422);
+            }
+            return redirect()->back()->withInput()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('payments.index');
+    }
+
+    /**
+     * Verify payment status upon return from Cashfree or Razorpay hosted checkout.
+     */
+    public function verify(Request $request): RedirectResponse
+    {
+        $orderId = $request->query('razorpay_order_id') ?? $request->query('order_id');
+        $paymentId = $request->query('razorpay_payment_id') ?? $request->query('payment_id');
+        $signature = $request->query('razorpay_signature') ?? $request->query('signature');
+
+        if (empty($orderId)) {
+            return redirect()->route('payments.index')->with('error', 'No order ID provided for payment verification.');
+        }
+
+        $payment = Payment::where('gateway_order_id', $orderId)->first();
+
+        // 1. Handle Razorpay client callback verification with signature
+        if ($payment && !empty($paymentId) && !empty($signature)) {
+            $isValid = $this->onlinePgService->verifyRazorpayPaymentSignature($orderId, $paymentId, $signature);
+            if ($isValid) {
+                if ($payment->status !== PaymentStatus::SUCCESS) {
+                    $payment->update([
+                        'status' => PaymentStatus::SUCCESS,
+                        'gateway_payment_id' => $paymentId,
+                        'verified_at' => now(),
+                    ]);
+                    event(new PaymentSuccessEvent($payment, $paymentId));
+                }
+                return redirect()->route('payments.index')->with('success', "Payment #{$payment->id} for ₹" . number_format((float)$payment->amount, 2) . " completed and verified successfully via Razorpay!");
+            }
+        }
+
+        // 2. Handle Cashfree direct order verification
+        $payment = $this->onlinePgService->verifyOrderWithCashfree($orderId);
+
+        if (!$payment) {
+            return redirect()->route('payments.index')->with('error', "Payment order '{$orderId}' not found.");
+        }
+
+        if ($payment->status === PaymentStatus::SUCCESS) {
+            return redirect()->route('payments.index')->with('success', "Payment #{$payment->id} for ₹" . number_format((float)$payment->amount, 2) . " completed and verified successfully!");
+        }
+
+        if ($payment->status === PaymentStatus::FAILED) {
+            return redirect()->route('payments.index')->with('error', "Payment #{$payment->id} failed: " . ($payment->rejection_reason ?: 'Transaction was declined or cancelled.'));
+        }
+
+        return redirect()->route('payments.index')->with('info', "Payment #{$payment->id} is pending gateway confirmation. It will update automatically once verified.");
+    }
+}
