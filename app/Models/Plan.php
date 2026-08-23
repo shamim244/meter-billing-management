@@ -57,4 +57,23 @@ class Plan extends Model
     {
         return $query->where('is_active', true);
     }
+
+    /**
+     * Get base price (1-month duration final_price, or lowest duration price).
+     */
+    public function getBasePriceAttribute(): float
+    {
+        if ($this->relationLoaded('durations') || $this->durations()->exists()) {
+            $monthly = $this->durations->firstWhere('duration_months', 1);
+            if ($monthly) {
+                return (float) $monthly->final_price;
+            }
+            $minPrice = $this->durations->min('final_price');
+            if ($minPrice !== null) {
+                return (float) $minPrice;
+            }
+        }
+
+        return 0.0;
+    }
 }

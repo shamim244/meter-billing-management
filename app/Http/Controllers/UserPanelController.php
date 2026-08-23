@@ -60,7 +60,7 @@ class UserPanelController extends Controller
             ->with(['durations' => function ($q) {
                 $q->orderBy('duration_months');
             }])
-            ->orderBy('base_price')
+            ->orderBy('id')
             ->get();
 
         $activeSubscription = $user->subscriptions()
