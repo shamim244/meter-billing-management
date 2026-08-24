@@ -144,6 +144,29 @@ class MruController extends Controller
     }
 
     /**
+     * Self-lock an active MRU.
+     */
+    public function lock(Mru $mru, Request $request): JsonResponse|RedirectResponse
+    {
+        $this->authorizeMru($mru);
+
+        $reason = $request->input('reason', 'user_manual_lock');
+        $this->mruQuotaService->lockMru($mru, $reason);
+
+        $msg = "MRU '{$mru->name} ({$mru->code})' has been locked.";
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => $msg,
+                'mru' => $mru->fresh(),
+            ]);
+        }
+
+        return redirect()->back()->with('success', $msg);
+    }
+
+    /**
      * Unlock an MRU via wallet deduction.
      */
     public function unlock(Mru $mru, Request $request): JsonResponse|RedirectResponse

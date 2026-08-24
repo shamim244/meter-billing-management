@@ -61,6 +61,11 @@ class SubscriptionCheckoutController extends Controller
 
         $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription);
 
+        $downgradeEligibility = null;
+        if ($pricingDetails['action_type'] === 'downgrade' && $activeSubscription) {
+            $downgradeEligibility = $this->planChangeService->checkDowngradeEligibility($activeSubscription, $plan);
+        }
+
         return view('subscription.purchase', compact(
             'plan',
             'duration',
@@ -68,7 +73,8 @@ class SubscriptionCheckoutController extends Controller
             'activeSubscription',
             'pricingDetails',
             'settings',
-            'walletBalance'
+            'walletBalance',
+            'downgradeEligibility'
         ));
     }
 
@@ -107,6 +113,11 @@ class SubscriptionCheckoutController extends Controller
         // If upgrade/purchase requires 0 payment (e.g. covered by credit or free tier)
         if ($amount <= 0) {
             if ($pricingDetails['action_type'] === 'downgrade' && $activeSubscription) {
+                $eligibility = $this->planChangeService->checkDowngradeEligibility($activeSubscription, $plan);
+                if (!$eligibility['eligible']) {
+                    return redirect()->route('subscription.purchase', ['plan' => $plan->id, 'duration' => $duration->id])
+                        ->with('error', $eligibility['message']);
+                }
                 $downgradeResult = $this->planChangeService->downgradePlan($activeSubscription, $plan, $duration);
                 if ($downgradeResult['success']) {
                     return redirect()->route('user-panel.subscription')
@@ -229,12 +240,28 @@ class SubscriptionCheckoutController extends Controller
             return $request->wantsJson() ? response()->json(['success' => true, 'message' => $msg]) : back()->with('success', $msg);
         }
 
-        // Case 2: Mid-cycle downgrade
         if ($pricingDetails['action_type'] === 'downgrade' && $activeSubscription) {
             $eligibility = $this->planChangeService->checkDowngradeEligibility($activeSubscription, $plan);
             if (!$eligibility['eligible']) {
                 $msg = $eligibility['message'] ?? 'Downgrade ineligible due to active MRU count.';
-                return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
+                if ($request->wantsJson() || $request->ajax()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $msg,
+                        'ineligible_mrus' => true,
+                        'active_mrus' => $eligibility['active_mrus']->map(fn($m) => [
+                            'id' => $m->id,
+                            'code' => $m->code,
+                            'name' => $m->name,
+                            'full_identifier' => $m->full_identifier,
+                            'consumers_count' => $m->consumerAccounts()->count(),
+                        ]),
+                        'excess_mrus' => $eligibility['excess_mrus'],
+                        'new_plan_quota' => $eligibility['new_plan_quota'],
+                        'active_mrus_count' => $eligibility['active_mrus_count'],
+                    ], 422);
+                }
+                return back()->with('error', $msg);
             }
 
             $res = $this->planChangeService->downgradePlan($activeSubscription, $plan, $duration);

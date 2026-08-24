@@ -59,6 +59,7 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
     Route::put('/mrus/{mru}/consumers/{consumer}', [MruController::class, 'updateConsumer'])->name('mrus.consumers.update');
     Route::delete('/mrus/{mru}/consumers/{consumer}', [MruController::class, 'deleteConsumer'])->name('mrus.consumers.destroy');
     Route::get('/mrus/{mru}/consumers/export', [MruController::class, 'exportConsumers'])->name('mrus.consumers.export');
+    Route::post('/mrus/{mru}/lock', [MruController::class, 'lock'])->name('mrus.lock');
     Route::post('/mrus/{mru}/unlock', [MruController::class, 'unlock'])->name('mrus.unlock');
     Route::post('/mrus/{mru}/start-billing', [MruController::class, 'startMonthlyBilling'])->middleware(['throttle:30,1', 'mru.not_locked'])->name('mrus.start-billing');
     Route::post('/mrus/{mru}/sync-missing', [MruController::class, 'syncMissingForMru'])->middleware(['throttle:30,1', 'mru.not_locked'])->name('mrus.sync-missing');

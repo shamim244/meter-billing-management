@@ -11,6 +11,12 @@
         isProcessingWallet: false,
         walletError: null,
         walletSuccess: null,
+        mruConflict: false,
+        activeMrus: [],
+        excessMrus: 0,
+        newPlanQuota: 0,
+        isLockingMru: false,
+        lockSuccessMsg: null,
         get selectedDurationPrice() {
             return this.selectedDuration ? (parseFloat(this.selectedDuration.final_price) || 0) : 0;
         },
@@ -19,6 +25,11 @@
             this.selectedDuration = duration;
             this.walletError = null;
             this.walletSuccess = null;
+            this.mruConflict = false;
+            this.activeMrus = [];
+            this.excessMrus = 0;
+            this.newPlanQuota = 0;
+            this.lockSuccessMsg = null;
             this.isProcessingWallet = false;
             this.showModal = true;
         },
@@ -27,6 +38,7 @@
             this.isProcessingWallet = true;
             this.walletError = null;
             this.walletSuccess = null;
+            this.lockSuccessMsg = null;
 
             try {
                 const response = await fetch('{{ route('subscription.subscribe_wallet', [], false) }}', {
@@ -45,6 +57,12 @@
                 const data = await response.json();
 
                 if (!response.ok || !data.success) {
+                    if (data.ineligible_mrus) {
+                        this.mruConflict = true;
+                        this.activeMrus = data.active_mrus || [];
+                        this.excessMrus = data.excess_mrus || 0;
+                        this.newPlanQuota = data.new_plan_quota || 0;
+                    }
                     throw new Error(data.message || 'Wallet payment failed.');
                 }
 
@@ -56,6 +74,39 @@
             } catch (err) {
                 this.isProcessingWallet = false;
                 this.walletError = err.message;
+            }
+        },
+        async lockMruFromModal(mruId) {
+            this.isLockingMru = true;
+            this.lockSuccessMsg = null;
+            try {
+                const res = await fetch('/mrus/' + mruId + '/lock', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({ reason: 'plan_downgrade' })
+                });
+                const d = await res.json();
+                if (d.success) {
+                    this.activeMrus = this.activeMrus.filter(m => m.id !== mruId);
+                    this.excessMrus = Math.max(0, this.excessMrus - 1);
+                    this.lockSuccessMsg = d.message;
+                    if (this.excessMrus <= 0) {
+                        this.mruConflict = false;
+                        this.walletError = null;
+                        // Auto-retry downgrade
+                        this.confirmWalletPayment();
+                    }
+                } else {
+                    this.walletError = d.message || 'Failed to lock MRU.';
+                }
+            } catch (e) {
+                this.walletError = e.message;
+            } finally {
+                this.isLockingMru = false;
             }
         },
         get directPurchaseUrl() {
@@ -301,8 +352,59 @@
                         <span x-text="walletSuccess"></span>
                     </div>
 
-                    <div x-show="walletError" x-cloak class="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-bold">
+                    <div x-show="walletError && !mruConflict" x-cloak class="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-bold">
                         <span>❌ </span><span x-text="walletError"></span>
+                    </div>
+
+                    <!-- MRU Downgrade Conflict & Quick Lock Resolution Section -->
+                    <div x-show="mruConflict" x-cloak class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900/60 space-y-3">
+                        <div class="flex items-start gap-2.5">
+                            <span class="text-xl">⚠️</span>
+                            <div>
+                                <h4 class="text-xs font-bold text-amber-900 dark:text-amber-200">Active MRU Quota Exceeded</h4>
+                                <p class="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5">
+                                    Target plan includes <strong x-text="newPlanQuota"></strong> MRU(s). You have <strong x-text="activeMrus.length"></strong> active. Please lock or delete <strong x-text="excessMrus"></strong> MRU(s) to continue.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Success message on lock -->
+                        <div x-show="lockSuccessMsg" x-cloak class="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 text-emerald-800 dark:text-emerald-300 text-[11px] font-semibold flex items-center gap-1.5">
+                            <span>✓</span> <span x-text="lockSuccessMsg"></span>
+                        </div>
+
+                        <!-- Active MRU Quick-Lock Options -->
+                        <div class="space-y-2 pt-2 border-t border-amber-200/70 dark:border-amber-800/70">
+                            <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                <span>Choose MRU to lock right now:</span>
+                                <span class="text-amber-600 dark:text-amber-400 font-mono" x-text="'Need ' + excessMrus + ' more'"></span>
+                            </div>
+
+                            <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                <template x-for="m in activeMrus" :key="m.id">
+                                    <div class="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-200/70 dark:border-slate-800 shadow-xs">
+                                        <div class="flex items-center gap-2">
+                                            <span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-cyan-300 border border-blue-200 dark:border-blue-800" x-text="m.code"></span>
+                                            <div>
+                                                <div class="text-xs font-bold text-slate-900 dark:text-white" x-text="m.name"></div>
+                                                <div class="text-[10px] text-slate-400 font-mono" x-text="m.consumers_count + ' consumers'"></div>
+                                            </div>
+                                        </div>
+                                        <button type="button" @click="lockMruFromModal(m.id)" :disabled="isLockingMru" class="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold shadow-xs transition flex items-center gap-1 disabled:opacity-50">
+                                            <span>🔒 Lock</span>
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Redirection Option: Manage / Delete on MRU page -->
+                        <div class="pt-2 border-t border-amber-200/70 dark:border-amber-800/70 flex items-center justify-between">
+                            <span class="text-[11px] text-slate-500">Or manage existing zones:</span>
+                            <a href="{{ route('mrus.index') }}" class="text-xs font-bold text-blue-600 dark:text-cyan-400 hover:underline flex items-center gap-1">
+                                <span>🗂️ Manage / Delete MRUs on MRU Page →</span>
+                            </a>
+                        </div>
                     </div>
 
                     <!-- Option 1: Pay from Wallet (In-Place) -->

@@ -145,17 +145,27 @@
                         <!-- Card Action Footer -->
                         <div class="px-6 py-4 bg-slate-50/60 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
                             <div class="flex items-center gap-1">
-                                <button @click="openCycleModal(mru.id)" class="text-xs text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-cyan-400 font-bold flex items-center gap-1 transition px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" title="Launch Billing Cycle">
+                                <button @click="openCycleModal(mru.id)" class="text-xs text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-cyan-400 font-bold flex items-center gap-1 transition px-2 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" title="Launch Billing Cycle">
                                     <span>⚡</span> Cycle
                                 </button>
+                                <template x-if="mru.status === 'active'">
+                                    <button @click="lockMru(mru)" class="text-xs text-amber-600 hover:text-amber-700 dark:text-amber-400 font-bold flex items-center gap-1 transition px-2 py-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/60" title="Lock MRU to free up subscription quota">
+                                        <span>🔒</span> Lock
+                                    </button>
+                                </template>
+                                <template x-if="mru.status === 'locked'">
+                                    <button @click="unlockMru(mru)" class="text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-1 transition px-2 py-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/60" title="Unlock MRU">
+                                        <span>🔓</span> Unlock
+                                    </button>
+                                </template>
                                 <button @click="openDeleteMruModal(mru)" class="text-xs text-rose-500 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 font-bold flex items-center gap-1 transition px-2 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/60" title="Delete MRU Workspace">
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                                     <span>Delete</span>
                                 </button>
                             </div>
 
-                            <a :href="'/mrus/' + mru.id" class="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition group-hover:shadow-md">
-                                Open Workspace →
+                            <a :href="'/mrus/' + mru.id" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition group-hover:shadow-md">
+                                Open →
                             </a>
                         </div>
                     </div>
@@ -679,6 +689,56 @@
                     .catch(err => {
                         this.isDeletingMru = false;
                         alert('Failed to delete MRU: ' + err.message);
+                    });
+                },
+
+                lockMru(mru) {
+                    if (!confirm(`Are you sure you want to lock '${mru.name} (${mru.code})'?\n\nLocking this MRU frees up plan quota so you can downgrade or create new MRUs. You can unlock it anytime.`)) return;
+
+                    fetch(`/mrus/${mru.id}/lock`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ reason: 'user_manual_lock' })
+                    })
+                    .then(async res => {
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.message || 'Failed to lock MRU');
+                        return data;
+                    })
+                    .then(data => {
+                        window.location.reload();
+                    })
+                    .catch(err => {
+                        alert('Error locking MRU: ' + err.message);
+                    });
+                },
+
+                unlockMru(mru) {
+                    if (!confirm(`Unlock '${mru.name} (${mru.code})'?`)) return;
+
+                    fetch(`/mrus/${mru.id}/unlock`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ pay_overage: true })
+                    })
+                    .then(async res => {
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.message || 'Failed to unlock MRU');
+                        return data;
+                    })
+                    .then(data => {
+                        window.location.reload();
+                    })
+                    .catch(err => {
+                        alert('Error unlocking MRU: ' + err.message);
                     });
                 }
             };
