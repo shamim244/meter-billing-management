@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -11,22 +12,42 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('plan_durations', function (Blueprint $table) {
-            // 1. Add index on plan_id so foreign key requirement is satisfied
-            $table->index('plan_id');
-        });
+        $driver = DB::getDriverName();
 
-        Schema::table('plan_durations', function (Blueprint $table) {
-            // 2. Drop the old unique composite index
-            try {
-                $table->dropUnique('plan_durations_plan_id_duration_months_unique');
-            } catch (\Throwable $e) {
-                // Ignore if not exists
+        if ($driver === 'mysql') {
+            // Check if old unique index exists before attempting drop
+            $uniqueIndexExists = collect(DB::select("
+                SHOW INDEX FROM `plan_durations` 
+                WHERE `Key_name` = 'plan_durations_plan_id_duration_months_unique'
+            "))->isNotEmpty();
+
+            if ($uniqueIndexExists) {
+                // Ensure plan_id is indexed independently for the foreign key
+                $planIdIndexExists = collect(DB::select("
+                    SHOW INDEX FROM `plan_durations` 
+                    WHERE `Key_name` = 'plan_durations_plan_id_index'
+                "))->isNotEmpty();
+
+                if (!$planIdIndexExists) {
+                    Schema::table('plan_durations', function (Blueprint $table) {
+                        $table->index('plan_id');
+                    });
+                }
+
+                Schema::table('plan_durations', function (Blueprint $table) {
+                    $table->dropUnique('plan_durations_plan_id_duration_months_unique');
+                });
             }
 
-            // 3. Make duration_months nullable
-            $table->unsignedSmallInteger('duration_months')->nullable()->default(1)->change();
-        });
+            // Ensure duration_months is nullable
+            Schema::table('plan_durations', function (Blueprint $table) {
+                $table->unsignedSmallInteger('duration_months')->nullable()->default(1)->change();
+            });
+        } else {
+            Schema::table('plan_durations', function (Blueprint $table) {
+                $table->unsignedSmallInteger('duration_months')->nullable()->default(1)->change();
+            });
+        }
     }
 
     /**
@@ -34,12 +55,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('plan_durations', function (Blueprint $table) {
-            try {
-                $table->unique(['plan_id', 'duration_months']);
-            } catch (\Throwable $e) {
-                //
-            }
-        });
+        // Safe no-op
     }
 };
