@@ -182,6 +182,13 @@ Route::middleware(['auth', 'role:admin', 'active'])->prefix('admin')->name('admi
     Route::post('/plans/{plan}/force-delete', [\App\Http\Controllers\Admin\AdminPlanController::class, 'forceDelete'])->name('plans.force-delete');
     Route::resource('plans', \App\Http\Controllers\Admin\AdminPlanController::class);
 
+    // Dedicated Plan Duration Management Console
+    Route::get('/plans/{plan}/durations', [\App\Http\Controllers\Admin\AdminPlanDurationController::class, 'index'])->name('plans.durations.index');
+    Route::post('/plans/{plan}/durations', [\App\Http\Controllers\Admin\AdminPlanDurationController::class, 'store'])->name('plans.durations.store');
+    Route::put('/plans/{plan}/durations/{duration}', [\App\Http\Controllers\Admin\AdminPlanDurationController::class, 'update'])->name('plans.durations.update');
+    Route::patch('/plans/{plan}/durations/{duration}/toggle', [\App\Http\Controllers\Admin\AdminPlanDurationController::class, 'toggleActive'])->name('plans.durations.toggle');
+    Route::delete('/plans/{plan}/durations/{duration}', [\App\Http\Controllers\Admin\AdminPlanDurationController::class, 'destroy'])->name('plans.durations.destroy');
+
     // Admin Billing & Subscription Lifecycle Management
     Route::get('/subscriptions', [\App\Http\Controllers\Admin\AdminSubscriptionController::class, 'index'])->name('subscriptions.index');
     Route::post('/subscriptions/{subscription}/state-override', [\App\Http\Controllers\Admin\AdminSubscriptionController::class, 'stateOverride'])->name('subscriptions.state_override');

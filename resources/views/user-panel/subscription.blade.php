@@ -198,11 +198,11 @@
                                 @if($durations->isNotEmpty())
                                     <div class="mt-4">
                                         <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Select Duration:</span>
-                                        <div class="grid grid-cols-3 sm:grid-cols-5 gap-1.5 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl">
+                                        <div class="flex flex-wrap gap-1.5 bg-slate-100 dark:bg-slate-950 p-1.5 rounded-xl">
                                             <template x-for="(d, idx) in durations" :key="d.id">
-                                                <button type="button" @click="activeDurationIndex = idx" :class="activeDurationIndex === idx ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-white shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 font-medium'" class="py-1.5 px-1 rounded-lg text-[10px] transition text-center flex flex-col items-center">
-                                                    <span x-text="d.duration_months + 'm'"></span>
-                                                    <span x-show="d.discount_percent > 0" class="text-[8px] text-amber-500 font-black" x-text="'-' + d.discount_percent + '%'"></span>
+                                                <button type="button" @click="activeDurationIndex = idx" :class="activeDurationIndex === idx ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-white shadow-sm font-bold border border-indigo-500/30' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 font-medium'" class="py-1.5 px-2.5 rounded-lg text-[11px] transition text-center flex items-center gap-1">
+                                                    <span x-text="(d.duration_value || d.duration_months) + (d.duration_unit === 'day' ? 'd' : 'm')"></span>
+                                                    <span x-show="d.discount_percent > 0" class="text-[9px] text-amber-500 font-black" x-text="'-' + d.discount_percent + '%'"></span>
                                                 </button>
                                             </template>
                                         </div>
@@ -215,7 +215,7 @@
                                         ₹<span x-text="currentPrice.toLocaleString('en-IN')"></span>
                                     </span>
                                     <span class="text-xs text-slate-400 font-medium">
-                                        / <span x-text="currentDuration ? (currentDuration.duration_months + ' mo') : 'mo'"></span>
+                                        / <span x-text="currentDuration ? (currentDuration.name || (currentDuration.duration_value || currentDuration.duration_months) + (currentDuration.duration_unit === 'day' ? ' Days' : ' Months')) : 'Period'"></span>
                                     </span>
                                 </div>
 

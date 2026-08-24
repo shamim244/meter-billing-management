@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Traits\BelongsToUser;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,6 +16,8 @@ class AgentSubscription extends Model
     protected $fillable = [
         'user_id',
         'plan_id',
+        'duration_unit',
+        'duration_value',
         'duration_months',
         'base_price_paid',
         'included_mrus_locked',
@@ -35,6 +38,7 @@ class AgentSubscription extends Model
     protected function casts(): array
     {
         return [
+            'duration_value' => 'integer',
             'duration_months' => 'integer',
             'base_price_paid' => 'decimal:2',
             'included_mrus_locked' => 'integer',
@@ -73,6 +77,32 @@ class AgentSubscription extends Model
     public function planUpgradeLogs(): HasMany
     {
         return $this->hasMany(PlanUpgradeLog::class)->orderByDesc('id');
+    }
+
+    /**
+     * Human-readable formatted duration string.
+     */
+    public function getFormattedDurationAttribute(): string
+    {
+        $val = $this->duration_value ?: $this->duration_months ?: 1;
+        $unit = $this->duration_unit === 'day' ? 'Day' : 'Month';
+
+        return "{$val} {$unit}" . ($val > 1 ? 's' : '');
+    }
+
+    /**
+     * Calculate new end timestamp when renewing or extending.
+     */
+    public function calculateNewEnd(?Carbon $startDate = null): Carbon
+    {
+        $start = ($startDate ?? ($this->billing_end > now() ? $this->billing_end : now()))->copy();
+        $val = $this->duration_value ?: $this->duration_months ?: 1;
+
+        if ($this->duration_unit === 'day') {
+            return $start->addDays($val);
+        }
+
+        return $start->addMonths($val);
     }
 
     /**

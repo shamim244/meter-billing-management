@@ -221,7 +221,7 @@ class RenewalService
 
         // Extend subscription billing period & reactivate
         $newStart = $subscription->billing_end > now() ? $subscription->billing_end : now();
-        $newEnd = (clone $newStart)->addMonths($subscription->duration_months);
+        $newEnd = $subscription->calculateNewEnd($newStart);
 
         $subscription->update([
             'billing_start' => $newStart,

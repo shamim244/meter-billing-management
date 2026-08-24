@@ -1,32 +1,57 @@
 <x-admin-layout>
-    <div class="space-y-6 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8" x-data="{
-        basePrice: {{ (float) ($plan->durations->firstWhere('duration_months', 1)?->final_price ?? 499) }},
+    <div class="space-y-6 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8" x-data="{
+        basePrice: {{ (float) ($plan->base_price ?: 499) }},
         durations: [
-            @php
-                $existingDurations = $plan->durations->keyBy('duration_months');
-                $standardMonths = [1, 2, 3, 6, 12];
-            @endphp
-            @foreach($standardMonths as $m)
-                @php
-                    $d = $existingDurations->get($m);
-                @endphp
+            @forelse($plan->durations as $d)
                 {
-                    months: {{ $m }},
-                    discount: {{ $d ? (float)$d->discount_percent : 0 }},
-                    price: {{ $d ? (float)$d->final_price : 0 }},
-                    extraMru: '{{ $d && $d->extra_mru_rate !== null ? (float)$d->extra_mru_rate : '' }}',
-                    extraConsumer: '{{ $d && $d->extra_consumer_rate !== null ? (float)$d->extra_consumer_rate : '' }}'
+                    id: {{ $d->id }},
+                    unit: '{{ $d->duration_unit ?: 'month' }}',
+                    value: {{ $d->duration_value ?: $d->duration_months ?: 1 }},
+                    name: '{{ addslashes($d->name ?? '') }}',
+                    discount: {{ (float)$d->discount_percent }},
+                    price: {{ (float)$d->final_price }},
+                    extraMru: '{{ $d->extra_mru_rate !== null ? (float)$d->extra_mru_rate : '' }}',
+                    extraConsumer: '{{ $d->extra_consumer_rate !== null ? (float)$d->extra_consumer_rate : '' }}',
+                    is_active: {{ $d->is_active ? 'true' : 'false' }}
                 },
-            @endforeach
+            @empty
+                { unit: 'month', value: 1, discount: 0, price: {{ (float)$plan->base_price ?: 499 }}, name: '', extraMru: '', extraConsumer: '', is_active: true }
+            @endforelse
         ],
+        addDuration(unit = 'month', value = 1) {
+            const val = parseInt(value) || 1;
+            const price = unit === 'day' ? parseFloat(((this.basePrice / 30) * val).toFixed(2)) : parseFloat((this.basePrice * val).toFixed(2));
+            this.durations.push({
+                id: null,
+                unit: unit,
+                value: val,
+                discount: 0,
+                price: price,
+                name: '',
+                extraMru: '',
+                extraConsumer: '',
+                is_active: true
+            });
+        },
+        removeDuration(index) {
+            if (this.durations.length > 1) {
+                this.durations.splice(index, 1);
+            }
+        },
         recalculateDurations() {
             this.durations.forEach(d => {
-                d.price = Math.round((this.basePrice * d.months) * (1 - (d.discount / 100)));
+                const discount = Math.min(100, Math.max(0, d.discount || 0));
+                const val = Math.max(1, d.value || 1);
+                if (d.unit === 'day') {
+                    d.price = parseFloat(((this.basePrice / 30) * val * (1 - (discount / 100))).toFixed(2));
+                } else {
+                    d.price = parseFloat((this.basePrice * val * (1 - (discount / 100))).toFixed(2));
+                }
             });
         }
     }">
         <!-- Header -->
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
                 <a href="{{ route('admin.plans.index') }}" class="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 mb-2">
                     ← Back to Plans
@@ -37,8 +62,11 @@
                 <p class="text-sm text-slate-400 mt-1">Modify plan parameters, quotas, and duration pricing options.</p>
             </div>
             <div class="flex items-center gap-2">
+                <a href="{{ route('admin.plans.durations.index', $plan) }}" class="px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 rounded-xl text-xs font-bold transition border border-indigo-500/30 flex items-center gap-1.5 shadow-sm">
+                    <span>⏳</span> Dedicated Durations Console ({ $plan->durations->count() })
+                </a>
                 <a href="{{ route('admin.plans.agents', $plan) }}" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition border border-slate-700/60 flex items-center gap-1.5">
-                    <span>👥</span> View Subscribers ({{ $plan->subscriptions()->where('status', 'active')->where('billing_end', '>', now())->count() }})
+                    <span>👥</span> Subscribers ({{ $plan->subscriptions()->where('status', 'active')->where('billing_end', '>', now())->count() }})
                 </a>
             </div>
         </div>
@@ -48,15 +76,21 @@
             <span class="text-base">🔒</span>
             <div>
                 <strong class="font-bold">Important Plan Edit Invariant:</strong>
-                <p class="mt-0.5 text-amber-200/80">Modifications to this plan will apply only to <strong>new purchases and future renewals</strong>. Existing active subscriber contracts have their rates and quotas permanently locked at purchase and will NOT be modified.</p>
+                Updating these plan parameters or rates will only apply to new subscriber registrations and future renewals.
+                Existing active subscriber quotas and pricing snapshots remain <strong>immutable</strong> until their renewal cycle.
             </div>
         </div>
 
         @if($errors->any())
-            <div class="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-300 text-xs font-semibold space-y-1">
-                @foreach($errors->all() as $err)
-                    <div>⚠️ {{ $err }}</div>
-                @endforeach
+            <div class="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-300 text-xs space-y-1">
+                <div class="font-bold flex items-center gap-1.5">
+                    <span>⚠️</span> Please correct the following errors:
+                </div>
+                <ul class="list-disc list-inside space-y-0.5 text-[11px] text-rose-400">
+                    @foreach($errors->all() as $err)
+                        <li>{{ $err }}</li>
+                    @endforeach
+                </ul>
             </div>
         @endif
 
@@ -64,24 +98,24 @@
             @csrf
             @method('PUT')
 
-            <!-- 1. Plan Basic Info -->
+            <!-- 1. Plan Basic Info & Quotas -->
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
-                <h2 class="text-sm font-bold text-white uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                    <span>📦</span> 1. Plan Identity & Quota Limits
-                </h2>
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h2 class="text-sm font-bold text-white uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                        <span>📦</span> 1. Plan Details & Included Quotas
+                    </h2>
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs font-semibold text-slate-300 cursor-pointer flex items-center gap-2">
+                            <input type="checkbox" name="is_active" value="1" {{ old('is_active', $plan->is_active) ? 'checked' : '' }} class="rounded bg-slate-950 border-slate-800 text-indigo-600 focus:ring-0">
+                            Active & Publicly Visible
+                        </label>
+                    </div>
+                </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
+                    <div class="sm:col-span-2">
                         <label class="block text-xs font-semibold text-slate-300 mb-1">Plan Name <span class="text-rose-400">*</span></label>
-                        <input type="text" name="name" value="{{ old('name', $plan->name) }}" required class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl text-white p-2.5 focus:ring-indigo-500 font-medium">
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-300 mb-1">Status</label>
-                        <select name="is_active" class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl text-white p-2.5 focus:ring-indigo-500">
-                            <option value="1" {{ $plan->is_active ? 'selected' : '' }}>Active (Available for subscription)</option>
-                            <option value="0" {{ !$plan->is_active ? 'selected' : '' }}>Inactive / Deactivated</option>
-                        </select>
+                        <input type="text" name="name" value="{{ old('name', $plan->name) }}" required class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl text-white p-2.5 focus:ring-indigo-500 font-bold">
                     </div>
 
                     <div class="sm:col-span-2">
@@ -100,9 +134,8 @@
                     </div>
 
                     <div>
-                        <label class="block text-xs font-semibold text-slate-300 mb-1">Grace Period Days <span class="text-slate-500 font-normal">(Optional Override)</span></label>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">Grace Period Days</label>
                         <input type="number" name="grace_period_days" min="0" max="90" value="{{ old('grace_period_days', $plan->grace_period_days) }}" placeholder="Platform Default (3)" class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl text-white p-2.5 focus:ring-indigo-500 font-mono">
-                        <span class="text-[10px] text-slate-500 mt-1 block">Leave empty to use platform default. Set 0 to disable grace.</span>
                     </div>
                 </div>
             </div>
@@ -131,44 +164,92 @@
                 </div>
             </div>
 
-            <!-- 3. Duration-Based Pricing Table -->
+            <!-- 3. Dynamic Duration Pricing Table -->
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
-                <div class="flex items-center justify-between">
-                    <h2 class="text-sm font-bold text-white uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                        <span>⏳</span> 3. Duration Pricing Table (1, 2, 3, 6, 12 Months)
-                    </h2>
-                    <span class="text-[10px] text-slate-400 bg-slate-800 px-2.5 py-1 rounded-lg">Admin Configurable</span>
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <h2 class="text-sm font-bold text-white uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <span>⏳</span> 3. Duration Pricing Table (Day-Wise & Month-Wise)
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">Customize duration tiers, discounts, overrides, or add new day/month tiers.</p>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <button type="button" @click="addDuration('day', 7)" class="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                            <span>⏱️</span> + Add Days
+                        </button>
+                        <button type="button" @click="addDuration('month', 1)" class="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                            <span>📅</span> + Add Months
+                        </button>
+                    </div>
                 </div>
 
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-xs border-collapse">
                         <thead>
                             <tr class="border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider">
-                                <th class="pb-2">Duration</th>
-                                <th class="pb-2">Discount %</th>
-                                <th class="pb-2">Final Price (₹)</th>
-                                <th class="pb-2">Extra MRU Rate (₹) <span class="text-slate-500 font-normal">(override)</span></th>
-                                <th class="pb-2">Extra CA Rate (₹) <span class="text-slate-500 font-normal">(override)</span></th>
+                                <th class="pb-2 pr-2">Unit</th>
+                                <th class="pb-2 pr-2">Duration</th>
+                                <th class="pb-2 pr-2">Label (Optional)</th>
+                                <th class="pb-2 pr-2">Discount %</th>
+                                <th class="pb-2 pr-2">Final Price (₹)</th>
+                                <th class="pb-2 pr-2">Extra MRU Rate</th>
+                                <th class="pb-2 pr-2">Extra CA Rate</th>
+                                <th class="pb-2 text-right">Remove</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-800/60">
-                            <template x-for="(d, index) in durations" :key="d.months">
+                            <template x-for="(d, index) in durations" :key="index">
                                 <tr>
-                                    <td class="py-2.5 font-bold text-white flex items-center gap-1.5">
-                                        <span x-text="d.months + ' Month' + (d.months > 1 ? 's' : '')"></span>
-                                        <input type="hidden" :name="'durations[' + index + '][duration_months]'" :value="d.months">
+                                    <!-- Hidden ID if existing -->
+                                    <input type="hidden" :name="'durations[' + index + '][id]'" :value="d.id">
+
+                                    <!-- Unit Select -->
+                                    <td class="py-2.5 pr-2">
+                                        <select :name="'durations[' + index + '][duration_unit]'" x-model="d.unit" @change="recalculateDurations()" class="text-xs bg-slate-950 border-slate-800 rounded-lg text-white p-1.5 focus:ring-indigo-500 font-bold">
+                                            <option value="month">📅 Month</option>
+                                            <option value="day">⏱️ Day</option>
+                                        </select>
                                     </td>
-                                    <td class="py-2.5 pr-3">
-                                        <input type="number" step="0.1" min="0" max="100" :name="'durations[' + index + '][discount_percent]'" x-model.number="d.discount" @input="recalculateDurations()" class="w-20 text-xs bg-slate-950 border-slate-800 rounded-lg text-white p-1.5 focus:ring-indigo-500 font-mono">
+
+                                    <!-- Duration Value -->
+                                    <td class="py-2.5 pr-2">
+                                        <div class="flex items-center gap-1">
+                                            <input type="number" min="1" max="3650" :name="'durations[' + index + '][duration_value]'" x-model.number="d.value" @input="recalculateDurations()" required class="w-16 text-xs bg-slate-950 border-slate-800 rounded-lg text-white p-1.5 focus:ring-indigo-500 font-mono font-bold">
+                                            <span class="text-[10px] text-slate-400" x-text="d.unit === 'day' ? 'Days' : 'Mo'"></span>
+                                        </div>
                                     </td>
-                                    <td class="py-2.5 pr-3">
-                                        <input type="number" step="0.01" min="0" :name="'durations[' + index + '][final_price]'" x-model.number="d.price" class="w-28 text-xs bg-slate-950 border-slate-800 rounded-lg text-white p-1.5 focus:ring-indigo-500 font-mono font-bold text-emerald-400">
+
+                                    <!-- Name / Label -->
+                                    <td class="py-2.5 pr-2">
+                                        <input type="text" :name="'durations[' + index + '][name]'" x-model="d.name" placeholder="e.g. Trial" class="w-24 text-xs bg-slate-950 border-slate-800 rounded-lg text-white p-1.5 focus:ring-indigo-500">
                                     </td>
-                                    <td class="py-2.5 pr-3">
-                                        <input type="number" step="0.01" min="0" :name="'durations[' + index + '][extra_mru_rate]'" x-model="d.extraMru" placeholder="Base Rate" class="w-28 text-xs bg-slate-950 border-slate-800 rounded-lg text-white p-1.5 focus:ring-indigo-500 font-mono">
+
+                                    <!-- Discount % -->
+                                    <td class="py-2.5 pr-2">
+                                        <input type="number" step="0.1" min="0" max="100" :name="'durations[' + index + '][discount_percent]'" x-model.number="d.discount" @input="recalculateDurations()" class="w-16 text-xs bg-slate-950 border-slate-800 rounded-lg text-white p-1.5 focus:ring-indigo-500 font-mono">
                                     </td>
-                                    <td class="py-2.5">
-                                        <input type="number" step="0.01" min="0" :name="'durations[' + index + '][extra_consumer_rate]'" x-model="d.extraConsumer" placeholder="Base Rate" class="w-28 text-xs bg-slate-950 border-slate-800 rounded-lg text-white p-1.5 focus:ring-indigo-500 font-mono">
+
+                                    <!-- Final Price -->
+                                    <td class="py-2.5 pr-2">
+                                        <input type="number" step="0.01" min="0" :name="'durations[' + index + '][final_price]'" x-model.number="d.price" required class="w-24 text-xs bg-slate-950 border-slate-800 rounded-lg text-emerald-400 font-bold p-1.5 focus:ring-indigo-500 font-mono">
+                                    </td>
+
+                                    <!-- Extra MRU Rate -->
+                                    <td class="py-2.5 pr-2">
+                                        <input type="number" step="0.01" min="0" :name="'durations[' + index + '][extra_mru_rate]'" x-model="d.extraMru" placeholder="Base" class="w-20 text-xs bg-slate-950 border-slate-800 rounded-lg text-white p-1.5 focus:ring-indigo-500 font-mono">
+                                    </td>
+
+                                    <!-- Extra CA Rate -->
+                                    <td class="py-2.5 pr-2">
+                                        <input type="number" step="0.01" min="0" :name="'durations[' + index + '][extra_consumer_rate]'" x-model="d.extraConsumer" placeholder="Base" class="w-20 text-xs bg-slate-950 border-slate-800 rounded-lg text-white p-1.5 focus:ring-indigo-500 font-mono">
+                                    </td>
+
+                                    <!-- Delete Button -->
+                                    <td class="py-2.5 text-right">
+                                        <button type="button" @click="removeDuration(index)" :disabled="durations.length <= 1" class="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 disabled:opacity-30 text-rose-400 rounded-lg transition" title="Remove Duration">
+                                            🗑️
+                                        </button>
                                     </td>
                                 </tr>
                             </template>

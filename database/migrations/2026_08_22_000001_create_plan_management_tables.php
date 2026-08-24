@@ -31,14 +31,14 @@ return new class extends Migration
         Schema::create('plan_durations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('plan_id')->constrained('plans')->onDelete('cascade');
-            $table->unsignedSmallInteger('duration_months'); // 1, 2, 3, 6, 12
+            $table->unsignedSmallInteger('duration_months')->nullable()->default(1);
             $table->decimal('discount_percent', 5, 2)->default(0.00);
             $table->decimal('final_price', 10, 2);
             $table->decimal('extra_mru_rate', 10, 2)->nullable();
             $table->decimal('extra_consumer_rate', 10, 2)->nullable();
             $table->timestamps();
 
-            $table->unique(['plan_id', 'duration_months']);
+            $table->index(['plan_id', 'duration_months']);
         });
 
         // 3. Locked Snapshot of Agent Subscriptions Table

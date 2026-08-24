@@ -137,15 +137,18 @@
                             <span>👥</span> {{ $plan->subscriptions_count }} Subscribers
                         </a>
 
-                        <div class="flex items-center gap-2">
-                            <a href="{{ route('admin.plans.edit', $plan) }}" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition border border-slate-700/60">
+                        <div class="flex items-center gap-1.5">
+                            <a href="{{ route('admin.plans.durations.index', $plan) }}" class="px-2.5 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 rounded-lg text-xs font-semibold transition border border-indigo-500/30 flex items-center gap-1" title="Manage validity & pricing durations">
+                                <span>⏳</span> Durations ({{ $plan->durations->count() }})
+                            </a>
+                            <a href="{{ route('admin.plans.edit', $plan) }}" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition border border-slate-700/60">
                                 ✏️ Edit
                             </a>
                             @if(!$plan->trashed())
                                 <form method="POST" action="{{ route('admin.plans.destroy', $plan) }}" onsubmit="return confirm('Deactivate this plan? Existing subscribers will remain active.');" class="inline">
                                     @csrf
                                     @method('DELETE')
-                                    <button type="submit" class="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-xs font-semibold transition border border-rose-500/20">
+                                    <button type="submit" class="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-xs font-semibold transition border border-rose-500/20">
                                         Deactivate
                                     </button>
                                 </form>

@@ -73,11 +73,16 @@ class AdminPlanController extends Controller
             'grace_period_days' => 'nullable|integer|min:0|max:90',
             'is_active' => 'nullable|boolean',
             'durations' => 'nullable|array',
-            'durations.*.duration_months' => 'required|integer|in:1,2,3,6,12',
+            'durations.*.id' => 'nullable|integer',
+            'durations.*.duration_unit' => 'nullable|string|in:day,month',
+            'durations.*.duration_value' => 'nullable|integer|min:1|max:3650',
+            'durations.*.duration_months' => 'nullable|integer|min:1|max:3650',
+            'durations.*.name' => 'nullable|string|max:100',
             'durations.*.discount_percent' => 'nullable|numeric|min:0|max:100',
-            'durations.*.final_price' => 'required|numeric|min:0',
+            'durations.*.final_price' => 'nullable|numeric|min:0',
             'durations.*.extra_mru_rate' => 'nullable|numeric|min:0',
             'durations.*.extra_consumer_rate' => 'nullable|numeric|min:0',
+            'durations.*.is_active' => 'nullable|boolean',
         ]);
 
         $plan = $this->planService->createPlan($validated, $request->input('durations', []));
@@ -111,11 +116,16 @@ class AdminPlanController extends Controller
             'grace_period_days' => 'nullable|integer|min:0|max:90',
             'is_active' => 'nullable|boolean',
             'durations' => 'nullable|array',
-            'durations.*.duration_months' => 'required|integer|in:1,2,3,6,12',
+            'durations.*.id' => 'nullable|integer',
+            'durations.*.duration_unit' => 'nullable|string|in:day,month',
+            'durations.*.duration_value' => 'nullable|integer|min:1|max:3650',
+            'durations.*.duration_months' => 'nullable|integer|min:1|max:3650',
+            'durations.*.name' => 'nullable|string|max:100',
             'durations.*.discount_percent' => 'nullable|numeric|min:0|max:100',
-            'durations.*.final_price' => 'required|numeric|min:0',
+            'durations.*.final_price' => 'nullable|numeric|min:0',
             'durations.*.extra_mru_rate' => 'nullable|numeric|min:0',
             'durations.*.extra_consumer_rate' => 'nullable|numeric|min:0',
+            'durations.*.is_active' => 'nullable|boolean',
         ]);
 
         $this->planService->updatePlan($plan, $validated, $request->input('durations', []));

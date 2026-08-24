@@ -193,7 +193,7 @@ class SubscriptionLifecycleService
             if ($debitResult === DebitResult::SUCCESS) {
                 // Extend billing period
                 $newStart = $sub->billing_end && $sub->billing_end > now() ? $sub->billing_end : now();
-                $newEnd = (clone $newStart)->addMonths($sub->duration_months);
+                $newEnd = $sub->calculateNewEnd($newStart);
 
                 $sub->update([
                     'billing_start' => $newStart,

@@ -117,7 +117,7 @@ class SubscriptionCheckoutController extends Controller
 
             $subscription = $this->planService->subscribeAgent($user, $plan, $duration);
             return redirect()->route('user-panel.subscription')
-                ->with('success', "🎉 Subscribed to {$plan->name} ({$duration->duration_months} Month" . ($duration->duration_months > 1 ? 's' : '') . ") successfully!");
+                ->with('success', "🎉 Subscribed to {$plan->name} ({$duration->formatted_duration}) successfully!");
         }
 
         $meta = [
@@ -254,7 +254,7 @@ class SubscriptionCheckoutController extends Controller
                 source: 'subscription_purchase',
                 referenceType: Plan::class,
                 referenceId: (string) $plan->id,
-                description: "Subscription to {$plan->name} ({$duration->duration_months} Month" . ($duration->duration_months > 1 ? 's' : '') . ")"
+                description: "Subscription to {$plan->name} ({$duration->formatted_duration})"
             );
 
             if ($debitResult !== DebitResult::SUCCESS) {
@@ -264,7 +264,7 @@ class SubscriptionCheckoutController extends Controller
         }
 
         $subscription = $this->planService->subscribeAgent($user, $plan, $duration);
-        $msg = "🎉 Subscribed to {$plan->name} ({$duration->duration_months} Month" . ($duration->duration_months > 1 ? 's' : '') . ") successfully!" . ($amountDue > 0 ? " ₹" . number_format($amountDue, 2) . " was debited from your wallet." : "");
+        $msg = "🎉 Subscribed to {$plan->name} ({$duration->formatted_duration}) successfully!" . ($amountDue > 0 ? " ₹" . number_format($amountDue, 2) . " was debited from your wallet." : "");
 
         return $request->wantsJson()
             ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $subscription->id])

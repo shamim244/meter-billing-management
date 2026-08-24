@@ -58,7 +58,9 @@ class UserPanelController extends Controller
 
         $plans = \App\Models\Plan::where('is_active', true)
             ->with(['durations' => function ($q) {
-                $q->orderBy('duration_months');
+                $q->where('is_active', true)
+                  ->orderBy('duration_unit', 'desc')
+                  ->orderBy('duration_value');
             }])
             ->orderBy('id')
             ->get();

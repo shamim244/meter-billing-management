@@ -43,6 +43,17 @@ class Plan extends Model
     }
 
     /**
+     * Active Duration-based pricing entries for this plan.
+     */
+    public function activeDurations(): HasMany
+    {
+        return $this->hasMany(PlanDuration::class)
+            ->where('is_active', true)
+            ->orderBy('duration_unit', 'desc')
+            ->orderBy('duration_value');
+    }
+
+    /**
      * Agent subscriptions associated with this plan.
      */
     public function subscriptions(): HasMany
@@ -64,7 +75,10 @@ class Plan extends Model
     public function getBasePriceAttribute(): float
     {
         if ($this->relationLoaded('durations') || $this->durations()->exists()) {
-            $monthly = $this->durations->firstWhere('duration_months', 1);
+            $monthly = $this->durations->firstWhere('duration_value', 1);
+            if (!$monthly) {
+                $monthly = $this->durations->firstWhere('duration_months', 1);
+            }
             if ($monthly) {
                 return (float) $monthly->final_price;
             }
