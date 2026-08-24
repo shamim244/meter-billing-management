@@ -57,9 +57,31 @@ class ConsumerReadingLedgerTest extends TestCase
         $this->assertEquals(2026, $consumer->last_working_year);
     }
 
+    protected function subscribeUser(User $user): void
+    {
+        $plan = \App\Models\Plan::firstOrCreate(
+            ['name' => 'Unlimited Test Plan'],
+            [
+                'included_mrus' => 50,
+                'included_consumers' => 50000,
+                'extra_mru_rate' => 0,
+                'extra_consumer_rate' => 0,
+                'is_active' => true,
+            ]
+        );
+
+        $duration = $plan->durations()->firstOrCreate(
+            ['duration_unit' => 'month', 'duration_value' => 1],
+            ['final_price' => 0, 'is_active' => true]
+        );
+
+        app(\App\Services\Plan\PlanService::class)->subscribeAgent($user, $plan, $duration);
+    }
+
     public function test_new_cycle_initializes_previous_reading_from_consumer_ledger(): void
     {
         $user = User::factory()->create(['status' => 'active']);
+        $this->subscribeUser($user);
         $mru = Mru::create(['user_id' => $user->id, 'code' => '0244', 'name' => 'NISARBHATI', 'status' => 'active']);
 
         $consumer = ConsumerAccount::create([

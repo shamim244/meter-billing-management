@@ -137,9 +137,31 @@ class MruArchitectureTest extends TestCase
         ]);
     }
 
+    protected function subscribeUser(User $user): void
+    {
+        $plan = \App\Models\Plan::firstOrCreate(
+            ['name' => 'Unlimited Test Plan'],
+            [
+                'included_mrus' => 50,
+                'included_consumers' => 50000,
+                'extra_mru_rate' => 0,
+                'extra_consumer_rate' => 0,
+                'is_active' => true,
+            ]
+        );
+
+        $duration = $plan->durations()->firstOrCreate(
+            ['duration_unit' => 'month', 'duration_value' => 1],
+            ['final_price' => 0, 'is_active' => true]
+        );
+
+        app(\App\Services\Plan\PlanService::class)->subscribeAgent($user, $plan, $duration);
+    }
+
     public function test_user_can_launch_billing_cycle_for_mru_with_month_and_year(): void
     {
         $user = User::factory()->create(['status' => 'active']);
+        $this->subscribeUser($user);
 
         $mru = Mru::create([
             'user_id' => $user->id,
@@ -169,6 +191,7 @@ class MruArchitectureTest extends TestCase
     public function test_user_can_launch_global_billing_cycle(): void
     {
         $user = User::factory()->create(['status' => 'active']);
+        $this->subscribeUser($user);
 
         $mru = Mru::create([
             'user_id' => $user->id,
@@ -199,6 +222,7 @@ class MruArchitectureTest extends TestCase
     public function test_user_can_create_billing_cycle_only_without_immediate_download(): void
     {
         $user = User::factory()->create(['status' => 'active']);
+        $this->subscribeUser($user);
 
         $mru = Mru::create([
             'user_id' => $user->id,
