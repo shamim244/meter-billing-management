@@ -24,6 +24,11 @@ class AppServiceProvider extends ServiceProvider
             \App\Listeners\CreditWalletOnPaymentSuccess::class
         );
 
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\PaymentSuccessEvent::class,
+            \App\Listeners\ActivateSubscriptionOnPaymentSuccess::class
+        );
+
         \Illuminate\Support\Facades\Event::subscribe(
             \App\Listeners\DomainNotificationSubscriber::class
         );

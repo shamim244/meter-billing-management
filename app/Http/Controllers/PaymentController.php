@@ -123,6 +123,15 @@ class PaymentController extends Controller
         $amount = (float) $request->input('amount');
         $outcome = $request->input('outcome');
 
+        $meta = [];
+        if ($purpose === PaymentPurpose::DIRECT_SUBSCRIPTION) {
+            $plan = \App\Models\Plan::where('is_active', true)->with('durations')->first();
+            $duration = $plan?->durations->first();
+            if ($plan && $duration) {
+                $meta = ['plan_id' => $plan->id, 'duration_id' => $duration->id, 'action_type' => 'new'];
+            }
+        }
+
         // 1. Mock Online PG (Razorpay or Cashfree)
         if ($testMode === 'pg_razorpay' || $testMode === 'pg_cashfree') {
             $gatewayName = ($testMode === 'pg_razorpay') ? 'Razorpay' : 'Cashfree';
@@ -140,6 +149,7 @@ class PaymentController extends Controller
                     'gateway_order_id' => $orderId,
                     'gateway_payment_id' => $paymentId,
                     'verified_at' => now(),
+                    'meta' => $meta,
                 ]);
 
                 PaymentAuditLog::create([
@@ -163,6 +173,7 @@ class PaymentController extends Controller
                     'gateway_order_id' => $orderId,
                     'gateway_payment_id' => $paymentId,
                     'rejection_reason' => 'Simulated test card decline (Sandbox)',
+                    'meta' => $meta,
                 ]);
 
                 PaymentAuditLog::create([
@@ -189,6 +200,7 @@ class PaymentController extends Controller
                 'currency' => 'INR',
                 'status' => PaymentStatus::PENDING_VERIFICATION,
                 'utr_number' => $mockUtr,
+                'meta' => $meta,
             ]);
 
             event(new ManualPaymentSubmittedEvent($payment));
@@ -207,6 +219,7 @@ class PaymentController extends Controller
                 'currency' => 'INR',
                 'status' => PaymentStatus::PENDING_VERIFICATION,
                 'bank_reference' => $mockRef,
+                'meta' => $meta,
             ]);
 
             event(new ManualPaymentSubmittedEvent($payment));

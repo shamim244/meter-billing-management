@@ -25,7 +25,8 @@ class ManualUpiPaymentService
         float $amount,
         PaymentPurpose $purpose,
         string $utrNumber,
-        ?UploadedFile $screenshot = null
+        ?UploadedFile $screenshot = null,
+        array $meta = []
     ): Payment {
         if (!$this->settings->isModeEnabled(PaymentMode::MANUAL_UPI)) {
             throw new \InvalidArgumentException('Manual UPI payment mode is currently disabled.');
@@ -65,6 +66,7 @@ class ManualUpiPaymentService
             'status' => PaymentStatus::PENDING_VERIFICATION,
             'utr_number' => $cleanUtr,
             'screenshot_url' => $screenshotUrl,
+            'meta' => $meta,
         ]);
 
         event(new ManualPaymentSubmittedEvent($payment));

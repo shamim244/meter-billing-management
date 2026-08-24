@@ -33,6 +33,7 @@ class Payment extends Model
         'verified_by',
         'verified_at',
         'rejection_reason',
+        'meta',
     ];
 
     /**
@@ -48,6 +49,7 @@ class Payment extends Model
             'status' => PaymentStatus::class,
             'amount' => 'decimal:2',
             'verified_at' => 'datetime',
+            'meta' => 'array',
         ];
     }
 

@@ -28,16 +28,25 @@ class PlanChangeService
     public function calculateProration(
         AgentSubscription|int $subscription,
         Plan|int $newPlan,
-        ?int $durationMonths = null
+        mixed $durationMonths = null
     ): array {
         $sub = $subscription instanceof AgentSubscription ? $subscription : AgentSubscription::findOrFail($subscription);
         $targetPlan = $newPlan instanceof Plan ? $newPlan : Plan::findOrFail($newPlan);
 
-        $duration = $durationMonths ?? $sub->duration_months;
+        if ($durationMonths instanceof \App\Models\PlanDuration) {
+            $duration = (int) $durationMonths->duration_months;
+            $targetDuration = $durationMonths;
+        } elseif (is_numeric($durationMonths)) {
+            $duration = (int) $durationMonths;
+            $targetDuration = $targetPlan->durations()->where('duration_months', $duration)->first();
+        } else {
+            $duration = (int) $sub->duration_months;
+            $targetDuration = $targetPlan->durations()->where('duration_months', $duration)->first();
+        }
+
         $oldPlanPrice = (float) $sub->base_price_paid;
 
         // Target duration price
-        $targetDuration = $targetPlan->durations()->where('duration_months', $duration)->first();
         $newPlanPrice = $targetDuration
             ? (float) $targetDuration->final_price
             : round((float) $targetPlan->base_price * $duration, 2);
@@ -70,13 +79,13 @@ class PlanChangeService
      * Mid-cycle Plan Upgrade flow.
      * PRD Section 5.1 - 5.3: Debits wallet, updates snapshot, and auto-unlocks eligible MRUs.
      */
-    public function upgradePlan(AgentSubscription|int $subscription, Plan|int $newPlan): array
+    public function upgradePlan(AgentSubscription|int $subscription, Plan|int $newPlan, mixed $duration = null): array
     {
         $sub = $subscription instanceof AgentSubscription ? $subscription : AgentSubscription::findOrFail($subscription);
         $targetPlan = $newPlan instanceof Plan ? $newPlan : Plan::findOrFail($newPlan);
         $oldPlan = $sub->plan ?? Plan::withTrashed()->find($sub->plan_id);
 
-        $proration = $this->calculateProration($sub, $targetPlan);
+        $proration = $this->calculateProration($sub, $targetPlan, $duration);
         $amountDue = max(0.00, $proration['amount_due']);
         $user = $sub->user;
 
@@ -212,7 +221,7 @@ class PlanChangeService
      * Mid-cycle Plan Downgrade flow.
      * PRD Section 5.4: Server-side eligibility check, credits wallet, updates snapshot.
      */
-    public function downgradePlan(AgentSubscription|int $subscription, Plan|int $newPlan): array
+    public function downgradePlan(AgentSubscription|int $subscription, Plan|int $newPlan, mixed $duration = null): array
     {
         $sub = $subscription instanceof AgentSubscription ? $subscription : AgentSubscription::findOrFail($subscription);
         $targetPlan = $newPlan instanceof Plan ? $newPlan : Plan::findOrFail($newPlan);
@@ -224,7 +233,7 @@ class PlanChangeService
             throw new InvalidArgumentException($eligibility['message']);
         }
 
-        $proration = $this->calculateProration($sub, $targetPlan);
+        $proration = $this->calculateProration($sub, $targetPlan, $duration);
         $creditAmount = max(0.00, round($proration['old_plan_credit'] - $proration['new_plan_cost'], 2));
         $user = $sub->user;
 

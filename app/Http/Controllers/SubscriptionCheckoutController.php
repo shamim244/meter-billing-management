@@ -104,15 +104,27 @@ class SubscriptionCheckoutController extends Controller
         $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription);
         $amount = (float) $pricingDetails['final_amount'];
 
-        // If upgrade/purchase requires 0 payment (e.g. covered by credit)
-        if ($amount <= 0 && $pricingDetails['action_type'] === 'downgrade') {
-            $downgradeResult = $this->planChangeService->downgradePlan($activeSubscription, $plan, $duration);
-            if ($downgradeResult['success']) {
-                return redirect()->route('user-panel.subscription')
-                    ->with('success', "Plan successfully changed to {$plan->name}. Proration credit of ₹" . number_format($downgradeResult['amount_credited'], 2) . " was added to your wallet.");
+        // If upgrade/purchase requires 0 payment (e.g. covered by credit or free tier)
+        if ($amount <= 0) {
+            if ($pricingDetails['action_type'] === 'downgrade' && $activeSubscription) {
+                $downgradeResult = $this->planChangeService->downgradePlan($activeSubscription, $plan, $duration);
+                if ($downgradeResult['success']) {
+                    return redirect()->route('user-panel.subscription')
+                        ->with('success', "Plan successfully changed to {$plan->name}. Proration credit of ₹" . number_format($downgradeResult['amount_credited'], 2) . " was added to your wallet.");
+                }
+                return redirect()->route('user-panel.subscription')->with('error', $downgradeResult['message'] ?? 'Plan change failed.');
             }
-            return redirect()->route('user-panel.subscription')->with('error', $downgradeResult['message'] ?? 'Plan change failed.');
+
+            $subscription = $this->planService->subscribeAgent($user, $plan, $duration);
+            return redirect()->route('user-panel.subscription')
+                ->with('success', "🎉 Subscribed to {$plan->name} ({$duration->duration_months} Month" . ($duration->duration_months > 1 ? 's' : '') . ") successfully!");
         }
+
+        $meta = [
+            'plan_id' => $plan->id,
+            'duration_id' => $duration->id,
+            'action_type' => $pricingDetails['action_type'],
+        ];
 
         try {
             switch ($mode) {
@@ -120,7 +132,9 @@ class SubscriptionCheckoutController extends Controller
                     $orderData = $this->onlinePgService->createOrder(
                         $user,
                         $amount,
-                        PaymentPurpose::DIRECT_SUBSCRIPTION
+                        PaymentPurpose::DIRECT_SUBSCRIPTION,
+                        null,
+                        $meta
                     );
 
                     if ($request->wantsJson() || $request->ajax()) {
@@ -138,7 +152,8 @@ class SubscriptionCheckoutController extends Controller
                         $amount,
                         PaymentPurpose::DIRECT_SUBSCRIPTION,
                         $request->input('utr_number'),
-                        $request->file('screenshot')
+                        $request->file('screenshot'),
+                        $meta
                     );
                     return redirect()->route('payments.index')
                         ->with('success', "Direct subscription payment of ₹" . number_format($amount, 2) . " submitted with UTR: {$payment->utr_number}. Your plan will activate upon admin approval.");
@@ -149,7 +164,8 @@ class SubscriptionCheckoutController extends Controller
                         $amount,
                         PaymentPurpose::DIRECT_SUBSCRIPTION,
                         $request->input('bank_reference'),
-                        $request->file('screenshot')
+                        $request->file('screenshot'),
+                        $meta
                     );
                     return redirect()->route('payments.index')
                         ->with('success', "Direct subscription payment of ₹" . number_format($amount, 2) . " submitted with Ref: {$payment->bank_reference}. Your plan will activate upon admin approval.");
@@ -231,22 +247,24 @@ class SubscriptionCheckoutController extends Controller
         }
 
         // Case 3: Initial Subscription or Same Plan Renewal
-        $debitResult = $this->walletService->debit(
-            user: $user,
-            amount: $amountDue,
-            source: 'subscription_purchase',
-            referenceType: Plan::class,
-            referenceId: (string) $plan->id,
-            description: "Subscription to {$plan->name} ({$duration->duration_months} Month" . ($duration->duration_months > 1 ? 's' : '') . ")"
-        );
+        if ($amountDue > 0) {
+            $debitResult = $this->walletService->debit(
+                user: $user,
+                amount: $amountDue,
+                source: 'subscription_purchase',
+                referenceType: Plan::class,
+                referenceId: (string) $plan->id,
+                description: "Subscription to {$plan->name} ({$duration->duration_months} Month" . ($duration->duration_months > 1 ? 's' : '') . ")"
+            );
 
-        if ($debitResult !== DebitResult::SUCCESS) {
-            $msg = $debitResult === DebitResult::WALLET_FROZEN ? 'Wallet is frozen. Please contact admin.' : 'Insufficient wallet balance.';
-            return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
+            if ($debitResult !== DebitResult::SUCCESS) {
+                $msg = $debitResult === DebitResult::WALLET_FROZEN ? 'Wallet is frozen. Please contact admin.' : 'Insufficient wallet balance.';
+                return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
+            }
         }
 
         $subscription = $this->planService->subscribeAgent($user, $plan, $duration);
-        $msg = "🎉 Subscribed to {$plan->name} ({$duration->duration_months} Month" . ($duration->duration_months > 1 ? 's' : '') . ") successfully! ₹" . number_format($amountDue, 2) . " was debited from your wallet.";
+        $msg = "🎉 Subscribed to {$plan->name} ({$duration->duration_months} Month" . ($duration->duration_months > 1 ? 's' : '') . ") successfully!" . ($amountDue > 0 ? " ₹" . number_format($amountDue, 2) . " was debited from your wallet." : "");
 
         return $request->wantsJson()
             ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $subscription->id])
@@ -286,13 +304,14 @@ class SubscriptionCheckoutController extends Controller
 
         $isUpgrade = $plan->base_price >= $activeSub->plan->base_price;
         $proration = $this->planChangeService->calculateProration($activeSub, $plan, $duration);
+        $proratedCredit = max(0.0, round(($proration['old_plan_credit'] ?? 0) - ($proration['new_plan_cost'] ?? 0), 2));
 
         return [
             'action_type' => $isUpgrade ? 'upgrade' : 'downgrade',
             'base_price' => $basePrice,
             'proration' => $proration,
             'final_amount' => $isUpgrade ? (float) $proration['amount_due'] : 0.0,
-            'prorated_credit' => !$isUpgrade ? (float) $proration['prorated_credit'] : 0.0,
+            'prorated_credit' => !$isUpgrade ? $proratedCredit : 0.0,
             'discount_percent' => (float) $duration->discount_percent,
             'is_upgrade' => $isUpgrade,
             'is_downgrade' => !$isUpgrade,

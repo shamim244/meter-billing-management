@@ -35,9 +35,10 @@ class EnsureSubscriptionNotSuspended
             $routeName = $request->route()?->getName() ?? '';
             $method = strtoupper($request->method());
 
-            // Always exempt renewal, wallet, payment, profile, and logout routes
+            // Always exempt renewal, wallet, payment, subscription purchase, profile, and logout routes
             $exemptRoutePrefixes = [
                 'user-panel.subscription',
+                'subscription.',
                 'payments.',
                 'wallet.',
                 'logout',

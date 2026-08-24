@@ -7,10 +7,13 @@
         showModal: false,
         selectedPlan: null,
         selectedDuration: null,
-        walletBalance: {{ $walletBalance }},
+        walletBalance: {{ (float) $walletBalance }},
         isProcessingWallet: false,
         walletError: null,
         walletSuccess: null,
+        get selectedDurationPrice() {
+            return this.selectedDuration ? (parseFloat(this.selectedDuration.final_price) || 0) : 0;
+        },
         openCheckoutModal(plan, duration) {
             this.selectedPlan = plan;
             this.selectedDuration = duration;
@@ -49,7 +52,7 @@
                 this.isProcessingWallet = false;
                 setTimeout(() => {
                     window.location.reload();
-                }, 1800);
+                }, 1500);
             } catch (err) {
                 this.isProcessingWallet = false;
                 this.walletError = err.message;
@@ -57,7 +60,7 @@
         },
         get directPurchaseUrl() {
             if (!this.selectedPlan || !this.selectedDuration) return '#';
-            return `/subscription/purchase/${this.selectedPlan.id}/${this.selectedDuration.id}`;
+            return `{{ url('/subscription/purchase') }}/${this.selectedPlan.id}/${this.selectedDuration.id}`;
         }
     }">
         <!-- Session Flash Messages -->
@@ -284,7 +287,7 @@
                         <div>
                             <span class="text-[10px] uppercase tracking-wider font-bold text-indigo-600 dark:text-indigo-400 block">Total Payable Amount</span>
                             <span class="text-2xl font-black text-indigo-900 dark:text-indigo-100 font-mono">
-                                ₹<span x-text="selectedDuration ? selectedDuration.final_price.toLocaleString('en-IN') : '0'"></span>
+                                ₹<span x-text="selectedDurationPrice.toLocaleString('en-IN')"></span>
                             </span>
                         </div>
                         <div class="text-right text-xs">
@@ -303,7 +306,7 @@
                     </div>
 
                     <!-- Option 1: Pay from Wallet (In-Place) -->
-                    <div class="p-5 rounded-2xl border-2 transition" :class="selectedDuration && walletBalance >= selectedDuration.final_price ? 'border-emerald-500/40 bg-emerald-50/30 dark:bg-emerald-950/20' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950'">
+                    <div class="p-5 rounded-2xl border-2 transition" :class="selectedDuration && walletBalance >= selectedDurationPrice ? 'border-emerald-500/40 bg-emerald-50/30 dark:bg-emerald-950/20' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950'">
                         <div class="flex items-start justify-between gap-3">
                             <div class="flex items-center gap-2.5">
                                 <span class="text-xl">👛</span>
@@ -312,23 +315,23 @@
                                     <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Instant activation with no redirect.</p>
                                 </div>
                             </div>
-                            <span class="text-xs font-mono font-bold" :class="selectedDuration && walletBalance >= selectedDuration.final_price ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'">
+                            <span class="text-xs font-mono font-bold" :class="selectedDuration && walletBalance >= selectedDurationPrice ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'">
                                 ₹<span x-text="walletBalance.toLocaleString('en-IN')"></span> Available
                             </span>
                         </div>
 
                         <div class="mt-4">
-                            <template x-if="selectedDuration && walletBalance >= selectedDuration.final_price">
+                            <template x-if="selectedDuration && walletBalance >= selectedDurationPrice">
                                 <button type="button" @click="confirmWalletPayment()" :disabled="isProcessingWallet" class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50">
                                     <span x-show="!isProcessingWallet">✓ Confirm & Subscribe from Wallet</span>
                                     <span x-show="isProcessingWallet" x-cloak>Activating Plan...</span>
                                 </button>
                             </template>
 
-                            <template x-if="selectedDuration && walletBalance < selectedDuration.final_price">
+                            <template x-if="selectedDuration && walletBalance < selectedDurationPrice">
                                 <div class="space-y-2">
                                     <p class="text-[11px] text-rose-500 font-semibold">
-                                        Wallet balance is insufficient (Deficit: ₹<span x-text="(selectedDuration.final_price - walletBalance).toLocaleString('en-IN')"></span>).
+                                        Wallet balance is insufficient (Deficit: ₹<span x-text="(selectedDurationPrice - walletBalance).toLocaleString('en-IN')"></span>).
                                     </p>
                                     <a href="{{ route('payments.create') }}" class="w-full py-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 font-bold text-xs flex items-center justify-center gap-1 hover:bg-indigo-100 transition">
                                         <span>👛 Top-Up Wallet First →</span>

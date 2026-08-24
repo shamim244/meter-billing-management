@@ -178,4 +178,228 @@ class PlanVisibilityAndPaymentSeparationTest extends TestCase
         $agent->refresh();
         $this->assertEquals(1701.00, (float) $this->walletService->getBalance($agent));
     }
+
+    /**
+     * Test direct online PG payment success activates subscription via ActivateSubscriptionOnPaymentSuccess listener.
+     */
+    public function test_direct_pg_payment_activates_subscription_upon_success_event(): void
+    {
+        $agent = User::factory()->create(['status' => 'active', 'email_verified_at' => now()]);
+        $agent->assignRole('user');
+
+        $plan = $this->planService->createPlan([
+            'name' => 'Online PG Plan',
+            'base_price' => 999.00,
+            'included_mrus' => 10,
+            'included_consumers' => 5000,
+            'extra_mru_rate' => 100.00,
+            'extra_consumer_rate' => 0.20,
+            'is_active' => true,
+        ], [
+            ['duration_months' => 1, 'discount_percent' => 0, 'final_price' => 999.00],
+        ]);
+
+        $duration = $plan->durations->first();
+
+        // 1. Initiate PG checkout process
+        $response = $this->actingAs($agent)->postJson(route('subscription.purchase.process', [
+            'plan' => $plan->id,
+            'duration' => $duration->id,
+        ]), [
+            'mode' => 'pg',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson(['success' => true]);
+        $paymentId = $response->json('payment_id');
+
+        $payment = \App\Models\Payment::findOrFail($paymentId);
+        $this->assertEquals(PaymentPurpose::DIRECT_SUBSCRIPTION, $payment->purpose);
+        $this->assertEquals($plan->id, $payment->meta['plan_id']);
+        $this->assertEquals($duration->id, $payment->meta['duration_id']);
+
+        // 2. Simulate gateway success event
+        $payment->update([
+            'status' => \App\Enums\PaymentStatus::SUCCESS,
+            'gateway_payment_id' => 'pay_mock_123',
+            'verified_at' => now(),
+        ]);
+        event(new \App\Events\PaymentSuccessEvent($payment, 'pay_mock_123'));
+
+        // 3. Assert subscription active in database
+        $this->assertDatabaseHas('agent_subscriptions', [
+            'user_id' => $agent->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'base_price_paid' => 999.00,
+        ]);
+    }
+
+    /**
+     * Test Manual UPI direct subscription activates when admin approves payment.
+     */
+    public function test_manual_upi_direct_subscription_activates_on_admin_approval(): void
+    {
+        $admin = User::factory()->create(['status' => 'active', 'email_verified_at' => now()]);
+        $admin->assignRole('admin');
+
+        $agent = User::factory()->create(['status' => 'active', 'email_verified_at' => now()]);
+        $agent->assignRole('user');
+
+        $plan = $this->planService->createPlan([
+            'name' => 'UPI Pro Plan',
+            'base_price' => 499.00,
+            'included_mrus' => 3,
+            'included_consumers' => 1500,
+            'extra_mru_rate' => 90.00,
+            'extra_consumer_rate' => 0.18,
+            'is_active' => true,
+        ], [
+            ['duration_months' => 1, 'discount_percent' => 0, 'final_price' => 499.00],
+        ]);
+
+        $duration = $plan->durations->first();
+
+        // 1. Submit manual UPI payment
+        $response = $this->actingAs($agent)->post(route('subscription.purchase.process', [
+            'plan' => $plan->id,
+            'duration' => $duration->id,
+        ]), [
+            'mode' => 'manual_upi',
+            'utr_number' => '423987654321',
+        ]);
+
+        $response->assertRedirect(route('payments.index'));
+
+        $payment = \App\Models\Payment::where('utr_number', '423987654321')->firstOrFail();
+        $this->assertEquals(\App\Enums\PaymentStatus::PENDING_VERIFICATION, $payment->status);
+        $this->assertEquals($plan->id, $payment->meta['plan_id']);
+
+        // 2. Admin approves payment
+        $verificationService = app(\App\Services\Payment\PaymentVerificationService::class);
+        $verificationService->approve($payment, $admin, 'Verified in bank account');
+
+        // 3. Assert subscription active
+        $this->assertDatabaseHas('agent_subscriptions', [
+            'user_id' => $agent->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'base_price_paid' => 499.00,
+        ]);
+    }
+
+    /**
+     * Test Bank Transfer direct subscription activates when admin approves payment.
+     */
+    public function test_bank_transfer_direct_subscription_activates_on_admin_approval(): void
+    {
+        $admin = User::factory()->create(['status' => 'active', 'email_verified_at' => now()]);
+        $admin->assignRole('admin');
+
+        $agent = User::factory()->create(['status' => 'active', 'email_verified_at' => now()]);
+        $agent->assignRole('user');
+
+        $plan = $this->planService->createPlan([
+            'name' => 'Bank Transfer Plan',
+            'base_price' => 1299.00,
+            'included_mrus' => 15,
+            'included_consumers' => 6000,
+            'extra_mru_rate' => 110.00,
+            'extra_consumer_rate' => 0.22,
+            'is_active' => true,
+        ], [
+            ['duration_months' => 3, 'discount_percent' => 10, 'final_price' => 3507.00],
+        ]);
+
+        $duration = $plan->durations->first();
+
+        // 1. Submit bank transfer payment
+        $response = $this->actingAs($agent)->post(route('subscription.purchase.process', [
+            'plan' => $plan->id,
+            'duration' => $duration->id,
+        ]), [
+            'mode' => 'bank_transfer',
+            'bank_reference' => 'NEFT-SBIN-998877',
+        ]);
+
+        $response->assertRedirect(route('payments.index'));
+
+        $payment = \App\Models\Payment::where('bank_reference', 'NEFT-SBIN-998877')->firstOrFail();
+        $this->assertEquals(\App\Enums\PaymentStatus::PENDING_VERIFICATION, $payment->status);
+
+        // 2. Admin approves payment
+        $verificationService = app(\App\Services\Payment\PaymentVerificationService::class);
+        $verificationService->approve($payment, $admin, 'Bank credit confirmed');
+
+        // 3. Assert subscription active
+        $this->assertDatabaseHas('agent_subscriptions', [
+            'user_id' => $agent->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'base_price_paid' => 3507.00,
+        ]);
+    }
+
+    /**
+     * Test suspended agent can access subscription purchase and activate plan without being blocked.
+     */
+    public function test_suspended_agent_can_renew_and_activate_plan_via_wallet(): void
+    {
+        $agent = User::factory()->create(['status' => 'active', 'email_verified_at' => now()]);
+        $agent->assignRole('user');
+
+        $this->walletService->credit($agent, 1000.00, 'test_seed');
+
+        $plan = $this->planService->createPlan([
+            'name' => 'Renewal Tier',
+            'base_price' => 350.00,
+            'included_mrus' => 3,
+            'included_consumers' => 1000,
+            'extra_mru_rate' => 90.00,
+            'extra_consumer_rate' => 0.18,
+            'is_active' => true,
+        ], [
+            ['duration_months' => 1, 'discount_percent' => 0, 'final_price' => 350.00],
+        ]);
+
+        $duration = $plan->durations->first();
+
+        // Create expired / suspended subscription
+        $sub = AgentSubscription::create([
+            'user_id' => $agent->id,
+            'plan_id' => $plan->id,
+            'status' => 'suspended',
+            'billing_start' => now()->subMonths(2),
+            'billing_end' => now()->subDays(10),
+            'grace_period_end' => now()->subDays(3),
+            'duration_months' => 1,
+            'base_price_paid' => 350.00,
+            'included_mrus_locked' => 3,
+            'included_consumers_locked' => 1000,
+            'extra_mru_rate_locked' => 90.00,
+            'extra_consumer_rate_locked' => 0.18,
+        ]);
+
+        // Ensure agent can access subscription page and purchase page
+        $pageResp = $this->actingAs($agent)->get(route('subscription.purchase', [
+            'plan' => $plan->id,
+            'duration' => $duration->id,
+        ]));
+        $pageResp->assertStatus(200);
+
+        // Ensure agent can POST to subscribe_wallet
+        $walletResp = $this->actingAs($agent)->postJson(route('subscription.subscribe_wallet'), [
+            'plan_id' => $plan->id,
+            'duration_id' => $duration->id,
+        ]);
+
+        $walletResp->assertStatus(200);
+        $walletResp->assertJson(['success' => true]);
+
+        // Subscription is now active!
+        $this->assertDatabaseHas('agent_subscriptions', [
+            'user_id' => $agent->id,
+            'status' => 'active',
+        ]);
+    }
 }

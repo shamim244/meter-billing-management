@@ -26,7 +26,7 @@ class OnlinePaymentGatewayService
     /**
      * Create an online payment gateway order (supporting Cashfree & Razorpay).
      */
-    public function createOrder(User $user, float $amount, PaymentPurpose $purpose, ?string $mandateId = null): array
+    public function createOrder(User $user, float $amount, PaymentPurpose $purpose, ?string $mandateId = null, array $meta = []): array
     {
         if (!$this->settings->isModeEnabled(PaymentMode::PG)) {
             throw new \InvalidArgumentException('Online Payment Gateway is currently disabled by administrator.');
@@ -40,16 +40,16 @@ class OnlinePaymentGatewayService
         $activeDriver = $this->settings->getActivePgDriver();
 
         if ($activeDriver === 'razorpay') {
-            return $this->createRazorpayOrder($user, $amount, $purpose);
+            return $this->createRazorpayOrder($user, $amount, $purpose, $meta);
         }
 
-        return $this->createCashfreeOrder($user, $amount, $purpose);
+        return $this->createCashfreeOrder($user, $amount, $purpose, $meta);
     }
 
     /**
      * Create a Razorpay Order.
      */
-    protected function createRazorpayOrder(User $user, float $amount, PaymentPurpose $purpose): array
+    protected function createRazorpayOrder(User $user, float $amount, PaymentPurpose $purpose, array $meta = []): array
     {
         $keyId = $this->settings->getRazorpayKeyId();
         $keySecret = $this->settings->getRazorpayKeySecret();
@@ -65,6 +65,7 @@ class OnlinePaymentGatewayService
             'currency' => 'INR',
             'status' => PaymentStatus::PENDING,
             'gateway_order_id' => $gatewayOrderId,
+            'meta' => $meta,
         ]);
 
         try {
@@ -110,6 +111,7 @@ class OnlinePaymentGatewayService
                 'user_id' => $user->id,
                 'purpose' => $purpose->value,
             ],
+            'meta' => $meta,
             'theme' => [
                 'color' => '#4f46e5', // Indigo brand
             ],
@@ -124,7 +126,7 @@ class OnlinePaymentGatewayService
     /**
      * Create a Cashfree Order.
      */
-    protected function createCashfreeOrder(User $user, float $amount, PaymentPurpose $purpose): array
+    protected function createCashfreeOrder(User $user, float $amount, PaymentPurpose $purpose, array $meta = []): array
     {
         $gatewayOrderId = 'cf_ord_' . Str::lower(Str::random(16));
 
@@ -136,6 +138,7 @@ class OnlinePaymentGatewayService
             'currency' => 'INR',
             'status' => PaymentStatus::PENDING,
             'gateway_order_id' => $gatewayOrderId,
+            'meta' => $meta,
         ]);
 
         $appId = $this->settings->getCashfreeAppId();

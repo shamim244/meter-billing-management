@@ -326,6 +326,15 @@ class AdminPaymentController extends Controller
         $orderId = ($gateway === 'razorpay' ? 'order_sim_' : 'cf_ord_sim_') . Str::random(12);
         $paymentId = ($gateway === 'razorpay' ? 'pay_sim_' : 'cf_pay_sim_') . Str::random(12);
 
+        $meta = [];
+        if ($purpose === PaymentPurpose::DIRECT_SUBSCRIPTION) {
+            $plan = \App\Models\Plan::where('is_active', true)->with('durations')->first();
+            $duration = $plan?->durations->first();
+            if ($plan && $duration) {
+                $meta = ['plan_id' => $plan->id, 'duration_id' => $duration->id, 'action_type' => 'new'];
+            }
+        }
+
         if ($outcome === 'success') {
             $payment = Payment::create([
                 'user_id' => $user->id,
@@ -337,6 +346,7 @@ class AdminPaymentController extends Controller
                 'gateway_order_id' => $orderId,
                 'gateway_payment_id' => $paymentId,
                 'verified_at' => now(),
+                'meta' => $meta,
             ]);
 
             PaymentAuditLog::create([

@@ -1,3 +1,5 @@
+<?php
+
 use App\Jobs\CheckMonthlyUsageSummaryJob;
 use App\Services\Billing\SubscriptionLifecycleService;
 use Illuminate\Foundation\Inspiring;

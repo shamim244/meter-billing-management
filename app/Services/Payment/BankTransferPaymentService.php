@@ -25,7 +25,8 @@ class BankTransferPaymentService
         float $amount,
         PaymentPurpose $purpose,
         string $bankReference,
-        ?UploadedFile $screenshot = null
+        ?UploadedFile $screenshot = null,
+        array $meta = []
     ): Payment {
         if (!$this->settings->isModeEnabled(PaymentMode::BANK_TRANSFER)) {
             throw new \InvalidArgumentException('Bank Transfer payment mode is currently disabled.');
@@ -65,6 +66,7 @@ class BankTransferPaymentService
             'status' => PaymentStatus::PENDING_VERIFICATION,
             'bank_reference' => $cleanRef,
             'screenshot_url' => $screenshotUrl,
+            'meta' => $meta,
         ]);
 
         event(new ManualPaymentSubmittedEvent($payment));
