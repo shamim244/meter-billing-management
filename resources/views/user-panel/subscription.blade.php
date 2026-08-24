@@ -29,7 +29,7 @@
             this.walletSuccess = null;
 
             try {
-                const response = await fetch('{{ route('subscription.subscribe_wallet') }}', {
+                const response = await fetch('{{ route('subscription.subscribe_wallet', [], false) }}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -60,7 +60,7 @@
         },
         get directPurchaseUrl() {
             if (!this.selectedPlan || !this.selectedDuration) return '#';
-            return `{{ url('/subscription/purchase') }}/${this.selectedPlan.id}/${this.selectedDuration.id}`;
+            return `/subscription/purchase/${this.selectedPlan.id}/${this.selectedDuration.id}`;
         }
     }">
         <!-- Session Flash Messages -->

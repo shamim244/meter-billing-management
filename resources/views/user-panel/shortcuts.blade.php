@@ -32,7 +32,7 @@
             this.isSaving = true;
             this.saveMessage = null;
 
-            fetch('{{ route('user.shortcuts.save') }}', {
+            fetch('{{ route('user.shortcuts.save', [], false) }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -58,8 +58,9 @@
         resetToDefaults() {
             if (!confirm('Reset all keyboard shortcuts back to system defaults?')) return;
             this.isSaving = true;
+            this.saveMessage = null;
 
-            fetch('{{ route('user.shortcuts.reset') }}', {
+            fetch('{{ route('user.shortcuts.reset', [], false) }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

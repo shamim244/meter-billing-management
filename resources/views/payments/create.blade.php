@@ -47,7 +47,7 @@
             this.errorMessage = null;
 
             try {
-                const response = await fetch('{{ route('payments.store') }}', {
+                const response = await fetch('{{ route('payments.store', [], false) }}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -85,7 +85,7 @@
                         notes: data.order.notes || {},
                         theme: data.order.theme || { color: '#4f46e5' },
                         handler: function (resp) {
-                            window.location.href = `{{ route('payments.verify') }}?razorpay_payment_id=${encodeURIComponent(resp.razorpay_payment_id)}&razorpay_order_id=${encodeURIComponent(resp.razorpay_order_id)}&razorpay_signature=${encodeURIComponent(resp.razorpay_signature)}`;
+                            window.location.href = `{{ route('payments.verify', [], false) }}?razorpay_payment_id=${encodeURIComponent(resp.razorpay_payment_id)}&razorpay_order_id=${encodeURIComponent(resp.razorpay_order_id)}&razorpay_signature=${encodeURIComponent(resp.razorpay_signature)}`;
                         },
                         modal: {
                             ondismiss: function () {
@@ -116,12 +116,12 @@
                             redirectTarget: '_self'
                         });
                     } else {
-                        window.location.href = '{{ route('payments.index') }}';
+                        window.location.href = '{{ route('payments.index', [], false) }}';
                     }
                     return;
                 }
 
-                window.location.href = '{{ route('payments.index') }}';
+                window.location.href = '{{ route('payments.index', [], false) }}';
             } catch (err) {
                 this.isSubmitting = false;
                 this.errorMessage = err.message || 'Payment initiation failed. Please try again.';
