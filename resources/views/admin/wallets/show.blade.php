@@ -244,7 +244,8 @@
                         <tbody class="divide-y divide-slate-800/60 font-mono text-xs">
                             @foreach($adjustments as $adj)
                                 @php
-                                    $isCredit = $adj->type === 'deposit';
+                                    $adjTypeVal = $adj->type instanceof \BackedEnum ? $adj->type->value : (string) ($adj->type ?? '');
+                                    $isCredit = $adjTypeVal === 'deposit';
                                     $meta = (array) ($adj->meta ?? []);
                                     $adminName = $meta['admin_name'] ?? ('Admin #' . ($meta['admin_id'] ?? ''));
                                     $reason = $meta['reason'] ?? ($meta['description'] ?? '—');
@@ -260,7 +261,7 @@
                                         @endif
                                     </td>
                                     <td class="py-2.5 px-3 font-black {{ $isCredit ? 'text-emerald-400' : 'text-rose-400' }}">
-                                        {{ $isCredit ? '+' : '−' }}₹{{ number_format((float)$adj->amountFloat, 2) }}
+                                        {{ $isCredit ? '+' : '−' }}₹{{ number_format(abs((float)$adj->amountFloat), 2) }}
                                     </td>
                                     <td class="py-2.5 px-3 font-sans text-slate-300 text-[11px] max-w-xs truncate">{{ $reason }}</td>
                                 </tr>
@@ -337,7 +338,8 @@
                     <tbody class="divide-y divide-slate-800/60 font-mono text-xs">
                         @forelse($transactions as $tx)
                             @php
-                                $isCredit = $tx->type === 'deposit';
+                                $typeVal = $tx->type instanceof \BackedEnum ? $tx->type->value : (string) $tx->type;
+                                $isCredit = $typeVal === 'deposit';
                                 $meta = (array) ($tx->meta ?? []);
                                 $source = $meta['source'] ?? ($isCredit ? 'Credit' : 'Debit');
                                 $desc = $meta['description'] ?? ($meta['reason'] ?? '—');
@@ -354,7 +356,7 @@
                                 </td>
                                 <td class="py-3 px-4 font-sans text-indigo-300 font-semibold text-[11px]">{{ ucwords(str_replace('_', ' ', $source)) }}</td>
                                 <td class="py-3 px-4 font-black {{ $isCredit ? 'text-emerald-400' : 'text-white' }}">
-                                    {{ $isCredit ? '+' : '−' }}₹{{ number_format((float)$tx->amountFloat, 2) }}
+                                    {{ $isCredit ? '+' : '−' }}₹{{ number_format(abs((float)$tx->amountFloat), 2) }}
                                 </td>
                                 <td class="py-3 px-4 font-sans text-slate-300 text-[11px] max-w-xs truncate">{{ $desc }}</td>
                             </tr>

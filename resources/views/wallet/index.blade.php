@@ -154,7 +154,8 @@
                         <tbody class="divide-y divide-slate-100 dark:divide-slate-800/60 font-mono text-xs">
                             @forelse($transactions as $tx)
                                 @php
-                                    $isCredit = $tx->type === 'deposit';
+                                    $typeVal = $tx->type instanceof \BackedEnum ? $tx->type->value : (string) $tx->type;
+                                    $isCredit = $typeVal === 'deposit';
                                     $meta = (array) ($tx->meta ?? []);
                                     $source = $meta['source'] ?? ($isCredit ? 'Credit' : 'Debit');
                                     $desc = $meta['description'] ?? ($meta['reason'] ?? '—');
@@ -179,7 +180,7 @@
                                         {{ ucwords(str_replace('_', ' ', $source)) }}
                                     </td>
                                     <td class="py-3.5 px-4 font-black {{ $isCredit ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white' }}">
-                                        {{ $isCredit ? '+' : '−' }}₹{{ number_format((float)$tx->amountFloat, 2) }}
+                                        {{ $isCredit ? '+' : '−' }}₹{{ number_format(abs((float)$tx->amountFloat), 2) }}
                                     </td>
                                     <td class="py-3.5 px-4 font-sans text-slate-600 dark:text-slate-400 text-[11px] max-w-xs truncate">
                                         {{ $desc }}

@@ -69,13 +69,14 @@ class WalletController extends Controller
             fputcsv($handle, ['Tx ID', 'Date & Time', 'Type', 'Amount (INR)', 'Source', 'Reference ID', 'Description']);
 
             foreach ($transactions as $tx) {
+                $typeVal = $tx->type instanceof \BackedEnum ? $tx->type->value : (string) $tx->type;
                 $meta = (array) ($tx->meta ?? []);
                 fputcsv($handle, [
                     $tx->id,
                     $tx->created_at->format('Y-m-d H:i:s'),
-                    $tx->type === 'deposit' ? 'CREDIT' : 'DEBIT',
+                    $typeVal === 'deposit' ? 'CREDIT' : 'DEBIT',
                     number_format((float) $tx->amountFloat, 2, '.', ''),
-                    $meta['source'] ?? $tx->type,
+                    $meta['source'] ?? $typeVal,
                     $meta['reference_id'] ?? '-',
                     $meta['description'] ?? ($meta['reason'] ?? '-'),
                 ]);
