@@ -7,6 +7,7 @@ use App\Models\BillStatus;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Services\EngineService;
+use App\Services\Plan\ConsumerQuotaService;
 use App\Services\Plan\MruQuotaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -20,11 +21,16 @@ class MruController extends Controller
 {
     protected EngineService $engineService;
     protected MruQuotaService $mruQuotaService;
+    protected ConsumerQuotaService $consumerQuotaService;
 
-    public function __construct(EngineService $engineService, MruQuotaService $mruQuotaService)
-    {
+    public function __construct(
+        EngineService $engineService,
+        MruQuotaService $mruQuotaService,
+        ConsumerQuotaService $consumerQuotaService
+    ) {
         $this->engineService = $engineService;
         $this->mruQuotaService = $mruQuotaService;
+        $this->consumerQuotaService = $consumerQuotaService;
     }
 
     /**
@@ -547,6 +553,27 @@ class MruController extends Controller
             ], 422);
         }
 
+        $payOverage = $request->boolean('pay_overage', false);
+        $quotaResult = $this->consumerQuotaService->consumeConsumerQuota(
+            user: $userId,
+            mru: $mru,
+            month: $month,
+            year: $year,
+            consumerCount: $activeConsumers->count(),
+            payOverage: $payOverage
+        );
+
+        if (!$quotaResult['allowed']) {
+            return response()->json([
+                'success' => false,
+                'requires_overage' => $quotaResult['requires_payment'] ?? false,
+                'overage_type' => 'consumer_cycle',
+                'amount_due' => $quotaResult['amount_due'] ?? 0,
+                'extra_count' => $quotaResult['extra_count'] ?? 0,
+                'message' => $quotaResult['reason'] ?? $quotaResult['message'] ?? 'Consumer quota exceeded.',
+            ], 402);
+        }
+
         \Illuminate\Support\Facades\DB::transaction(function () use ($activeConsumers, $userId, $month, $year, $monthLabel, $mru) {
             foreach ($activeConsumers as $consumer) {
                 // Find strictly preceding record in DB if exists
@@ -628,6 +655,27 @@ class MruController extends Controller
                 'success' => false,
                 'message' => "MRU '{$mru->name}' has no active consumers. Please add consumers first.",
             ], 422);
+        }
+
+        $payOverage = $request->boolean('pay_overage', false);
+        $quotaResult = $this->consumerQuotaService->consumeConsumerQuota(
+            user: $userId,
+            mru: $mru,
+            month: $month,
+            year: $year,
+            consumerCount: count($consumerCAs),
+            payOverage: $payOverage
+        );
+
+        if (!$quotaResult['allowed']) {
+            return response()->json([
+                'success' => false,
+                'requires_overage' => $quotaResult['requires_payment'] ?? false,
+                'overage_type' => 'consumer_cycle',
+                'amount_due' => $quotaResult['amount_due'] ?? 0,
+                'extra_count' => $quotaResult['extra_count'] ?? 0,
+                'message' => $quotaResult['reason'] ?? $quotaResult['message'] ?? 'Consumer quota exceeded.',
+            ], 402);
         }
 
         $results = $this->engineService->downloadAndParseBills($consumerCAs, $userId, $month, $year, $mru->id);

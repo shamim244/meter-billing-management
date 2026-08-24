@@ -515,8 +515,19 @@
                             <div class="text-slate-400 text-[10px]">Processing consumers concurrently. Please wait...</div>
                         </div>
 
+                        <!-- Cycle Overage Confirmation Alert -->
+                        <div x-show="cycleOverageRequired" class="p-4 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/80 rounded-2xl space-y-2">
+                            <div class="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-xs">
+                                <span>⚠️</span> Consumer Quota Notice
+                            </div>
+                            <p class="text-xs text-amber-900 dark:text-amber-200" x-text="cycleOverageMessage"></p>
+                            <button type="button" @click="triggerMruBilling(executingAction, true)" :disabled="billingInProgress" class="w-full mt-2 py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow transition flex items-center justify-center gap-1.5">
+                                <span>✓</span> Confirm & Pay ₹<span x-text="cycleOverageAmount"></span> from Wallet
+                            </button>
+                        </div>
+
                         <!-- Result message -->
-                        <div x-show="billingResult" class="p-3.5 rounded-2xl text-xs font-semibold" :class="billingResult?.success ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800'" x-text="billingResult?.message"></div>
+                        <div x-show="billingResult && !cycleOverageRequired" class="p-3.5 rounded-2xl text-xs font-semibold" :class="billingResult?.success ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800'" x-text="billingResult?.message"></div>
                     </div>
 
                     <!-- Modal Actions: Two distinct choices -->
@@ -677,6 +688,10 @@
                 billingInProgress: false,
                 billingResult: null,
 
+                cycleOverageRequired: false,
+                cycleOverageAmount: 0,
+                cycleOverageMessage: '',
+
                 get detectedLinesCount() {
                     if (!this.bulkImportText.trim()) return 0;
                     return this.bulkImportText.trim().split(/\r?\n/).filter(line => line.trim().length > 0).length;
@@ -698,6 +713,9 @@
                 openDownloadForSession(month, year) {
                     this.cycleMonth = month;
                     this.cycleYear = year;
+                    this.cycleOverageRequired = false;
+                    this.cycleOverageAmount = 0;
+                    this.cycleOverageMessage = '';
                     this.showStartBillingModal = true;
                 },
 
@@ -743,7 +761,7 @@
                     });
                 },
 
-                triggerMruBilling(actionType = 'download_all') {
+                triggerMruBilling(actionType = 'download_all', payOverage = false) {
                     this.executingAction = actionType;
                     this.billingInProgress = true;
                     this.billingResult = null;
@@ -757,11 +775,18 @@
                         body: JSON.stringify({
                             billing_month: this.cycleMonth,
                             billing_year: this.cycleYear,
-                            action_type: actionType
+                            action_type: actionType,
+                            pay_overage: payOverage ? 1 : 0
                         })
                     })
                     .then(async res => {
                         const data = await res.json();
+                        if (res.status === 402 && data.requires_overage) {
+                            this.cycleOverageRequired = true;
+                            this.cycleOverageAmount = data.amount_due || 0;
+                            this.cycleOverageMessage = data.message || 'Consumer quota exceeded. Wallet deduction required.';
+                            throw new Error(data.message);
+                        }
                         if (!res.ok) {
                             throw new Error(data.message || 'Cycle creation failed');
                         }

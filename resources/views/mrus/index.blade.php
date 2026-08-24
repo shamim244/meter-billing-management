@@ -192,8 +192,19 @@
                         <button @click="showCreateModal = false" :disabled="isSubmittingMru" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 disabled:opacity-40 p-1">✕</button>
                     </div>
 
-                    <form @submit.prevent="submitCreateMru()" class="overflow-y-auto p-4 sm:p-6 space-y-4">
+                    <form @submit.prevent="submitCreateMru(false)" class="overflow-y-auto p-4 sm:p-6 space-y-4">
                         <div x-show="createMruError" class="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-semibold rounded-xl" x-text="createMruError"></div>
+
+                        <!-- Overage Confirmation Alert -->
+                        <div x-show="mruOverageRequired" class="p-4 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/80 rounded-2xl space-y-2">
+                            <div class="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-xs">
+                                <span>⚠️</span> Plan Quota Notice
+                            </div>
+                            <p class="text-xs text-amber-900 dark:text-amber-200" x-text="mruOverageMessage"></p>
+                            <button type="button" @click="submitCreateMru(true)" :disabled="isSubmittingMru" class="w-full mt-2 py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow transition flex items-center justify-center gap-1.5">
+                                <span>✓</span> Confirm & Pay ₹<span x-text="mruOverageAmount"></span> from Wallet
+                            </button>
+                        </div>
 
                         <div>
                             <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">MRU Code *</label>
@@ -215,7 +226,7 @@
                             <button type="button" @click="showCreateModal = false" :disabled="isSubmittingMru" class="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-center">
                                 Cancel
                             </button>
-                            <button type="submit" :disabled="isSubmittingMru" class="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition flex items-center justify-center gap-1.5">
+                            <button x-show="!mruOverageRequired" type="submit" :disabled="isSubmittingMru" class="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition flex items-center justify-center gap-1.5">
                                 <svg x-show="isSubmittingMru" class="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                                 <span x-text="isSubmittingMru ? 'Verifying & Creating...' : 'Create Workspace'"></span>
                             </button>
@@ -354,8 +365,19 @@
                             <div class="text-slate-400 text-[10px]">Processing consumers concurrently. Please wait...</div>
                         </div>
 
+                        <!-- Cycle Overage Confirmation Alert -->
+                        <div x-show="cycleOverageRequired" class="p-4 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/80 rounded-2xl space-y-2">
+                            <div class="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-xs">
+                                <span>⚠️</span> Consumer Quota Notice
+                            </div>
+                            <p class="text-xs text-amber-900 dark:text-amber-200" x-text="cycleOverageMessage"></p>
+                            <button type="button" @click="launchBillingCycle(executingAction, true)" :disabled="cycleInProgress" class="w-full mt-2 py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow transition flex items-center justify-center gap-1.5">
+                                <span>✓</span> Confirm & Pay ₹<span x-text="cycleOverageAmount"></span> from Wallet
+                            </button>
+                        </div>
+
                         <!-- Result notification -->
-                        <div x-show="cycleResult" class="p-3.5 rounded-2xl text-xs font-semibold" :class="cycleResult?.success ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800'" x-text="cycleResult?.message"></div>
+                        <div x-show="cycleResult && !cycleOverageRequired" class="p-3.5 rounded-2xl text-xs font-semibold" :class="cycleResult?.success ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800'" x-text="cycleResult?.message"></div>
                     </div>
 
                     <div class="p-4 sm:p-6 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2.5">
@@ -472,6 +494,14 @@
                 newMruIdentifier: '',
                 isSubmittingMru: false,
                 createMruError: null,
+                mruOverageRequired: false,
+                mruOverageAmount: 0,
+                mruOverageMessage: '',
+
+                // Cycle Overage State
+                cycleOverageRequired: false,
+                cycleOverageAmount: 0,
+                cycleOverageMessage: '',
 
                 get filteredMrus() {
                     return this.mruList.filter(m => {
@@ -491,10 +521,13 @@
                     this.newMruName = '';
                     this.newMruIdentifier = '';
                     this.createMruError = null;
+                    this.mruOverageRequired = false;
+                    this.mruOverageAmount = 0;
+                    this.mruOverageMessage = '';
                     this.showCreateModal = true;
                 },
 
-                submitCreateMru() {
+                submitCreateMru(payOverage = false) {
                     if (!this.newMruCode.trim() || !this.newMruName.trim()) return;
 
                     this.isSubmittingMru = true;
@@ -510,11 +543,18 @@
                         body: JSON.stringify({
                             code: this.newMruCode,
                             name: this.newMruName,
-                            full_identifier: this.newMruIdentifier
+                            full_identifier: this.newMruIdentifier,
+                            pay_overage: payOverage ? 1 : 0
                         })
                     })
                     .then(async res => {
                         const data = await res.json();
+                        if (res.status === 402 && data.requires_overage) {
+                            this.mruOverageRequired = true;
+                            this.mruOverageAmount = data.amount_due || 0;
+                            this.mruOverageMessage = data.message || 'Plan MRU limit exceeded. Wallet deduction required.';
+                            throw new Error(data.message);
+                        }
                         if (!res.ok) {
                             throw new Error(data.message || 'Server error occurred');
                         }
@@ -546,10 +586,13 @@
                         this.selectedMruId = this.mruList[0].id;
                     }
                     this.cycleResult = null;
+                    this.cycleOverageRequired = false;
+                    this.cycleOverageAmount = 0;
+                    this.cycleOverageMessage = '';
                     this.showCycleModal = true;
                 },
 
-                launchBillingCycle(actionType = 'download_all') {
+                launchBillingCycle(actionType = 'download_all', payOverage = false) {
                     if (!this.selectedMruId) return;
 
                     this.executingAction = actionType;
@@ -566,11 +609,18 @@
                             mru_id: this.selectedMruId,
                             billing_month: this.cycleMonth,
                             billing_year: this.cycleYear,
-                            action_type: actionType
+                            action_type: actionType,
+                            pay_overage: payOverage ? 1 : 0
                         })
                     })
                     .then(async res => {
                         const data = await res.json();
+                        if (res.status === 402 && data.requires_overage) {
+                            this.cycleOverageRequired = true;
+                            this.cycleOverageAmount = data.amount_due || 0;
+                            this.cycleOverageMessage = data.message || 'Consumer quota exceeded. Wallet deduction required.';
+                            throw new Error(data.message);
+                        }
                         if (!res.ok) {
                             throw new Error(data.message || 'Server returned an error');
                         }
