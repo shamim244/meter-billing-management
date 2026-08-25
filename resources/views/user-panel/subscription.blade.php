@@ -5,39 +5,73 @@
 
     <div class="space-y-8" x-data="{
         showModal: false,
+        isLoadingQuote: false,
+        quote: null,
         selectedPlan: null,
         selectedDuration: null,
         walletBalance: {{ (float) $walletBalance }},
         isProcessingWallet: false,
         walletError: null,
-        walletSuccess: null,
         mruConflict: false,
         activeMrus: [],
         excessMrus: 0,
         newPlanQuota: 0,
         isLockingMru: false,
         lockSuccessMsg: null,
+        showReceiptModal: false,
+        receiptData: null,
+
         get selectedDurationPrice() {
+            if (this.quote && this.quote.action_type === 'upgrade') {
+                return parseFloat(this.quote.final_amount) || 0;
+            }
+            if (this.quote && this.quote.action_type === 'downgrade') {
+                return 0;
+            }
             return this.selectedDuration ? (parseFloat(this.selectedDuration.final_price) || 0) : 0;
         },
-        openCheckoutModal(plan, duration) {
+
+        async openCheckoutModal(plan, duration) {
             this.selectedPlan = plan;
             this.selectedDuration = duration;
             this.walletError = null;
-            this.walletSuccess = null;
             this.mruConflict = false;
             this.activeMrus = [];
             this.excessMrus = 0;
             this.newPlanQuota = 0;
             this.lockSuccessMsg = null;
             this.isProcessingWallet = false;
+            this.quote = null;
+            this.isLoadingQuote = true;
             this.showModal = true;
+
+            try {
+                const res = await fetch(`/subscription/quote/${plan.id}/${duration.id}`, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    this.quote = data;
+                    if (data.action_type === 'downgrade' && data.downgrade_eligibility && !data.downgrade_eligibility.eligible) {
+                        this.mruConflict = true;
+                        this.activeMrus = data.downgrade_eligibility.active_mrus || [];
+                        this.excessMrus = data.downgrade_eligibility.excess_mrus || 0;
+                        this.newPlanQuota = data.downgrade_eligibility.new_plan_quota || 0;
+                    }
+                } else {
+                    this.walletError = data.message || 'Failed to calculate quote.';
+                }
+            } catch (err) {
+                this.walletError = 'Failed to load plan quote.';
+            } finally {
+                this.isLoadingQuote = false;
+            }
         },
+
         async confirmWalletPayment() {
             if (!this.selectedPlan || !this.selectedDuration) return;
             this.isProcessingWallet = true;
             this.walletError = null;
-            this.walletSuccess = null;
             this.lockSuccessMsg = null;
 
             try {
@@ -66,16 +100,24 @@
                     throw new Error(data.message || 'Wallet payment failed.');
                 }
 
-                this.walletSuccess = data.message;
-                this.isProcessingWallet = false;
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1500);
+                // Show Receipt Modal
+                this.receiptData = {
+                    planName: this.selectedPlan.name,
+                    actionType: this.quote?.action_type || 'subscription',
+                    message: data.message,
+                    amountPaid: this.quote?.final_amount || 0,
+                    amountCredited: this.quote?.prorated_credit || 0,
+                    duration: this.selectedDuration.formatted_duration || (this.selectedDuration.duration_months + ' Month(s)'),
+                };
+                this.showModal = false;
+                this.showReceiptModal = true;
             } catch (err) {
-                this.isProcessingWallet = false;
                 this.walletError = err.message;
+            } finally {
+                this.isProcessingWallet = false;
             }
         },
+
         async lockMruFromModal(mruId) {
             this.isLockingMru = true;
             this.lockSuccessMsg = null;
@@ -97,8 +139,6 @@
                     if (this.excessMrus <= 0) {
                         this.mruConflict = false;
                         this.walletError = null;
-                        // Auto-retry downgrade
-                        this.confirmWalletPayment();
                     }
                 } else {
                     this.walletError = d.message || 'Failed to lock MRU.';
@@ -109,6 +149,7 @@
                 this.isLockingMru = false;
             }
         },
+
         get directPurchaseUrl() {
             if (!this.selectedPlan || !this.selectedDuration) return '#';
             return `/subscription/purchase/${this.selectedPlan.id}/${this.selectedDuration.id}`;
@@ -310,152 +351,300 @@
             @endif
         </div>
 
-        <!-- Interactive Checkout Modal ("Pay from Wallet" vs "Pay Directly") -->
+        <!-- Modal 1: Transparent Pre-Payment Plan Transition & Proration Summary Modal -->
         <div x-show="showModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
             <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
                 <div x-show="showModal" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" @click="showModal = false" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"></div>
 
                 <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
-                <div x-show="showModal" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" class="inline-block align-bottom bg-white dark:bg-slate-900 rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full border border-slate-200 dark:border-slate-800 p-6 sm:p-8 space-y-6">
+                <div x-show="showModal" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" class="inline-block align-bottom bg-white dark:bg-slate-900 rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full border border-slate-200 dark:border-slate-800 p-6 sm:p-8 space-y-5">
 
                     <!-- Modal Header -->
                     <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                         <div>
                             <h3 class="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                                <span>💳</span> Choose Payment Method
+                                <template x-if="quote && quote.action_type === 'upgrade'">
+                                    <span>🚀 Plan Upgrade Summary</span>
+                                </template>
+                                <template x-if="quote && quote.action_type === 'downgrade'">
+                                    <span>🔄 Plan Downgrade & Refund Summary</span>
+                                </template>
+                                <template x-if="!quote || (quote.action_type !== 'upgrade' && quote.action_type !== 'downgrade')">
+                                    <span>💳 Subscription & Checkout Summary</span>
+                                </template>
                             </h3>
                             <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                 Subscribing to <strong class="text-slate-800 dark:text-slate-200" x-text="selectedPlan ? selectedPlan.name : ''"></strong>
-                                (<span x-text="selectedDuration ? (selectedDuration.duration_months + ' Month' + (selectedDuration.duration_months > 1 ? 's' : '')) : ''"></span>)
+                                (<span x-text="selectedDuration ? (selectedDuration.formatted_duration || selectedDuration.duration_months + ' Month(s)') : ''"></span>)
                             </p>
                         </div>
                         <button type="button" @click="showModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold p-1">✕</button>
                     </div>
 
-                    <!-- Price Confirmation Banner -->
-                    <div class="p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 flex items-center justify-between">
-                        <div>
-                            <span class="text-[10px] uppercase tracking-wider font-bold text-indigo-600 dark:text-indigo-400 block">Total Payable Amount</span>
-                            <span class="text-2xl font-black text-indigo-900 dark:text-indigo-100 font-mono">
-                                ₹<span x-text="selectedDurationPrice.toLocaleString('en-IN')"></span>
-                            </span>
-                        </div>
-                        <div class="text-right text-xs">
-                            <span class="text-slate-500 dark:text-slate-400 block">Wallet Balance</span>
-                            <strong class="font-mono text-slate-900 dark:text-white">₹<span x-text="walletBalance.toLocaleString('en-IN')"></span></strong>
-                        </div>
+                    <!-- Loading State -->
+                    <div x-show="isLoadingQuote" class="py-8 text-center space-y-3">
+                        <div class="inline-block w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                        <p class="text-xs font-semibold text-slate-500 dark:text-slate-400">Calculating proration and live quota summary...</p>
                     </div>
 
-                    <!-- Feedback Alerts -->
-                    <div x-show="walletSuccess" x-cloak class="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-bold">
-                        <span x-text="walletSuccess"></span>
-                    </div>
+                    <!-- Main Quote Content (Loaded) -->
+                    <div x-show="!isLoadingQuote && quote" class="space-y-4">
 
-                    <div x-show="walletError && !mruConflict" x-cloak class="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-bold">
-                        <span>❌ </span><span x-text="walletError"></span>
-                    </div>
-
-                    <!-- MRU Downgrade Conflict & Quick Lock Resolution Section -->
-                    <div x-show="mruConflict" x-cloak class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900/60 space-y-3">
-                        <div class="flex items-start gap-2.5">
-                            <span class="text-xl">⚠️</span>
-                            <div>
-                                <h4 class="text-xs font-bold text-amber-900 dark:text-amber-200">Active MRU Quota Exceeded</h4>
-                                <p class="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5">
-                                    Target plan includes <strong x-text="newPlanQuota"></strong> MRU(s). You have <strong x-text="activeMrus.length"></strong> active. Please lock or delete <strong x-text="excessMrus"></strong> MRU(s) to continue.
-                                </p>
+                        <!-- Quota & Capacity Comparison Card -->
+                        <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 space-y-2.5">
+                            <div class="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500">
+                                Capacity & Quota Comparison
                             </div>
-                        </div>
-
-                        <!-- Success message on lock -->
-                        <div x-show="lockSuccessMsg" x-cloak class="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 text-emerald-800 dark:text-emerald-300 text-[11px] font-semibold flex items-center gap-1.5">
-                            <span>✓</span> <span x-text="lockSuccessMsg"></span>
-                        </div>
-
-                        <!-- Active MRU Quick-Lock Options -->
-                        <div class="space-y-2 pt-2 border-t border-amber-200/70 dark:border-amber-800/70">
-                            <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                <span>Choose MRU to lock right now:</span>
-                                <span class="text-amber-600 dark:text-amber-400 font-mono" x-text="'Need ' + excessMrus + ' more'"></span>
-                            </div>
-
-                            <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                                <template x-for="m in activeMrus" :key="m.id">
-                                    <div class="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-200/70 dark:border-slate-800 shadow-xs">
-                                        <div class="flex items-center gap-2">
-                                            <span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-cyan-300 border border-blue-200 dark:border-blue-800" x-text="m.code"></span>
-                                            <div>
-                                                <div class="text-xs font-bold text-slate-900 dark:text-white" x-text="m.name"></div>
-                                                <div class="text-[10px] text-slate-400 font-mono" x-text="m.consumers_count + ' consumers'"></div>
-                                            </div>
-                                        </div>
-                                        <button type="button" @click="lockMruFromModal(m.id)" :disabled="isLockingMru" class="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold shadow-xs transition flex items-center gap-1 disabled:opacity-50">
-                                            <span>🔒 Lock</span>
-                                        </button>
-                                    </div>
-                                </template>
-                            </div>
-                        </div>
-
-                        <!-- Redirection Option: Manage / Delete on MRU page -->
-                        <div class="pt-2 border-t border-amber-200/70 dark:border-amber-800/70 flex items-center justify-between">
-                            <span class="text-[11px] text-slate-500">Or manage existing zones:</span>
-                            <a href="{{ route('mrus.index') }}" class="text-xs font-bold text-blue-600 dark:text-cyan-400 hover:underline flex items-center gap-1">
-                                <span>🗂️ Manage / Delete MRUs on MRU Page →</span>
-                            </a>
-                        </div>
-                    </div>
-
-                    <!-- Option 1: Pay from Wallet (In-Place) -->
-                    <div class="p-5 rounded-2xl border-2 transition" :class="selectedDuration && walletBalance >= selectedDurationPrice ? 'border-emerald-500/40 bg-emerald-50/30 dark:bg-emerald-950/20' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950'">
-                        <div class="flex items-start justify-between gap-3">
-                            <div class="flex items-center gap-2.5">
-                                <span class="text-xl">👛</span>
+                            <div class="grid grid-cols-2 gap-3 text-xs">
                                 <div>
-                                    <h4 class="text-xs font-bold text-slate-900 dark:text-white">Pay from Wallet Balance</h4>
-                                    <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Instant activation with no redirect.</p>
+                                    <span class="text-[11px] text-slate-400 block">MRU Workspaces</span>
+                                    <div class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 mt-0.5">
+                                        <template x-if="quote.current_subscription">
+                                            <span class="text-slate-400 line-through" x-text="quote.current_subscription.included_mrus + ' MRUs'"></span>
+                                        </template>
+                                        <span class="text-indigo-600 dark:text-cyan-400 font-mono font-black" x-text="quote.plan.included_mrus + ' MRUs'"></span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <span class="text-[11px] text-slate-400 block">Monthly Consumers</span>
+                                    <div class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 mt-0.5">
+                                        <template x-if="quote.current_subscription">
+                                            <span class="text-slate-400 line-through" x-text="quote.current_subscription.included_consumers.toLocaleString()"></span>
+                                        </template>
+                                        <span class="text-indigo-600 dark:text-cyan-400 font-mono font-black" x-text="quote.plan.included_consumers.toLocaleString()"></span>
+                                    </div>
                                 </div>
                             </div>
-                            <span class="text-xs font-mono font-bold" :class="selectedDuration && walletBalance >= selectedDurationPrice ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'">
-                                ₹<span x-text="walletBalance.toLocaleString('en-IN')"></span> Available
-                            </span>
                         </div>
 
-                        <div class="mt-4">
-                            <template x-if="selectedDuration && walletBalance >= selectedDurationPrice">
-                                <button type="button" @click="confirmWalletPayment()" :disabled="isProcessingWallet" class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50">
-                                    <span x-show="!isProcessingWallet">✓ Confirm & Subscribe from Wallet</span>
-                                    <span x-show="isProcessingWallet" x-cloak>Activating Plan...</span>
+                        <!-- Mathematical Proration Card (for Upgrade or Downgrade) -->
+                        <template x-if="quote.proration">
+                            <div class="p-4 rounded-2xl border space-y-2.5 text-xs" :class="quote.action_type === 'downgrade' ? 'bg-blue-50/50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900/60' : 'bg-indigo-50/50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-900/60'">
+                                <div class="flex items-center justify-between text-[11px] font-bold" :class="quote.action_type === 'downgrade' ? 'text-blue-800 dark:text-blue-300' : 'text-indigo-800 dark:text-indigo-300'">
+                                    <span>⏳ Days Remaining in Cycle:</span>
+                                    <span class="font-mono" x-text="quote.proration.days_remaining + ' of ' + quote.proration.total_days_in_cycle + ' days'"></span>
+                                </div>
+                                <div class="space-y-1.5 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60 text-[11px]">
+                                    <div class="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                                        <span>Unused Current Plan Credit:</span>
+                                        <span class="font-mono font-bold text-emerald-600 dark:text-emerald-400" x-text="'+₹' + quote.proration.old_plan_credit.toLocaleString('en-IN')"></span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                                        <span>Target Plan Cost (Remaining Days):</span>
+                                        <span class="font-mono font-bold text-slate-700 dark:text-slate-300" x-text="'-₹' + quote.proration.new_plan_cost.toLocaleString('en-IN')"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Pre-Payment Action Highlight Banner -->
+                        <template x-if="quote.action_type === 'downgrade'">
+                            <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 flex items-center justify-between">
+                                <div>
+                                    <span class="text-[10px] uppercase tracking-wider font-bold text-emerald-700 dark:text-emerald-300 block">💰 Prorated Refund to Wallet</span>
+                                    <span class="text-2xl font-black font-mono text-emerald-800 dark:text-emerald-100">
+                                        +₹<span x-text="quote.prorated_credit.toLocaleString('en-IN')"></span>
+                                    </span>
+                                    <p class="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                        You will NOT be charged. This amount will be added to your wallet immediately.
+                                    </p>
+                                </div>
+                                <div class="text-right text-xs">
+                                    <span class="text-slate-500 dark:text-slate-400 block">Wallet Balance</span>
+                                    <strong class="font-mono text-slate-900 dark:text-white">₹<span x-text="walletBalance.toLocaleString('en-IN')"></span></strong>
+                                </div>
+                            </div>
+                        </template>
+
+                        <template x-if="quote.action_type !== 'downgrade'">
+                            <div class="p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 flex items-center justify-between">
+                                <div>
+                                    <span class="text-[10px] uppercase tracking-wider font-bold text-indigo-600 dark:text-indigo-400 block">
+                                        <span x-text="quote.action_type === 'upgrade' ? 'Net Prorated Amount to Pay' : 'Total Payable Amount'"></span>
+                                    </span>
+                                    <span class="text-2xl font-black text-indigo-900 dark:text-indigo-100 font-mono">
+                                        ₹<span x-text="quote.final_amount.toLocaleString('en-IN')"></span>
+                                    </span>
+                                </div>
+                                <div class="text-right text-xs">
+                                    <span class="text-slate-500 dark:text-slate-400 block">Wallet Balance</span>
+                                    <strong class="font-mono text-slate-900 dark:text-white">₹<span x-text="walletBalance.toLocaleString('en-IN')"></span></strong>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Error alert -->
+                        <div x-show="walletError && !mruConflict" x-cloak class="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-bold">
+                            <span>❌ </span><span x-text="walletError"></span>
+                        </div>
+
+                        <!-- MRU Downgrade Conflict & Quick Lock Resolution Section -->
+                        <div x-show="mruConflict" x-cloak class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900/60 space-y-3">
+                            <div class="flex items-start gap-2.5">
+                                <span class="text-xl">⚠️</span>
+                                <div>
+                                    <h4 class="text-xs font-bold text-amber-900 dark:text-amber-200">Active MRU Quota Exceeded</h4>
+                                    <p class="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5">
+                                        Target plan includes <strong x-text="newPlanQuota"></strong> MRU(s). You have <strong x-text="activeMrus.length"></strong> active. Please lock or delete <strong x-text="excessMrus"></strong> MRU(s) to continue.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div x-show="lockSuccessMsg" x-cloak class="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 text-emerald-800 dark:text-emerald-300 text-[11px] font-semibold flex items-center gap-1.5">
+                                <span>✓</span> <span x-text="lockSuccessMsg"></span>
+                            </div>
+
+                            <div class="space-y-2 pt-2 border-t border-amber-200/70 dark:border-amber-800/70">
+                                <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                    <span>Choose MRU to lock right now:</span>
+                                    <span class="text-amber-600 dark:text-amber-400 font-mono" x-text="'Need ' + excessMrus + ' more'"></span>
+                                </div>
+
+                                <div class="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                                    <template x-for="m in activeMrus" :key="m.id">
+                                        <div class="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-200/70 dark:border-slate-800 shadow-xs">
+                                            <div class="flex items-center gap-2">
+                                                <span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-cyan-300 border border-blue-200 dark:border-blue-800" x-text="m.code"></span>
+                                                <div>
+                                                    <div class="text-xs font-bold text-slate-900 dark:text-white" x-text="m.name"></div>
+                                                    <div class="text-[10px] text-slate-400 font-mono" x-text="m.consumers_count + ' consumers'"></div>
+                                                </div>
+                                            </div>
+                                            <button type="button" @click="lockMruFromModal(m.id)" :disabled="isLockingMru" class="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold shadow-xs transition flex items-center gap-1 disabled:opacity-50">
+                                                <span>🔒 Lock</span>
+                                            </button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <div class="pt-2 border-t border-amber-200/70 dark:border-amber-800/70 flex items-center justify-between">
+                                <span class="text-[11px] text-slate-500">Or manage existing zones:</span>
+                                <a href="{{ route('mrus.index') }}" class="text-xs font-bold text-blue-600 dark:text-cyan-400 hover:underline flex items-center gap-1">
+                                    <span>🗂️ Manage / Delete MRUs on MRU Page →</span>
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Confirmation & Action Section -->
+                        <div class="space-y-3 pt-2">
+                            <!-- Case A: Downgrade (Instant Confirmation with Credit) -->
+                            <template x-if="quote.action_type === 'downgrade'">
+                                <button type="button" @click="confirmWalletPayment()" :disabled="isProcessingWallet || mruConflict" class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50">
+                                    <span x-show="!isProcessingWallet">✓ Confirm Downgrade & Receive +₹<span x-text="quote.prorated_credit.toLocaleString('en-IN')"></span> to Wallet</span>
+                                    <span x-show="isProcessingWallet" x-cloak>Applying Downgrade...</span>
                                 </button>
                             </template>
 
-                            <template x-if="selectedDuration && walletBalance < selectedDurationPrice">
-                                <div class="space-y-2">
-                                    <p class="text-[11px] text-rose-500 font-semibold">
-                                        Wallet balance is insufficient (Deficit: ₹<span x-text="(selectedDurationPrice - walletBalance).toLocaleString('en-IN')"></span>).
-                                    </p>
-                                    <a href="{{ route('payments.create') }}" class="w-full py-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 font-bold text-xs flex items-center justify-center gap-1 hover:bg-indigo-100 transition">
-                                        <span>👛 Top-Up Wallet First →</span>
-                                    </a>
+                            <!-- Case B: Upgrade or New/Renewal (Payment Options) -->
+                            <template x-if="quote.action_type !== 'downgrade'">
+                                <div class="space-y-3">
+                                    <!-- Option 1: Pay from Wallet -->
+                                    <div class="p-4 rounded-2xl border-2 transition" :class="walletBalance >= quote.final_amount ? 'border-emerald-500/40 bg-emerald-50/30 dark:bg-emerald-950/20' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950'">
+                                        <div class="flex items-start justify-between gap-3">
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-lg">👛</span>
+                                                <div>
+                                                    <h4 class="text-xs font-bold text-slate-900 dark:text-white">Pay from Wallet Balance</h4>
+                                                    <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Instant activation with no redirect.</p>
+                                                </div>
+                                            </div>
+                                            <span class="text-xs font-mono font-bold" :class="walletBalance >= quote.final_amount ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'">
+                                                ₹<span x-text="walletBalance.toLocaleString('en-IN')"></span> Available
+                                            </span>
+                                        </div>
+
+                                        <div class="mt-3">
+                                            <template x-if="walletBalance >= quote.final_amount">
+                                                <button type="button" @click="confirmWalletPayment()" :disabled="isProcessingWallet || mruConflict" class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50">
+                                                    <span x-show="!isProcessingWallet">✓ Pay ₹<span x-text="quote.final_amount.toLocaleString('en-IN')"></span> from Wallet</span>
+                                                    <span x-show="isProcessingWallet" x-cloak>Processing Payment...</span>
+                                                </button>
+                                            </template>
+
+                                            <template x-if="walletBalance < quote.final_amount">
+                                                <div class="space-y-2">
+                                                    <p class="text-[11px] text-rose-500 font-semibold">
+                                                        Wallet balance is insufficient (Deficit: ₹<span x-text="(quote.final_amount - walletBalance).toLocaleString('en-IN')"></span>).
+                                                    </p>
+                                                    <a href="{{ route('payments.create') }}" class="w-full py-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 font-bold text-xs flex items-center justify-center gap-1 hover:bg-indigo-100 transition">
+                                                        <span>👛 Top-Up Wallet First →</span>
+                                                    </a>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+
+                                    <!-- Option 2: Pay Directly -->
+                                    <div class="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-lg">💳</span>
+                                            <div>
+                                                <h4 class="text-xs font-bold text-slate-900 dark:text-white">Pay Directly</h4>
+                                                <p class="text-[10px] text-slate-500 dark:text-slate-400">Gateway / UPI QR / Bank Transfer</p>
+                                            </div>
+                                        </div>
+                                        <a :href="directPurchaseUrl" class="py-2 px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs shadow-xs transition">
+                                            <span>Pay ₹<span x-text="quote.final_amount.toLocaleString('en-IN')"></span> →</span>
+                                        </a>
+                                    </div>
                                 </div>
                             </template>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
 
-                    <!-- Option 2: Pay Directly via PG / UPI / Bank Transfer -->
-                    <div class="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
-                        <div class="flex items-center gap-2.5">
-                            <span class="text-xl">💳</span>
-                            <div>
-                                <h4 class="text-xs font-bold text-slate-900 dark:text-white">Pay Directly (Gateway / UPI / Bank)</h4>
-                                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Proceed to secure checkout for this specific plan.</p>
-                            </div>
+        <!-- Modal 2: Post-Action Confirmation & Receipt Modal -->
+        <div x-show="showReceiptModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="receipt-modal-title" role="dialog" aria-modal="true">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                <div x-show="showReceiptModal" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"></div>
+
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+                <div x-show="showReceiptModal" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" class="inline-block align-bottom bg-white dark:bg-slate-900 rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full border border-slate-200 dark:border-slate-800 p-6 sm:p-8 space-y-5 text-center">
+
+                    <div class="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-3xl mx-auto shadow-inner">
+                        ✓
+                    </div>
+
+                    <div class="space-y-1">
+                        <h3 class="text-lg font-black text-slate-900 dark:text-white">
+                            <span x-text="receiptData?.actionType === 'downgrade' ? 'Plan Downgrade Applied!' : 'Plan Activated Successfully!'"></span>
+                        </h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400" x-text="receiptData?.message"></p>
+                    </div>
+
+                    <!-- Receipt Details Box -->
+                    <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 text-xs space-y-2 text-left">
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-500 dark:text-slate-400">Activated Plan:</span>
+                            <strong class="text-slate-900 dark:text-white" x-text="receiptData?.planName"></strong>
                         </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-500 dark:text-slate-400">Duration:</span>
+                            <span class="font-semibold text-slate-800 dark:text-slate-200" x-text="receiptData?.duration"></span>
+                        </div>
+                        <template x-if="receiptData?.actionType === 'downgrade'">
+                            <div class="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
+                                <span class="text-emerald-600 dark:text-emerald-400 font-bold">Prorated Refund Credited:</span>
+                                <span class="font-mono font-black text-emerald-600 dark:text-emerald-400" x-text="'+₹' + receiptData?.amountCredited?.toLocaleString('en-IN')"></span>
+                            </div>
+                        </template>
+                        <template x-if="receiptData?.actionType !== 'downgrade'">
+                            <div class="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
+                                <span class="text-slate-700 dark:text-slate-300 font-bold">Amount Paid:</span>
+                                <span class="font-mono font-black text-slate-900 dark:text-white" x-text="'₹' + receiptData?.amountPaid?.toLocaleString('en-IN')"></span>
+                            </div>
+                        </template>
+                    </div>
 
-                        <a :href="directPurchaseUrl" class="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs shadow-md transition flex items-center justify-center gap-1.5">
-                            <span>Proceed to Direct Payment →</span>
-                        </a>
+                    <div class="pt-2">
+                        <button type="button" @click="window.location.reload()" class="w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs shadow-md transition">
+                            ✓ Back to Subscriptions
+                        </button>
                     </div>
                 </div>
             </div>

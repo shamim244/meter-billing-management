@@ -102,6 +102,7 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
     Route::get('/wallet/export', [\App\Http\Controllers\WalletController::class, 'export'])->name('wallet.export');
 
     // Subscription Checkout & Purchase Flow
+    Route::get('/subscription/quote/{plan}/{duration}', [\App\Http\Controllers\SubscriptionCheckoutController::class, 'quote'])->name('subscription.quote');
     Route::get('/subscription/purchase/{plan}/{duration}', [\App\Http\Controllers\SubscriptionCheckoutController::class, 'show'])->name('subscription.purchase');
     Route::post('/subscription/purchase/{plan}/{duration}/process', [\App\Http\Controllers\SubscriptionCheckoutController::class, 'process'])->name('subscription.purchase.process');
     Route::post('/subscription/subscribe-wallet', [\App\Http\Controllers\SubscriptionCheckoutController::class, 'subscribeWallet'])->name('subscription.subscribe_wallet');

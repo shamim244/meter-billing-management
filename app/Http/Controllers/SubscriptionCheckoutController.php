@@ -39,6 +39,81 @@ class SubscriptionCheckoutController extends Controller
     ) {}
 
     /**
+     * Get dynamic pre-payment quote and proration breakdown.
+     */
+    public function quote(Request $request, Plan $plan, PlanDuration $duration): JsonResponse
+    {
+        if ($duration->plan_id !== $plan->id || !$plan->is_active) {
+            return response()->json(['success' => false, 'message' => 'Selected plan or duration is not currently available.'], 404);
+        }
+
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+        $walletBalance = (float) $this->walletService->getBalance($user);
+
+        $activeSubscription = $user->subscriptions()
+            ->where('status', 'active')
+            ->where('billing_end', '>', now())
+            ->latest('id')
+            ->first();
+
+        $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription);
+
+        $downgradeEligibility = null;
+        if ($pricingDetails['action_type'] === 'downgrade' && $activeSubscription) {
+            $downgradeEligibility = $this->planChangeService->checkDowngradeEligibility($activeSubscription, $plan);
+        }
+
+        return response()->json([
+            'success' => true,
+            'action_type' => $pricingDetails['action_type'],
+            'plan' => [
+                'id' => $plan->id,
+                'name' => $plan->name,
+                'description' => $plan->description,
+                'included_mrus' => (int) $plan->included_mrus,
+                'included_consumers' => (int) $plan->included_consumers,
+                'extra_mru_rate' => (float) ($duration->extra_mru_rate ?? $plan->extra_mru_rate),
+                'extra_consumer_rate' => (float) ($duration->extra_consumer_rate ?? $plan->extra_consumer_rate),
+            ],
+            'duration' => [
+                'id' => $duration->id,
+                'formatted_duration' => $duration->formatted_duration,
+                'duration_months' => $duration->duration_months,
+                'duration_unit' => $duration->duration_unit,
+                'duration_value' => $duration->duration_value,
+                'discount_percent' => (float) $duration->discount_percent,
+                'final_price' => (float) $duration->final_price,
+            ],
+            'current_subscription' => $activeSubscription ? [
+                'plan_name' => $activeSubscription->plan?->name ?? 'Active Plan',
+                'included_mrus' => (int) $activeSubscription->included_mrus_locked,
+                'included_consumers' => (int) $activeSubscription->included_consumers_locked,
+                'billing_end' => $activeSubscription->billing_end ? $activeSubscription->billing_end->format('M d, Y') : null,
+                'base_price_paid' => (float) $activeSubscription->base_price_paid,
+            ] : null,
+            'proration' => $pricingDetails['proration'],
+            'final_amount' => (float) $pricingDetails['final_amount'],
+            'prorated_credit' => (float) ($pricingDetails['prorated_credit'] ?? 0.0),
+            'wallet_balance' => $walletBalance,
+            'can_pay_from_wallet' => $pricingDetails['final_amount'] <= 0 || $walletBalance >= $pricingDetails['final_amount'],
+            'downgrade_eligibility' => $downgradeEligibility ? [
+                'eligible' => $downgradeEligibility['eligible'],
+                'active_mrus_count' => $downgradeEligibility['active_mrus_count'],
+                'new_plan_quota' => $downgradeEligibility['new_plan_quota'],
+                'excess_mrus' => $downgradeEligibility['excess_mrus'] ?? 0,
+                'active_mrus' => ($downgradeEligibility['active_mrus'] ?? collect())->map(fn($m) => [
+                    'id' => $m->id,
+                    'code' => $m->code,
+                    'name' => $m->name,
+                    'full_identifier' => $m->full_identifier,
+                    'consumers_count' => $m->consumerAccounts()->count(),
+                ]),
+            ] : null,
+        ]);
+    }
+
+    /**
      * Display Subscription Purchase Confirmation page (Fixed pricing derived server-side).
      */
     public function show(Request $request, Plan $plan, PlanDuration $duration): View|RedirectResponse
