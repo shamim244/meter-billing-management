@@ -35,6 +35,16 @@ class ActivateSubscriptionOnPaymentSuccess
             return;
         }
 
+        // 2. Strict Idempotency Check (Prevent duplicate activations for same payment)
+        $alreadyProcessed = PaymentAuditLog::where('payment_id', $payment->id)
+            ->where('notes', 'like', '[SUBSCRIPTION_ACTIVATED]%')
+            ->exists();
+
+        if ($alreadyProcessed) {
+            Log::warning("[SubscriptionActivationListener] Payment #{$payment->id} direct subscription already processed. Skipping duplicate event.");
+            return;
+        }
+
         $user = $payment->user;
         if (!$user) {
             Log::warning("[SubscriptionActivationListener] Payment #{$payment->id} has no associated user.");
@@ -58,28 +68,24 @@ class ActivateSubscriptionOnPaymentSuccess
             return;
         }
 
-        $activeSubscription = $user->subscriptions()
-            ->where('status', 'active')
-            ->where('billing_end', '>', now())
-            ->latest('id')
-            ->first();
+        $activeSubscription = $user->activeSubscription;
 
         try {
             if ($activeSubscription && $activeSubscription->plan_id !== $plan->id) {
-                $isUpgrade = $plan->base_price >= $activeSubscription->plan?->base_price;
-                if ($isUpgrade) {
+                $proration = $this->planChangeService->calculateProration($activeSubscription, $plan, $duration);
+                if ($proration['is_upgrade']) {
                     $res = $this->planChangeService->upgradePlan($activeSubscription, $plan, $duration);
                     $subId = $res['subscription']->id ?? $activeSubscription->id;
-                    $actionText = "Upgraded to plan {$plan->name} ({$duration->duration_months}m)";
+                    $actionText = "Upgraded to plan {$plan->name} ({$duration->formatted_duration})";
                 } else {
                     $res = $this->planChangeService->downgradePlan($activeSubscription, $plan, $duration);
                     $subId = $res['subscription']->id ?? $activeSubscription->id;
-                    $actionText = "Downgraded to plan {$plan->name} ({$duration->duration_months}m)";
+                    $actionText = "Downgraded to plan {$plan->name} ({$duration->formatted_duration})";
                 }
             } else {
                 $subscription = $this->planService->subscribeAgent($user, $plan, $duration);
                 $subId = $subscription->id;
-                $actionText = "Directly subscribed to plan {$plan->name} ({$duration->duration_months}m)";
+                $actionText = "Directly subscribed to plan {$plan->name} ({$duration->formatted_duration})";
             }
 
             PaymentAuditLog::create([

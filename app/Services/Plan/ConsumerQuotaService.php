@@ -20,14 +20,14 @@ class ConsumerQuotaService
     ) {}
 
     /**
-     * Get active subscription for a user.
+     * Get active subscription for a user (permits active, renewal_due, and grace_period).
      */
     public function getActiveSubscription(User|int $user): ?AgentSubscription
     {
         $userId = $user instanceof User ? $user->id : $user;
         return AgentSubscription::where('user_id', $userId)
             ->where('status', 'active')
-            ->where('billing_end', '>', now())
+            ->whereIn('lifecycle_status', ['active', 'renewal_due', 'grace_period'])
             ->latest('id')
             ->first();
     }
@@ -142,31 +142,31 @@ class ConsumerQuotaService
             ];
         }
 
-        // Process wallet debit for extra consumers
-        $debitResult = $this->walletService->debit(
-            user: $userModel,
-            amount: $extraCharge,
-            source: 'consumer_cycle',
-            referenceType: 'mru',
-            referenceId: (string) $mru->id,
-            description: "Extra consumer quota for MRU {$mru->name} ({$month}/{$year}) [{$extraCount} consumers]"
-        );
+        // Process wallet debit for extra consumers inside atomic transaction
+        return DB::transaction(function () use ($userModel, $extraCharge, $extraCount, $mru, $month, $year, $consumerCount, $includedUsed) {
+            $debitResult = $this->walletService->debit(
+                user: $userModel,
+                amount: $extraCharge,
+                source: 'consumer_cycle',
+                referenceType: 'mru',
+                referenceId: (string) $mru->id,
+                description: "Extra consumer quota for MRU {$mru->name} ({$month}/{$year}) [{$extraCount} consumers]"
+            );
 
-        if ($debitResult !== DebitResult::SUCCESS) {
-            return [
-                'allowed' => false,
-                'requires_payment' => true,
-                'debit_result' => $debitResult->value,
-                'amount_due' => $extraCharge,
-                'message' => $debitResult === DebitResult::WALLET_FROZEN
-                    ? 'Wallet is frozen. Please contact administrator.'
-                    : 'Insufficient wallet balance to cover extra consumer overage.',
-            ];
-        }
+            if ($debitResult !== DebitResult::SUCCESS) {
+                return [
+                    'allowed' => false,
+                    'requires_payment' => true,
+                    'debit_result' => $debitResult->value,
+                    'amount_due' => $extraCharge,
+                    'message' => $debitResult === DebitResult::WALLET_FROZEN
+                        ? 'Wallet is frozen. Please contact administrator.'
+                        : 'Insufficient wallet balance to cover extra consumer overage.',
+                ];
+            }
 
-        $latestTx = $userModel->transactions()->latest('id')->first();
+            $latestTx = $userModel->transactions()->latest('id')->first();
 
-        $cycle = DB::transaction(function () use ($userModel, $mru, $month, $year, $consumerCount, $includedUsed, $extraCount, $extraCharge, $latestTx) {
             $cycle = BillingCycle::create([
                 'mru_id' => $mru->id,
                 'user_id' => $userModel->id,
@@ -191,15 +191,13 @@ class ConsumerQuotaService
 
             event(new ConsumerOverageChargedEvent($userModel, $cycle, $extraCount, $extraCharge, $charge));
 
-            return $cycle;
+            return [
+                'allowed' => true,
+                'cycle' => $cycle,
+                'extra_consumer_count' => $extraCount,
+                'extra_consumer_charge' => $extraCharge,
+            ];
         });
-
-        return [
-            'allowed' => true,
-            'cycle' => $cycle,
-            'extra_consumer_count' => $extraCount,
-            'extra_consumer_charge' => $extraCharge,
-        ];
     }
 
     /**
@@ -244,45 +242,55 @@ class ConsumerQuotaService
             ];
         }
 
-        // Process wallet debit
-        if ($additionalCharge > 0) {
-            $debitResult = $this->walletService->debit(
-                user: $userModel,
-                amount: $additionalCharge,
-                source: 'consumer_cycle_sync',
-                referenceType: 'billing_cycle',
-                referenceId: (string) $cycle->id,
-                description: "Additional consumer sync for cycle #{$cycle->id} (+{$diff} consumers)"
-            );
+        // Process wallet debit inside atomic transaction
+        return DB::transaction(function () use ($userModel, $additionalCharge, $diff, $cycle, $currentCount, $oldCount) {
+            if ($additionalCharge > 0) {
+                $debitResult = $this->walletService->debit(
+                    user: $userModel,
+                    amount: $additionalCharge,
+                    source: 'consumer_cycle_sync',
+                    referenceType: 'billing_cycle',
+                    referenceId: (string) $cycle->id,
+                    description: "Additional consumer sync for cycle #{$cycle->id} (+{$diff} consumers)"
+                );
 
-            if ($debitResult !== DebitResult::SUCCESS) {
-                return [
-                    'synced' => false,
-                    'requires_payment' => true,
-                    'debit_result' => $debitResult->value,
-                    'amount_due' => $additionalCharge,
-                    'message' => 'Insufficient wallet balance for cycle sync.',
-                ];
+                if ($debitResult !== DebitResult::SUCCESS) {
+                    return [
+                        'synced' => false,
+                        'requires_payment' => true,
+                        'debit_result' => $debitResult->value,
+                        'amount_due' => $additionalCharge,
+                        'message' => 'Insufficient wallet balance for cycle sync.',
+                    ];
+                }
+
+                $latestTx = $userModel->transactions()->latest('id')->first();
+
+                PlanOverageCharge::create([
+                    'user_id' => $userModel->id,
+                    'charge_type' => 'consumer_cycle',
+                    'reference_type' => 'billing_cycle',
+                    'reference_id' => (string) $cycle->id,
+                    'amount' => $additionalCharge,
+                    'wallet_transaction_id' => $latestTx?->id ? (string)$latestTx->id : null,
+                    'created_at' => now(),
+                ]);
             }
 
-            $latestTx = $userModel->transactions()->latest('id')->first();
-
-            PlanOverageCharge::create([
-                'user_id' => $userModel->id,
-                'charge_type' => 'consumer_cycle',
-                'reference_type' => 'billing_cycle',
-                'reference_id' => (string) $cycle->id,
-                'amount' => $additionalCharge,
-                'wallet_transaction_id' => $latestTx?->id ? (string)$latestTx->id : null,
-                'created_at' => now(),
+            $cycle->update([
+                'consumer_count_at_creation' => $currentCount,
+                'extra_consumer_count' => $cycle->extra_consumer_count + $diff,
+                'extra_consumer_charge' => $cycle->extra_consumer_charge + $additionalCharge,
             ]);
-        }
 
-        $cycle->update([
-            'consumer_count_at_creation' => $currentCount,
-            'extra_consumer_count' => $cycle->extra_consumer_count + $diff,
-            'extra_consumer_charge' => $cycle->extra_consumer_charge + $additionalCharge,
-        ]);
+            return [
+                'synced' => true,
+                'old_count' => $oldCount,
+                'current_count' => $currentCount,
+                'additional_charge' => $additionalCharge,
+                'cycle' => $cycle->fresh(),
+            ];
+        });
 
         return [
             'synced' => true,

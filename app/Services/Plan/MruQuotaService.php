@@ -12,6 +12,7 @@ use App\Models\PlanOverageCharge;
 use App\Models\User;
 use App\Services\Wallet\WalletService;
 use Bavix\Wallet\Models\Transaction;
+use Illuminate\Support\Facades\DB;
 
 class MruQuotaService
 {
@@ -20,14 +21,14 @@ class MruQuotaService
     ) {}
 
     /**
-     * Get active subscription for a user.
+     * Get active subscription for a user (permits active, renewal_due, and grace_period).
      */
     public function getActiveSubscription(User|int $user): ?AgentSubscription
     {
         $userId = $user instanceof User ? $user->id : $user;
         return AgentSubscription::where('user_id', $userId)
             ->where('status', 'active')
-            ->where('billing_end', '>', now())
+            ->whereIn('lifecycle_status', ['active', 'renewal_due', 'grace_period'])
             ->latest('id')
             ->first();
     }
@@ -103,53 +104,55 @@ class MruQuotaService
             ];
         }
 
-        // Process wallet deduction for extra MRU
-        $debitResult = $this->walletService->debit(
-            user: $userModel,
-            amount: $extraRate,
-            source: 'mru_creation',
-            referenceType: 'mru',
-            referenceId: (string) $mru->id,
-            description: "Extra MRU creation fee ({$mru->name})"
-        );
+        // Process wallet deduction for extra MRU inside atomic transaction
+        return DB::transaction(function () use ($userModel, $extraRate, $mru) {
+            $debitResult = $this->walletService->debit(
+                user: $userModel,
+                amount: $extraRate,
+                source: 'mru_creation',
+                referenceType: 'mru',
+                referenceId: (string) $mru->id,
+                description: "Extra MRU creation fee ({$mru->name})"
+            );
 
-        if ($debitResult !== DebitResult::SUCCESS) {
+            if ($debitResult !== DebitResult::SUCCESS) {
+                return [
+                    'allowed' => false,
+                    'requires_payment' => true,
+                    'debit_result' => $debitResult->value,
+                    'amount_due' => $extraRate,
+                    'message' => $debitResult === DebitResult::WALLET_FROZEN
+                        ? 'Wallet is frozen. Please contact administrator.'
+                        : 'Insufficient wallet balance. Please top up to proceed.',
+                ];
+            }
+
+            // Record overage charge
+            $latestTx = $userModel->transactions()->latest('id')->first();
+
+            $charge = PlanOverageCharge::create([
+                'user_id' => $userModel->id,
+                'charge_type' => 'mru_creation',
+                'reference_type' => 'mru',
+                'reference_id' => (string) $mru->id,
+                'amount' => $extraRate,
+                'wallet_transaction_id' => $latestTx?->id ? (string)$latestTx->id : null,
+                'created_at' => now(),
+            ]);
+
+            $mru->update([
+                'status' => 'active',
+                'is_over_quota' => true,
+            ]);
+
+            event(new MruOverageChargedEvent($userModel, $mru, $extraRate, $charge));
+
             return [
-                'allowed' => false,
-                'requires_payment' => true,
-                'debit_result' => $debitResult->value,
-                'amount_due' => $extraRate,
-                'message' => $debitResult === DebitResult::WALLET_FROZEN
-                    ? 'Wallet is frozen. Please contact administrator.'
-                    : 'Insufficient wallet balance. Please top up to proceed.',
+                'allowed' => true,
+                'is_over_quota' => true,
+                'charge' => $charge,
             ];
-        }
-
-        // Record overage charge
-        $latestTx = $userModel->transactions()->latest('id')->first();
-
-        $charge = PlanOverageCharge::create([
-            'user_id' => $userModel->id,
-            'charge_type' => 'mru_creation',
-            'reference_type' => 'mru',
-            'reference_id' => (string) $mru->id,
-            'amount' => $extraRate,
-            'wallet_transaction_id' => $latestTx?->id ? (string)$latestTx->id : null,
-            'created_at' => now(),
-        ]);
-
-        $mru->update([
-            'status' => 'active',
-            'is_over_quota' => true,
-        ]);
-
-        event(new MruOverageChargedEvent($userModel, $mru, $extraRate, $charge));
-
-        return [
-            'allowed' => true,
-            'is_over_quota' => true,
-            'charge' => $charge,
-        ];
+        });
     }
 
     /**
@@ -185,55 +188,58 @@ class MruQuotaService
         $subscription = $this->getActiveSubscription($userModel);
         $extraRate = $subscription ? (float) $subscription->extra_mru_rate_locked : 0.0;
 
-        if ($payOverage && $extraRate > 0) {
-            $debitResult = $this->walletService->debit(
-                user: $userModel,
-                amount: $extraRate,
-                source: 'mru_unlock',
-                referenceType: 'mru',
-                referenceId: (string) $mru->id,
-                description: "MRU unlock fee ({$mru->name})"
-            );
+        return DB::transaction(function () use ($userModel, $mru, $payOverage, $extraRate) {
+            $charge = null;
+            if ($payOverage && $extraRate > 0) {
+                $debitResult = $this->walletService->debit(
+                    user: $userModel,
+                    amount: $extraRate,
+                    source: 'mru_unlock',
+                    referenceType: 'mru',
+                    referenceId: (string) $mru->id,
+                    description: "MRU unlock fee ({$mru->name})"
+                );
 
-            if ($debitResult !== DebitResult::SUCCESS) {
-                return [
-                    'success' => false,
-                    'debit_result' => $debitResult->value,
-                    'amount_due' => $extraRate,
-                    'message' => $debitResult === DebitResult::WALLET_FROZEN
-                        ? 'Wallet is frozen. Please contact administrator.'
-                        : 'Insufficient wallet balance to unlock MRU.',
-                ];
+                if ($debitResult !== DebitResult::SUCCESS) {
+                    return [
+                        'success' => false,
+                        'debit_result' => $debitResult->value,
+                        'amount_due' => $extraRate,
+                        'message' => $debitResult === DebitResult::WALLET_FROZEN
+                            ? 'Wallet is frozen. Please contact administrator.'
+                            : 'Insufficient wallet balance to unlock MRU.',
+                    ];
+                }
+
+                $latestTx = $userModel->transactions()->latest('id')->first();
+
+                $charge = PlanOverageCharge::create([
+                    'user_id' => $userModel->id,
+                    'charge_type' => 'mru_unlock',
+                    'reference_type' => 'mru',
+                    'reference_id' => (string) $mru->id,
+                    'amount' => $extraRate,
+                    'wallet_transaction_id' => $latestTx?->id ? (string)$latestTx->id : null,
+                    'created_at' => now(),
+                ]);
+
+                event(new MruOverageChargedEvent($userModel, $mru, $extraRate, $charge));
             }
 
-            $latestTx = $userModel->transactions()->latest('id')->first();
-
-            $charge = PlanOverageCharge::create([
-                'user_id' => $userModel->id,
-                'charge_type' => 'mru_unlock',
-                'reference_type' => 'mru',
-                'reference_id' => (string) $mru->id,
-                'amount' => $extraRate,
-                'wallet_transaction_id' => $latestTx?->id ? (string)$latestTx->id : null,
-                'created_at' => now(),
+            $mru->update([
+                'status' => 'active',
+                'locked_reason' => null,
+                'unlocked_at' => now(),
+                'is_over_quota' => $payOverage,
             ]);
 
-            event(new MruOverageChargedEvent($userModel, $mru, $extraRate, $charge));
-        }
+            event(new MruUnlockedEvent($mru, $payOverage ? $extraRate : 0.0));
 
-        $mru->update([
-            'status' => 'active',
-            'locked_reason' => null,
-            'unlocked_at' => now(),
-            'is_over_quota' => $payOverage,
-        ]);
-
-        event(new MruUnlockedEvent($mru, $payOverage ? $extraRate : 0.0));
-
-        return [
-            'success' => true,
-            'mru' => $mru->fresh(),
-        ];
+            return [
+                'success' => true,
+                'mru' => $mru->fresh(),
+            ];
+        });
     }
 
     /**

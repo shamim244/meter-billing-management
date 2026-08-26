@@ -24,6 +24,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class SubscriptionCheckoutController extends Controller
@@ -51,11 +52,7 @@ class SubscriptionCheckoutController extends Controller
         $user = Auth::user();
         $walletBalance = (float) $this->walletService->getBalance($user);
 
-        $activeSubscription = $user->subscriptions()
-            ->where('status', 'active')
-            ->where('billing_end', '>', now())
-            ->latest('id')
-            ->first();
+        $activeSubscription = $user->activeSubscription;
 
         $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription);
 
@@ -128,11 +125,7 @@ class SubscriptionCheckoutController extends Controller
         $settings = $this->settingsService->getSettings();
         $walletBalance = (float) $this->walletService->getBalance($user);
 
-        $activeSubscription = $user->subscriptions()
-            ->where('status', 'active')
-            ->where('billing_end', '>', now())
-            ->latest('id')
-            ->first();
+        $activeSubscription = $user->activeSubscription;
 
         $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription);
 
@@ -176,11 +169,7 @@ class SubscriptionCheckoutController extends Controller
         $user = Auth::user();
         $mode = PaymentMode::from($request->input('mode'));
 
-        $activeSubscription = $user->subscriptions()
-            ->where('status', 'active')
-            ->where('billing_end', '>', now())
-            ->latest('id')
-            ->first();
+        $activeSubscription = $user->activeSubscription;
 
         $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription);
         $amount = (float) $pricingDetails['final_amount'];
@@ -289,11 +278,7 @@ class SubscriptionCheckoutController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
-        $activeSubscription = $user->subscriptions()
-            ->where('status', 'active')
-            ->where('billing_end', '>', now())
-            ->latest('id')
-            ->first();
+        $activeSubscription = $user->activeSubscription;
 
         $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription);
         $amountDue = (float) $pricingDetails['final_amount'];
@@ -349,28 +334,37 @@ class SubscriptionCheckoutController extends Controller
         }
 
         // Case 3: Initial Subscription or Same Plan Renewal
-        if ($amountDue > 0) {
-            $debitResult = $this->walletService->debit(
-                user: $user,
-                amount: $amountDue,
-                source: 'subscription_purchase',
-                referenceType: Plan::class,
-                referenceId: (string) $plan->id,
-                description: "Subscription to {$plan->name} ({$duration->formatted_duration})"
-            );
+        $isRenewal = $activeSubscription && $activeSubscription->plan_id === $plan->id;
+        $txDesc = $isRenewal
+            ? "Plan Extension: +{$duration->formatted_duration} added to {$plan->name}"
+            : "Subscription to {$plan->name} ({$duration->formatted_duration})";
 
-            if ($debitResult !== DebitResult::SUCCESS) {
-                $msg = $debitResult === DebitResult::WALLET_FROZEN ? 'Wallet is frozen. Please contact admin.' : 'Insufficient wallet balance.';
-                return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
+        return DB::transaction(function () use ($user, $plan, $duration, $amountDue, $isRenewal, $txDesc, $request) {
+            if ($amountDue > 0) {
+                $debitResult = $this->walletService->debit(
+                    user: $user,
+                    amount: $amountDue,
+                    source: $isRenewal ? 'subscription_renewal' : 'subscription_purchase',
+                    referenceType: Plan::class,
+                    referenceId: (string) $plan->id,
+                    description: $txDesc
+                );
+
+                if ($debitResult !== DebitResult::SUCCESS) {
+                    $msg = $debitResult === DebitResult::WALLET_FROZEN ? 'Wallet is frozen. Please contact admin.' : 'Insufficient wallet balance.';
+                    return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
+                }
             }
-        }
 
-        $subscription = $this->planService->subscribeAgent($user, $plan, $duration);
-        $msg = "🎉 Subscribed to {$plan->name} ({$duration->formatted_duration}) successfully!" . ($amountDue > 0 ? " ₹" . number_format($amountDue, 2) . " was debited from your wallet." : "");
+            $subscription = $this->planService->subscribeAgent($user, $plan, $duration);
+            $msg = $isRenewal
+                ? "🎉 Extended {$plan->name} (+{$duration->formatted_duration}) successfully! Valid until " . $subscription->billing_end->format('M d, Y') . "."
+                : "🎉 Subscribed to {$plan->name} ({$duration->formatted_duration}) successfully! Valid until " . $subscription->billing_end->format('M d, Y') . ".";
 
-        return $request->wantsJson()
-            ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $subscription->id])
-            : back()->with('success', $msg);
+            return $request->wantsJson()
+                ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $subscription->id])
+                : back()->with('success', $msg);
+        });
     }
 
     /**
@@ -404,16 +398,17 @@ class SubscriptionCheckoutController extends Controller
             ];
         }
 
-        $isUpgrade = $plan->base_price >= $activeSub->plan->base_price;
         $proration = $this->planChangeService->calculateProration($activeSub, $plan, $duration);
-        $proratedCredit = max(0.0, round(($proration['old_plan_credit'] ?? 0) - ($proration['new_plan_cost'] ?? 0), 2));
+        $amountDue = (float) $proration['amount_due'];
+        $isUpgrade = $amountDue > 0;
+        $proratedCredit = $amountDue < 0 ? abs($amountDue) : 0.0;
 
         return [
             'action_type' => $isUpgrade ? 'upgrade' : 'downgrade',
             'base_price' => $basePrice,
             'proration' => $proration,
-            'final_amount' => $isUpgrade ? (float) $proration['amount_due'] : 0.0,
-            'prorated_credit' => !$isUpgrade ? $proratedCredit : 0.0,
+            'final_amount' => $isUpgrade ? $amountDue : 0.0,
+            'prorated_credit' => $proratedCredit,
             'discount_percent' => (float) $duration->discount_percent,
             'is_upgrade' => $isUpgrade,
             'is_downgrade' => !$isUpgrade,

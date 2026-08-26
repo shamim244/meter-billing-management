@@ -65,15 +65,17 @@ class UserPanelController extends Controller
             ->orderBy('id')
             ->get();
 
-        $activeSubscription = $user->subscriptions()
-            ->where('status', 'active')
-            ->where('billing_end', '>', now())
-            ->latest('id')
-            ->first();
+        $activeSubscription = $user->activeSubscription;
+
+        $subscriptionHistory = $user->subscriptions()
+            ->with('plan')
+            ->orderByDesc('id')
+            ->take(10)
+            ->get();
 
         $walletBalance = (float) app(\App\Services\Wallet\WalletService::class)->getBalance($user);
 
-        return view('user-panel.subscription', compact('user', 'stats', 'plans', 'activeSubscription', 'walletBalance'));
+        return view('user-panel.subscription', compact('user', 'stats', 'plans', 'activeSubscription', 'subscriptionHistory', 'walletBalance'));
     }
 
     /**

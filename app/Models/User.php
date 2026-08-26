@@ -221,13 +221,13 @@ class User extends Authenticatable implements Wallet, WalletFloat
     }
 
     /**
-     * Current active subscription for this user.
+     * Current active subscription for this user (includes renewal_due and grace_period).
      */
     public function activeSubscription(): \Illuminate\Database\Eloquent\Relations\HasOne
     {
         return $this->hasOne(AgentSubscription::class)
             ->where('status', 'active')
-            ->where('billing_end', '>', now())
+            ->whereIn('lifecycle_status', ['active', 'renewal_due', 'grace_period'])
             ->latest('id');
     }
 

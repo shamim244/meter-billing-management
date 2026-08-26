@@ -365,7 +365,7 @@ class SubscriptionQuotaOverUseAndRealConsumersTest extends TestCase
 
         // Upgrade to Pro Plan via PlanChangeService
         $planChangeService = app(\App\Services\Billing\PlanChangeService::class);
-        $planChangeService->upgradePlan($agent->activeSubscription, $proPlan, $proPlan->durations->first());
+        $planChangeService->upgradePlan($agent->fresh()->activeSubscription, $proPlan, $proPlan->durations->first());
 
         // Quota immediately expands: 10 - 2 = 8 available MRU slots!
         $this->assertEquals(8, $this->mruQuotaService->checkMruQuotaAvailable($agent));

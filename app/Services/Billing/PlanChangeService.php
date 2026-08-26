@@ -34,31 +34,32 @@ class PlanChangeService
         $targetPlan = $newPlan instanceof Plan ? $newPlan : Plan::findOrFail($newPlan);
 
         if ($durationMonths instanceof \App\Models\PlanDuration) {
-            $duration = (int) $durationMonths->duration_months;
             $targetDuration = $durationMonths;
+            $duration = (int) ($targetDuration->duration_value ?: $targetDuration->duration_months ?: 1);
         } elseif (is_numeric($durationMonths)) {
             $duration = (int) $durationMonths;
-            $targetDuration = $targetPlan->durations()->where('duration_months', $duration)->first();
+            $targetDuration = $targetPlan->durations()->where('duration_months', $duration)->first()
+                ?? $targetPlan->durations()->where('duration_value', $duration)->first();
         } else {
-            $duration = (int) $sub->duration_months;
-            $targetDuration = $targetPlan->durations()->where('duration_months', $duration)->first();
+            $targetDuration = $targetPlan->durations()->first();
+            $duration = (int) ($targetDuration?->duration_value ?: 1);
         }
 
         $oldPlanPrice = (float) $sub->base_price_paid;
-
-        // Target duration price
         $newPlanPrice = $targetDuration
             ? (float) $targetDuration->final_price
             : round((float) $targetPlan->base_price * $duration, 2);
 
         $start = $sub->billing_start ? \Carbon\Carbon::parse($sub->billing_start) : now();
-        $end = $sub->billing_end ? \Carbon\Carbon::parse($sub->billing_end) : now()->addMonths($duration);
+        $end = $sub->billing_end 
+            ? \Carbon\Carbon::parse($sub->billing_end) 
+            : ($targetDuration ? $targetDuration->calculateBillingEnd($start) : ($sub->calculateNewEnd($start) ?? now()->addMonth()));
 
         $totalDaysInCycle = max(1, (int) round($start->floatDiffInDays($end)));
-        $daysRemaining = $end > now() ? max(1, (int) round(now()->floatDiffInDays($end))) : 0;
+        $daysRemaining = $end > now() ? max(0, (int) round(now()->floatDiffInDays($end))) : 0;
 
         $oldPlanCredit = round($oldPlanPrice * ($daysRemaining / $totalDaysInCycle), 2);
-        $newPlanCost = round($newPlanPrice * ($daysRemaining / $totalDaysInCycle), 2);
+        $newPlanCost = $newPlanPrice;
         $amountDue = round($newPlanCost - $oldPlanCredit, 2);
 
         return [
@@ -77,7 +78,7 @@ class PlanChangeService
 
     /**
      * Mid-cycle Plan Upgrade flow.
-     * PRD Section 5.1 - 5.3: Debits wallet, updates snapshot, and auto-unlocks eligible MRUs.
+     * PRD Section 5.1 - 5.3: Debits wallet, creates new subscription snapshot, and auto-unlocks eligible MRUs.
      */
     public function upgradePlan(AgentSubscription|int $subscription, Plan|int $newPlan, mixed $duration = null): array
     {
@@ -123,18 +124,38 @@ class PlanChangeService
         return DB::transaction(function () use ($sub, $targetPlan, $oldPlan, $proration, $amountDue, $txId, $user) {
             $targetDuration = $proration['target_duration'];
 
-            // 1. Update subscription snapshot
+            // 1. Mark previous subscription as upgraded
             $sub->update([
+                'status' => 'upgraded',
+                'last_state_change_at' => now(),
+            ]);
+
+            // 2. Create fresh active subscription starting NOW with the full target duration
+            $start = now();
+            $end = $targetDuration ? $targetDuration->calculateBillingEnd($start) : $start->copy()->addMonth();
+
+            $durationValue = $targetDuration ? ($targetDuration->duration_value ?: $targetDuration->duration_months ?: 1) : 1;
+            $durationUnit = $targetDuration ? ($targetDuration->duration_unit ?: 'month') : 'month';
+            $durationMonths = $durationUnit === 'month' ? $durationValue : max(1, (int)ceil($durationValue / 30));
+
+            $newSubscription = AgentSubscription::create([
+                'user_id' => $user->id,
                 'plan_id' => $targetPlan->id,
+                'duration_unit' => $durationUnit,
+                'duration_value' => $durationValue,
+                'duration_months' => $durationMonths,
+                'base_price_paid' => $proration['new_plan_price'],
                 'included_mrus_locked' => $targetPlan->included_mrus,
                 'included_consumers_locked' => $targetPlan->included_consumers,
                 'extra_mru_rate_locked' => $targetDuration?->extra_mru_rate ?? $targetPlan->extra_mru_rate,
                 'extra_consumer_rate_locked' => $targetDuration?->extra_consumer_rate ?? $targetPlan->extra_consumer_rate,
-                'base_price_paid' => $proration['new_plan_price'],
-                'last_state_change_at' => now(),
+                'billing_start' => $start,
+                'billing_end' => $end,
+                'status' => 'active',
+                'lifecycle_status' => 'active',
             ]);
 
-            // 2. Auto-unlock evaluation (PRD Section 5.3)
+            // 3. Auto-unlock evaluation (PRD Section 5.3)
             $activeMrusCount = Mru::where('user_id', $user->id)->where('status', 'active')->count();
             $availableNewSlots = max(0, $targetPlan->included_mrus - $activeMrusCount);
             $autoUnlockedMrus = [];
@@ -154,10 +175,10 @@ class PlanChangeService
                 }
             }
 
-            // 3. Log upgrade
+            // 4. Log upgrade
             $log = PlanUpgradeLog::create([
-                'agent_subscription_id' => $sub->id,
-                'user_id' => $sub->user_id,
+                'agent_subscription_id' => $newSubscription->id,
+                'user_id' => $newSubscription->user_id,
                 'from_plan_id' => $oldPlan?->id,
                 'to_plan_id' => $targetPlan->id,
                 'action_type' => 'upgrade',
@@ -170,12 +191,12 @@ class PlanChangeService
                 'notes' => 'Mid-cycle upgrade with day-based proration.',
             ]);
 
-            event(new PlanUpgradedEvent($sub->fresh(), $oldPlan, $targetPlan, $log));
+            event(new PlanUpgradedEvent($newSubscription, $oldPlan, $targetPlan, $log));
 
             return [
                 'success' => true,
                 'amount_charged' => $amountDue,
-                'subscription' => $sub->fresh(),
+                'subscription' => $newSubscription,
                 'auto_unlocked_mrus' => $autoUnlockedMrus,
                 'log' => $log,
             ];
@@ -219,7 +240,7 @@ class PlanChangeService
 
     /**
      * Mid-cycle Plan Downgrade flow.
-     * PRD Section 5.4: Server-side eligibility check, credits wallet, updates snapshot.
+     * PRD Section 5.4: Server-side eligibility check, credits wallet, creates new subscription snapshot.
      */
     public function downgradePlan(AgentSubscription|int $subscription, Plan|int $newPlan, mixed $duration = null): array
     {
@@ -252,24 +273,44 @@ class PlanChangeService
             $txId = $user->wallet?->transactions()->latest('id')->value('id');
         }
 
-        return DB::transaction(function () use ($sub, $targetPlan, $oldPlan, $proration, $creditAmount, $txId) {
+        return DB::transaction(function () use ($sub, $targetPlan, $oldPlan, $proration, $creditAmount, $txId, $user) {
             $targetDuration = $proration['target_duration'];
 
-            // 1. Update subscription snapshot
+            // 1. Mark previous subscription as downgraded
             $sub->update([
+                'status' => 'downgraded',
+                'last_state_change_at' => now(),
+            ]);
+
+            // 2. Create fresh active subscription starting NOW with the full target duration
+            $start = now();
+            $end = $targetDuration ? $targetDuration->calculateBillingEnd($start) : $start->copy()->addMonth();
+
+            $durationValue = $targetDuration ? ($targetDuration->duration_value ?: $targetDuration->duration_months ?: 1) : 1;
+            $durationUnit = $targetDuration ? ($targetDuration->duration_unit ?: 'month') : 'month';
+            $durationMonths = $durationUnit === 'month' ? $durationValue : max(1, (int)ceil($durationValue / 30));
+
+            $newSubscription = AgentSubscription::create([
+                'user_id' => $user->id,
                 'plan_id' => $targetPlan->id,
+                'duration_unit' => $durationUnit,
+                'duration_value' => $durationValue,
+                'duration_months' => $durationMonths,
+                'base_price_paid' => $proration['new_plan_price'],
                 'included_mrus_locked' => $targetPlan->included_mrus,
                 'included_consumers_locked' => $targetPlan->included_consumers,
                 'extra_mru_rate_locked' => $targetDuration?->extra_mru_rate ?? $targetPlan->extra_mru_rate,
                 'extra_consumer_rate_locked' => $targetDuration?->extra_consumer_rate ?? $targetPlan->extra_consumer_rate,
-                'base_price_paid' => $proration['new_plan_price'],
-                'last_state_change_at' => now(),
+                'billing_start' => $start,
+                'billing_end' => $end,
+                'status' => 'active',
+                'lifecycle_status' => 'active',
             ]);
 
-            // 2. Log downgrade
+            // 3. Log downgrade
             $log = PlanUpgradeLog::create([
-                'agent_subscription_id' => $sub->id,
-                'user_id' => $sub->user_id,
+                'agent_subscription_id' => $newSubscription->id,
+                'user_id' => $newSubscription->user_id,
                 'from_plan_id' => $oldPlan?->id,
                 'to_plan_id' => $targetPlan->id,
                 'action_type' => 'downgrade',
@@ -282,12 +323,12 @@ class PlanChangeService
                 'notes' => 'Mid-cycle downgrade with day-based proration credit.',
             ]);
 
-            event(new PlanDowngradedEvent($sub->fresh(), $oldPlan, $targetPlan, $log));
+            event(new PlanDowngradedEvent($newSubscription, $oldPlan, $targetPlan, $log));
 
             return [
                 'success' => true,
                 'amount_credited' => $creditAmount,
-                'subscription' => $sub->fresh(),
+                'subscription' => $newSubscription,
                 'log' => $log,
             ];
         });

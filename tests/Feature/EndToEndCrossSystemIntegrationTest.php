@@ -82,6 +82,7 @@ class EndToEndCrossSystemIntegrationTest extends TestCase
         $starter = Plan::create([
             'name' => 'Starter Plan',
             'description' => 'For small operators',
+            'base_price' => 299.00,
             'included_mrus' => 2,
             'included_consumers' => 100,
             'extra_mru_rate' => 100.00,
@@ -102,6 +103,7 @@ class EndToEndCrossSystemIntegrationTest extends TestCase
         $growth = Plan::create([
             'name' => 'Growth Plan',
             'description' => 'For growing operators',
+            'base_price' => 599.00,
             'included_mrus' => 5,
             'included_consumers' => 500,
             'extra_mru_rate' => 80.00,
@@ -424,17 +426,18 @@ class EndToEndCrossSystemIntegrationTest extends TestCase
             'billing_start' => Carbon::now()->subDays(15),
             'billing_end' => Carbon::now()->addDays(15),
         ]);
+        $subscription->refresh();
 
         // 1. Upgrade from Starter (₹299) to Growth (₹599)
-        // Proration: Old credit = 299 * (15/30) = 149.50. New cost = 599 * (15/30) = 299.50. Due = 150.00
+        // Proration: Old credit = 299 * (15/30) = 149.50. New cost = 599.00. Due = 449.50
         $balanceBeforeUpgrade = (float) $this->walletService->getBalance($user);
         $upgradeResult = $this->planChangeService->upgradePlan($subscription, $plans['growth'], $plans['growthDuration']);
 
         $this->assertTrue($upgradeResult['success']);
-        $this->assertEquals(150.00, (float) $upgradeResult['amount_charged']);
-        $this->assertEquals($balanceBeforeUpgrade - 150.00, (float) $this->walletService->getBalance($user));
+        $this->assertEquals(449.50, (float) $upgradeResult['amount_charged']);
+        $this->assertEquals($balanceBeforeUpgrade - 449.50, (float) $this->walletService->getBalance($user));
 
-        $subscription->refresh();
+        $subscription = $upgradeResult['subscription'];
         $this->assertEquals(5, $subscription->included_mrus_locked);
         $this->assertEquals(500, $subscription->included_consumers_locked);
 
@@ -450,7 +453,7 @@ class EndToEndCrossSystemIntegrationTest extends TestCase
         ]);
         $upgradeNotification = Notification::where('user_id', $user->id)->where('event_type', 'subscription.upgraded')->first();
         $this->assertStringContainsString('Growth Plan', $upgradeNotification->body);
-        $this->assertStringContainsString('150.00', $upgradeNotification->body);
+        $this->assertStringContainsString('449.50', $upgradeNotification->body);
 
         // 2. Downgrade from Growth (5 MRUs) back to Starter (2 MRUs)
         // User currently has 3 active MRUs -> eligibility check MUST block downgrade
@@ -465,13 +468,20 @@ class EndToEndCrossSystemIntegrationTest extends TestCase
         $eligibilityAfterLock = $this->planChangeService->checkDowngradeEligibility($subscription, $plans['starter']);
         $this->assertTrue($eligibilityAfterLock['eligible']);
 
-        // Execute downgrade: Proration credit = 150.00 added to wallet
+        // Set 25 days remaining out of 30 days for Growth (Credit = 499.17 - Starter 299.00 = 200.17)
+        $subscription->update([
+            'billing_start' => Carbon::now()->subDays(5),
+            'billing_end' => Carbon::now()->addDays(25),
+        ]);
+        $subscription->refresh();
+
+        // Execute downgrade: Proration credit = 200.17 added to wallet
         $balanceBeforeDowngrade = (float) $this->walletService->getBalance($user);
         $downgradeResult = $this->planChangeService->downgradePlan($subscription, $plans['starter'], $plans['starterDuration']);
 
         $this->assertTrue($downgradeResult['success']);
-        $this->assertEquals(150.00, (float) $downgradeResult['amount_credited']);
-        $this->assertEquals($balanceBeforeDowngrade + 150.00, (float) $this->walletService->getBalance($user));
+        $this->assertEquals(200.17, (float) $downgradeResult['amount_credited']);
+        $this->assertEquals($balanceBeforeDowngrade + 200.17, (float) $this->walletService->getBalance($user));
 
         // Confirm subscription.downgraded notification fired
         $this->assertDatabaseHas('notifications', [

@@ -604,4 +604,56 @@ class PaymentGatewaySystemTest extends TestCase
 
         Event::assertDispatched(ManualPaymentSubmittedEvent::class);
     }
+
+    public function test_activate_subscription_on_payment_success_is_idempotent(): void
+    {
+        $plan = \App\Models\Plan::create([
+            'name' => 'Idempotent Plan',
+            'included_mrus' => 2,
+            'included_consumers' => 2000,
+            'base_price' => 500.0,
+            'extra_mru_rate' => 20.0,
+            'extra_consumer_rate' => 0.2,
+            'is_active' => true,
+        ]);
+        $duration = $plan->durations()->create([
+            'duration_unit' => 'month',
+            'duration_value' => 1,
+            'final_price' => 500.0,
+            'is_active' => true,
+        ]);
+
+        $payment = Payment::create([
+            'user_id' => $this->agent->id,
+            'amount' => 500.0,
+            'currency' => 'INR',
+            'mode' => PaymentMode::PG->value,
+            'purpose' => PaymentPurpose::DIRECT_SUBSCRIPTION->value,
+            'status' => PaymentStatus::SUCCESS->value,
+            'meta' => [
+                'plan_id' => $plan->id,
+                'duration_id' => $duration->id,
+            ],
+        ]);
+
+        $listener = app(\App\Listeners\ActivateSubscriptionOnPaymentSuccess::class);
+
+        // First dispatch
+        $listener->handle(new PaymentSuccessEvent($payment));
+        $this->assertEquals(1, $this->agent->subscriptions()->count());
+        $initialSubEnd = $this->agent->activeSubscription->billing_end->timestamp;
+
+        // Second dispatch (duplicate webhook)
+        $listener->handle(new PaymentSuccessEvent($payment));
+
+        // Subscriptions count MUST remain 1 and billing_end must not be extended again
+        $this->assertEquals(1, $this->agent->subscriptions()->count());
+        $this->assertEquals($initialSubEnd, $this->agent->fresh()->activeSubscription->billing_end->timestamp);
+
+        // Audit log count for this payment must remain 1
+        $auditLogsCount = PaymentAuditLog::where('payment_id', $payment->id)
+            ->where('notes', 'like', '[SUBSCRIPTION_ACTIVATED]%')
+            ->count();
+        $this->assertEquals(1, $auditLogsCount);
+    }
 }

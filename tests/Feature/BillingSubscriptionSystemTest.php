@@ -165,13 +165,14 @@ class BillingSubscriptionSystemTest extends TestCase
         $proPlan = $this->createTestPlan('Pro Tier', 600.00, 5, 5000);
         $starterPlan = $this->createTestPlan('Starter Tier', 300.00, 2, 1000);
 
-        // Subscribed with 30 days cycle, 15 days remaining
+        // Subscribed with 30 days cycle, 20 days remaining (Unused credit = 400.00, Starter cost = 300.00 -> Credit = 100.00)
         $sub = $this->planService->subscribeAgent($this->agent, $proPlan, $proPlan->durations()->first());
         $sub->update([
-            'billing_start' => now()->subDays(15),
-            'billing_end' => now()->addDays(15),
+            'billing_start' => now()->subDays(10),
+            'billing_end' => now()->addDays(20),
             'base_price_paid' => 600.00,
         ]);
+        $sub->refresh();
 
         $initialBalance = (float) $this->walletService->getBalance($this->agent);
         $this->assertEquals(0.00, $initialBalance);

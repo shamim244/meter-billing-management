@@ -142,6 +142,8 @@ class StorageQuotaAndCyclePurgeTest extends TestCase
 
     public function test_user_storage_quota_calculation_and_percentage(): void
     {
+        Storage::fake('local');
+
         $user = User::factory()->create([
             'status' => 'active',
             'storage_limit_mb' => 10, // 10 MB

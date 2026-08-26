@@ -120,21 +120,54 @@ class PlanService
     }
 
     /**
-     * Subscribe an agent/user to a plan, locking all pricing and quota snapshots.
+     * Subscribe or extend an agent's plan, preserving existing validity on renewals.
      */
     public function subscribeAgent(User $user, Plan $plan, PlanDuration $duration): AgentSubscription
     {
         return DB::transaction(function () use ($user, $plan, $duration) {
-            // Deactivate any existing active subscriptions for this user
-            $user->subscriptions()
-                ->where('status', 'active')
-                ->update(['status' => 'expired']);
-
-            $start = now();
-            $end = $duration->calculateBillingEnd($start);
             $durationValue = $duration->duration_value ?: $duration->duration_months ?: 1;
             $durationUnit = $duration->duration_unit ?: 'month';
             $durationMonths = $durationUnit === 'month' ? $durationValue : max(1, (int)ceil($durationValue / 30));
+
+            // Check if user has an existing active subscription to the SAME plan (including renewal_due and grace_period)
+            $existingActiveSub = $user->subscriptions()
+                ->where('status', 'active')
+                ->where('plan_id', $plan->id)
+                ->whereIn('lifecycle_status', ['active', 'renewal_due', 'grace_period'])
+                ->latest('id')
+                ->first();
+
+            if ($existingActiveSub) {
+                // RENEWAL / EXTENSION: Add new duration onto the existing billing_end (or now() if past/null)
+                $baseDate = ($existingActiveSub->billing_end && $existingActiveSub->billing_end->isFuture())
+                    ? $existingActiveSub->billing_end
+                    : now();
+                $newEnd = $duration->calculateBillingEnd($baseDate);
+
+                $existingActiveSub->update([
+                    'billing_end' => $newEnd,
+                    'base_price_paid' => (float) $duration->final_price,
+                    'duration_unit' => $durationUnit,
+                    'duration_value' => $durationValue,
+                    'duration_months' => $durationMonths,
+                    'last_state_change_at' => now(),
+                    'lifecycle_status' => 'active',
+                    'suspended_at' => null,
+                    'grace_period_ends_at' => null,
+                ]);
+
+                event(new AgentSubscribedEvent($existingActiveSub->fresh()));
+
+                return $existingActiveSub->fresh();
+            }
+
+            // FRESH SUBSCRIPTION: Deactivate any previous active subscriptions
+            $user->subscriptions()
+                ->where('status', 'active')
+                ->update(['status' => 'expired', 'last_state_change_at' => now()]);
+
+            $start = now();
+            $end = $duration->calculateBillingEnd($start);
 
             $subscription = AgentSubscription::create([
                 'user_id' => $user->id,
@@ -150,6 +183,7 @@ class PlanService
                 'billing_start' => $start,
                 'billing_end' => $end,
                 'status' => 'active',
+                'lifecycle_status' => 'active',
             ]);
 
             event(new AgentSubscribedEvent($subscription));
