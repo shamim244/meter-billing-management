@@ -1,0 +1,9 @@
+{
+    "agents": [
+        "antigravity",
+        "claude_code"
+    ],
+    "mcp": true,
+    "nightwatch": false,
+    "sail": false
+}
