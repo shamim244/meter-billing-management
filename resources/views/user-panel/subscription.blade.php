@@ -57,18 +57,20 @@
             this.isLoadingQuote = true;
             this.showModal = true;
 
-            // 🌟 2. Smart Pre-Selection (Saves 1 click)
+            // 🌟 2. Smart Pre-Selection
             const currentPlanId = {{ $activeSubscription ? $activeSubscription->plan_id : 'null' }};
-            if (this.hasActiveSubscription) {
-                if (currentPlanId && currentPlanId === plan.id) {
-                    this.selectedActionMode = 'extend';
-                } else {
-                    this.selectedActionMode = 'shift';
-                }
+            if (this.hasActiveSubscription && currentPlanId && currentPlanId === plan.id) {
+                // Current Active Plan -> 3-Step Wizard starts at Step 1 (Extend)
+                this.selectedActionMode = 'extend';
+                this.currentStep = 1;
+            } else if (this.hasActiveSubscription) {
+                // Different Plan -> Direct Transition/Checkout
+                this.selectedActionMode = 'shift';
                 this.currentStep = 1;
             } else {
+                // New Subscription
                 this.selectedActionMode = 'new';
-                this.currentStep = 2; // Jump directly to Step 2 if no active subscription
+                this.currentStep = 1;
             }
 
             await this.fetchQuote(this.selectedActionMode);
@@ -486,7 +488,7 @@
             </div>
         @endif
 
-        <!-- Modal 1: Modern Step-by-Step Subscription & Plan Transition Wizard -->
+        <!-- Modal 1: Subscription & Plan Transition Modal -->
         <div x-show="showModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
             <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
                 <div x-show="showModal" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" @click="showModal = false" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"></div>
@@ -499,26 +501,33 @@
                     <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                         <div>
                             <h3 class="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                                <span x-text="selectedPlan ? selectedPlan.name : 'Subscription Checkout'"></span>
-                            </h3>
-                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                <template x-if="hasActiveSubscription">
-                                    <span>Manage validity or switch billing period</span>
+                                <template x-if="isSamePlan">
+                                    <span>Manage Current Plan (<span x-text="selectedPlan ? selectedPlan.name : ''"></span>)</span>
+                                </template>
+                                <template x-if="!isSamePlan && hasActiveSubscription">
+                                    <span x-text="(quote && quote.action_type === 'downgrade' ? '🔄 Switch to ' : '🚀 Upgrade to ') + (selectedPlan ? selectedPlan.name : '')"></span>
                                 </template>
                                 <template x-if="!hasActiveSubscription">
-                                    <span>Select your preferred plan duration</span>
+                                    <span>💳 Subscribe to <span x-text="selectedPlan ? selectedPlan.name : ''"></span></span>
+                                </template>
+                            </h3>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                <template x-if="isSamePlan">
+                                    <span>Extend current expiration date or shift your billing period</span>
+                                </template>
+                                <template x-if="!isSamePlan">
+                                    <span>Review quota capacity adjustments and complete subscription</span>
                                 </template>
                             </p>
                         </div>
                         <button type="button" @click="showModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold p-1">✕</button>
                     </div>
 
-                    <!-- 🌟 1. Modern Top Stepper Bar (Step 1 -> Step 2 -> Step 3) -->
-                    <div class="grid grid-cols-3 gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl text-xs font-semibold">
-                        <!-- Step 1: Action (Only clickable if user has an active subscription) -->
+                    <!-- 🌟 1. Modern Top Stepper Bar: ONLY for Current Active Plan (isSamePlan) -->
+                    <div x-show="isSamePlan" class="grid grid-cols-3 gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl text-xs font-semibold">
+                        <!-- Step 1: Action -->
                         <button type="button" 
-                                @click="hasActiveSubscription && goToStep(1)" 
-                                :disabled="!hasActiveSubscription"
+                                @click="goToStep(1)" 
                                 :class="currentStep === 1 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' : (currentStep > 1 ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800' : 'text-slate-400 dark:text-slate-500 opacity-60 cursor-not-allowed')"
                                 class="py-2 px-2.5 rounded-xl transition flex items-center justify-center gap-1.5 text-center font-bold">
                             <span class="w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center font-mono"
@@ -563,259 +572,427 @@
 
                     <div x-show="!isLoadingQuote && quote" class="space-y-4">
 
-                        <!-- ========================================== -->
-                        <!-- STEP 1: CHOOSE ACTION INTENT               -->
-                        <!-- ========================================== -->
-                        <div x-show="currentStep === 1" class="space-y-4">
-                            <div class="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                                Select what you would like to do with your active plan:
-                            </div>
-
-                            <div class="space-y-3">
-                                <!-- Option A: Extend Validity -->
-                                <button type="button" 
-                                        @click="switchActionMode('extend')"
-                                        :class="selectedActionMode === 'extend' ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/90 dark:bg-indigo-950/70 ring-2 ring-indigo-500/30' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'"
-                                        class="w-full p-4 rounded-2xl border text-left transition flex items-start justify-between gap-3 cursor-pointer">
-                                    <div class="flex items-start gap-3">
-                                        <span class="text-2xl p-2 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800">⏳</span>
-                                        <div>
-                                            <div class="flex items-center gap-2">
-                                                <span class="text-sm font-bold" :class="selectedActionMode === 'extend' ? 'text-indigo-950 dark:text-indigo-100' : 'text-slate-900 dark:text-white'">Extend Current Validity</span>
-                                                <template x-if="isSamePlan">
-                                                    <span class="text-[9px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800">Recommended</span>
-                                                </template>
-                                            </div>
-                                            <p class="text-xs mt-1 leading-snug" :class="selectedActionMode === 'extend' ? 'text-indigo-800 dark:text-indigo-300 font-medium' : 'text-slate-500 dark:text-slate-400'">
-                                                Keeps your active cycle and adds extra time directly onto your current expiration date.
-                                            </p>
-                                        </div>
+                        <!-- ======================================================= -->
+                        <!-- A. 3-STEP WIZARD (ONLY FOR CURRENT ACTIVE PLAN)        -->
+                        <!-- ======================================================= -->
+                        <template x-if="isSamePlan">
+                            <div class="space-y-4">
+                                <!-- STEP 1: CHOOSE ACTION INTENT -->
+                                <div x-show="currentStep === 1" class="space-y-4">
+                                    <div class="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                                        Select what you would like to do with your active plan:
                                     </div>
-                                    <div class="mt-1">
-                                        <span class="w-6 h-6 rounded-full border-2 flex items-center justify-center font-black text-xs"
-                                              :class="selectedActionMode === 'extend' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-transparent'">
-                                            ✓
-                                        </span>
-                                    </div>
-                                </button>
 
-                                <!-- Option B: Shift Plan Period -->
-                                <button type="button" 
-                                        @click="switchActionMode('shift')"
-                                        :class="selectedActionMode === 'shift' ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/90 dark:bg-indigo-950/70 ring-2 ring-indigo-500/30' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'"
-                                        class="w-full p-4 rounded-2xl border text-left transition flex items-start justify-between gap-3 cursor-pointer">
-                                    <div class="flex items-start gap-3">
-                                        <span class="text-2xl p-2 rounded-xl bg-purple-100 dark:bg-purple-900/60 border border-purple-200 dark:border-purple-800">🔄</span>
-                                        <div>
-                                            <div class="flex items-center gap-2">
-                                                <span class="text-sm font-bold" :class="selectedActionMode === 'shift' ? 'text-indigo-950 dark:text-indigo-100' : 'text-slate-900 dark:text-white'">Shift / Switch Plan Period</span>
-                                                <template x-if="!isSamePlan">
-                                                    <span class="text-[9px] font-black uppercase tracking-wider text-purple-800 dark:text-purple-200 bg-purple-100 dark:bg-purple-950 px-2 py-0.5 rounded-full border border-purple-300 dark:border-purple-800">Recommended</span>
-                                                </template>
-                                            </div>
-                                            <p class="text-xs mt-1 leading-snug" :class="selectedActionMode === 'shift' ? 'text-indigo-800 dark:text-indigo-300 font-medium' : 'text-slate-500 dark:text-slate-400'">
-                                                Start a fresh period from today. Remaining unused days from your current cycle are <strong>credited / deducted</strong>.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div class="mt-1">
-                                        <span class="w-6 h-6 rounded-full border-2 flex items-center justify-center font-black text-xs"
-                                              :class="selectedActionMode === 'shift' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-transparent'">
-                                            ✓
-                                        </span>
-                                    </div>
-                                </button>
-                            </div>
-
-                            <!-- Next Button -->
-                            <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-                                <button type="button" @click="goToStep(2)" class="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5 cursor-pointer">
-                                    <span>Continue to Duration</span>
-                                    <span>➔</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- ========================================== -->
-                        <!-- STEP 2: CHOOSE DURATION & REVIEW MATH      -->
-                        <!-- ========================================== -->
-                        <div x-show="currentStep === 2" class="space-y-4">
-                            <div>
-                                <span class="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 block mb-1.5">
-                                    Select Billing Duration:
-                                </span>
-                                <!-- 🌟 3. Duration Cards with High-Contrast Selection -->
-                                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                                    <template x-for="d in availableDurations" :key="d.id">
+                                    <div class="space-y-3">
+                                        <!-- Option A: Extend Validity -->
                                         <button type="button" 
-                                                @click="selectDuration(d)"
-                                                :class="selectedDuration && selectedDuration.id === d.id ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 ring-2 ring-indigo-400/50' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:border-indigo-300 dark:hover:border-indigo-700'"
-                                                class="p-3.5 rounded-2xl border text-left transition flex flex-col justify-between relative cursor-pointer">
-                                            <div class="flex items-center justify-between gap-1">
-                                                <span class="text-xs font-bold" :class="selectedDuration && selectedDuration.id === d.id ? 'text-white' : 'text-slate-900 dark:text-white'" x-text="d.name || (d.duration_value || d.duration_months) + (d.duration_unit === 'day' ? ' Days' : ' Month(s)')"></span>
-                                                <template x-if="d.discount_percent > 0">
-                                                    <span class="text-[9px] font-black px-1.5 py-0.5 rounded-md" 
-                                                          :class="selectedDuration && selectedDuration.id === d.id ? 'bg-amber-400 text-amber-950 font-black' : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 font-bold'"
-                                                          x-text="d.discount_percent + '% OFF'"></span>
-                                                </template>
-                                            </div>
-                                            <div class="mt-2.5 flex items-baseline justify-between">
-                                                <div class="text-base font-mono font-black" :class="selectedDuration && selectedDuration.id === d.id ? 'text-white' : 'text-slate-900 dark:text-white'">
-                                                    ₹<span x-text="parseFloat(d.final_price).toLocaleString('en-IN')"></span>
+                                                @click="switchActionMode('extend')"
+                                                :class="selectedActionMode === 'extend' ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/90 dark:bg-indigo-950/70 ring-2 ring-indigo-500/30' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'"
+                                                class="w-full p-4 rounded-2xl border text-left transition flex items-start justify-between gap-3 cursor-pointer">
+                                            <div class="flex items-start gap-3">
+                                                <span class="text-2xl p-2 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800">⏳</span>
+                                                <div>
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="text-sm font-bold" :class="selectedActionMode === 'extend' ? 'text-indigo-950 dark:text-indigo-100' : 'text-slate-900 dark:text-white'">Extend Current Validity</span>
+                                                        <span class="text-[9px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800">Recommended</span>
+                                                    </div>
+                                                    <p class="text-xs mt-1 leading-snug" :class="selectedActionMode === 'extend' ? 'text-indigo-800 dark:text-indigo-300 font-medium' : 'text-slate-500 dark:text-slate-400'">
+                                                        Keeps your active cycle and adds extra time directly onto your current expiration date.
+                                                    </p>
                                                 </div>
-                                                <span x-show="selectedDuration && selectedDuration.id === d.id" class="text-[10px] font-bold uppercase tracking-wider text-white bg-white/20 px-1.5 py-0.5 rounded">
-                                                    ✓ Selected
+                                            </div>
+                                            <div class="mt-1">
+                                                <span class="w-6 h-6 rounded-full border-2 flex items-center justify-center font-black text-xs"
+                                                      :class="selectedActionMode === 'extend' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-transparent'">
+                                                    ✓
                                                 </span>
                                             </div>
                                         </button>
-                                    </template>
-                                </div>
-                            </div>
 
-                            <!-- Compact 2-Line Math & Validity Preview Box -->
-                            <div class="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2.5 text-xs">
-                                <div class="flex items-center justify-between font-semibold">
-                                    <span class="text-slate-600 dark:text-slate-300">📅 New Plan Validity:</span>
-                                    <strong class="font-mono text-slate-900 dark:text-white text-xs font-bold">
-                                        <span x-text="quote.start_date"></span> → <span x-text="quote.end_date"></span>
-                                    </strong>
+                                        <!-- Option B: Shift Plan Period -->
+                                        <button type="button" 
+                                                @click="switchActionMode('shift')"
+                                                :class="selectedActionMode === 'shift' ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/90 dark:bg-indigo-950/70 ring-2 ring-indigo-500/30' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'"
+                                                class="w-full p-4 rounded-2xl border text-left transition flex items-start justify-between gap-3 cursor-pointer">
+                                            <div class="flex items-start gap-3">
+                                                <span class="text-2xl p-2 rounded-xl bg-purple-100 dark:bg-purple-900/60 border border-purple-200 dark:border-purple-800">🔄</span>
+                                                <div>
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="text-sm font-bold" :class="selectedActionMode === 'shift' ? 'text-indigo-950 dark:text-indigo-100' : 'text-slate-900 dark:text-white'">Shift / Reset Billing Period</span>
+                                                    </div>
+                                                    <p class="text-xs mt-1 leading-snug" :class="selectedActionMode === 'shift' ? 'text-indigo-800 dark:text-indigo-300 font-medium' : 'text-slate-500 dark:text-slate-400'">
+                                                        Start a fresh period from today. Remaining unused days from your current cycle are <strong>credited / deducted</strong>.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div class="mt-1">
+                                                <span class="w-6 h-6 rounded-full border-2 flex items-center justify-center font-black text-xs"
+                                                      :class="selectedActionMode === 'shift' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-transparent'">
+                                                    ✓
+                                                </span>
+                                            </div>
+                                        </button>
+                                    </div>
+
+                                    <!-- Next Button -->
+                                    <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                                        <button type="button" @click="goToStep(2)" class="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5 cursor-pointer">
+                                            <span>Continue to Duration</span>
+                                            <span>➔</span>
+                                        </button>
+                                    </div>
                                 </div>
 
-                                <!-- Proration details if shifting with balance adjustment -->
-                                <template x-if="selectedActionMode === 'shift' && quote.proration">
-                                    <div class="space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-700 text-xs">
-                                        <div class="flex items-center justify-between text-slate-700 dark:text-slate-300">
-                                            <span>Unused Days Credit (<span x-text="quote.proration.days_remaining + ' of ' + quote.proration.total_days_in_cycle + ' days'"></span>):</span>
-                                            <span class="font-mono font-bold text-emerald-600 dark:text-emerald-400" x-text="'-₹' + quote.proration.old_plan_credit.toLocaleString('en-IN')"></span>
-                                        </div>
-                                        <div class="flex items-center justify-between text-slate-700 dark:text-slate-300">
-                                            <span>Target Duration Cost:</span>
-                                            <span class="font-mono font-bold text-slate-900 dark:text-white" x-text="'₹' + quote.proration.new_plan_cost.toLocaleString('en-IN')"></span>
+                                <!-- STEP 2: CHOOSE DURATION & REVIEW MATH -->
+                                <div x-show="currentStep === 2" class="space-y-4">
+                                    <div>
+                                        <span class="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 block mb-1.5">
+                                            Select Billing Duration:
+                                        </span>
+                                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                                            <template x-for="d in availableDurations" :key="d.id">
+                                                <button type="button" 
+                                                        @click="selectDuration(d)"
+                                                        :class="selectedDuration && selectedDuration.id === d.id ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 ring-2 ring-indigo-400/50' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:border-indigo-300 dark:hover:border-indigo-700'"
+                                                        class="p-3.5 rounded-2xl border text-left transition flex flex-col justify-between relative cursor-pointer">
+                                                    <div class="flex items-center justify-between gap-1">
+                                                        <span class="text-xs font-bold" :class="selectedDuration && selectedDuration.id === d.id ? 'text-white' : 'text-slate-900 dark:text-white'" x-text="d.name || (d.duration_value || d.duration_months) + (d.duration_unit === 'day' ? ' Days' : ' Month(s)')"></span>
+                                                        <template x-if="d.discount_percent > 0">
+                                                            <span class="text-[9px] font-black px-1.5 py-0.5 rounded-md" 
+                                                                  :class="selectedDuration && selectedDuration.id === d.id ? 'bg-amber-400 text-amber-950 font-black' : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 font-bold'"
+                                                                  x-text="d.discount_percent + '% OFF'"></span>
+                                                        </template>
+                                                    </div>
+                                                    <div class="mt-2.5 flex items-baseline justify-between">
+                                                        <div class="text-base font-mono font-black" :class="selectedDuration && selectedDuration.id === d.id ? 'text-white' : 'text-slate-900 dark:text-white'">
+                                                            ₹<span x-text="parseFloat(d.final_price).toLocaleString('en-IN')"></span>
+                                                        </div>
+                                                        <span x-show="selectedDuration && selectedDuration.id === d.id" class="text-[10px] font-bold uppercase tracking-wider text-white bg-white/20 px-1.5 py-0.5 rounded">
+                                                            ✓ Selected
+                                                        </span>
+                                                    </div>
+                                                </button>
+                                            </template>
                                         </div>
                                     </div>
-                                </template>
 
-                                <!-- Net Payable / Refund Highlight -->
-                                <div class="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                                    <span class="font-bold uppercase tracking-wider text-[11px]" :class="quote.action_type === 'downgrade' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'">
-                                        <span x-text="quote.action_type === 'downgrade' ? '💰 Prorated Wallet Refund:' : 'Total Amount to Pay:'"></span>
-                                    </span>
-                                    <span class="text-lg font-black font-mono" :class="quote.action_type === 'downgrade' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-950 dark:text-white'">
-                                        <span x-text="quote.action_type === 'downgrade' ? '+₹' + quote.prorated_credit.toLocaleString('en-IN') : '₹' + quote.final_amount.toLocaleString('en-IN')"></span>
-                                    </span>
-                                </div>
-                            </div>
+                                    <!-- Compact 2-Line Math & Validity Preview Box -->
+                                    <div class="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2.5 text-xs">
+                                        <div class="flex items-center justify-between font-semibold">
+                                            <span class="text-slate-600 dark:text-slate-300">📅 New Plan Validity:</span>
+                                            <strong class="font-mono text-slate-900 dark:text-white text-xs font-bold">
+                                                <span x-text="quote.start_date"></span> → <span x-text="quote.end_date"></span>
+                                            </strong>
+                                        </div>
 
-                            <!-- MRU Quota Conflict (if downgrade requires locking MRUs) -->
-                            <div x-show="mruConflict" x-cloak class="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900/60 space-y-2.5">
-                                <div class="flex items-center gap-2 text-xs font-bold text-amber-900 dark:text-amber-200">
-                                    <span>⚠️</span>
-                                    <span>Active MRUs Exceed Quota (Lock <strong x-text="excessMrus"></strong> MRU to continue)</span>
+                                        <!-- Proration details if shifting with balance adjustment -->
+                                        <template x-if="selectedActionMode === 'shift' && quote.proration">
+                                            <div class="space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-700 text-xs">
+                                                <div class="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                                                    <span>Unused Days Credit (<span x-text="quote.proration.days_remaining + ' of ' + quote.proration.total_days_in_cycle + ' days'"></span>):</span>
+                                                    <span class="font-mono font-bold text-emerald-600 dark:text-emerald-400" x-text="'-₹' + quote.proration.old_plan_credit.toLocaleString('en-IN')"></span>
+                                                </div>
+                                                <div class="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                                                    <span>Target Duration Cost:</span>
+                                                    <span class="font-mono font-bold text-slate-900 dark:text-white" x-text="'₹' + quote.proration.new_plan_cost.toLocaleString('en-IN')"></span>
+                                                </div>
+                                            </div>
+                                        </template>
+
+                                        <!-- Net Payable / Refund Highlight -->
+                                        <div class="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                                            <span class="font-bold uppercase tracking-wider text-[11px]" :class="quote.action_type === 'downgrade' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'">
+                                                <span x-text="quote.action_type === 'downgrade' ? '💰 Prorated Wallet Refund:' : 'Total Amount to Pay:'"></span>
+                                            </span>
+                                            <span class="text-lg font-black font-mono" :class="quote.action_type === 'downgrade' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-950 dark:text-white'">
+                                                <span x-text="quote.action_type === 'downgrade' ? '+₹' + quote.prorated_credit.toLocaleString('en-IN') : '₹' + quote.final_amount.toLocaleString('en-IN')"></span>
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Navigation Buttons -->
+                                    <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                                        <button type="button" @click="goToStep(1)" class="py-2.5 px-4 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition cursor-pointer">
+                                            <span>⬅ Back to Action</span>
+                                        </button>
+
+                                        <button type="button" @click="goToStep(3)" :disabled="isLoadingQuote || mruConflict" class="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer">
+                                            <span>Continue to Payment</span>
+                                            <span>➔</span>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="space-y-1.5 max-h-32 overflow-y-auto pr-1">
-                                    <template x-for="m in activeMrus" :key="m.id">
-                                        <div class="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-200/70 dark:border-slate-800 text-xs">
-                                            <span class="font-mono font-bold text-blue-600 dark:text-cyan-400" x-text="m.code + ' - ' + m.name"></span>
-                                            <button type="button" @click="lockMruFromModal(m.id)" :disabled="isLockingMru" class="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold transition disabled:opacity-50 cursor-pointer">
-                                                <span>🔒 Lock</span>
+
+                                <!-- STEP 3: PAYMENT / CONFIRMATION -->
+                                <div x-show="currentStep === 3" class="space-y-4">
+                                    <!-- Downgrade Refund Theme -->
+                                    <template x-if="quote.action_type === 'downgrade'">
+                                        <div class="space-y-4">
+                                            <div class="p-5 rounded-3xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-center space-y-2">
+                                                <span class="text-3xl">💰</span>
+                                                <h4 class="text-sm font-black text-emerald-900 dark:text-emerald-100">Wallet Credit Refund</h4>
+                                                <div class="text-3xl font-black font-mono text-emerald-700 dark:text-emerald-300">
+                                                    +₹<span x-text="quote.prorated_credit.toLocaleString('en-IN')"></span>
+                                                </div>
+                                                <p class="text-xs text-emerald-800 dark:text-emerald-300 max-w-xs mx-auto">
+                                                    You will NOT be charged. The unused balance of your previous plan will be deposited into your wallet balance instantly.
+                                                </p>
+                                            </div>
+
+                                            <div x-show="walletError" x-cloak class="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 text-rose-800 text-xs font-bold">
+                                                <span>❌ </span><span x-text="walletError"></span>
+                                            </div>
+
+                                            <button type="button" @click="confirmWalletPayment()" :disabled="isProcessingWallet || mruConflict" class="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
+                                                <span x-show="!isProcessingWallet">✓ Confirm & Receive +₹<span x-text="quote.prorated_credit.toLocaleString('en-IN')"></span></span>
+                                                <span x-show="isProcessingWallet" x-cloak>Applying...</span>
                                             </button>
                                         </div>
                                     </template>
-                                </div>
-                            </div>
 
-                            <!-- Navigation Buttons -->
-                            <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                                <button type="button" 
-                                        @click="hasActiveSubscription ? goToStep(1) : (showModal = false)" 
-                                        class="py-2.5 px-4 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition cursor-pointer">
-                                    <span x-text="hasActiveSubscription ? '⬅ Back to Action' : 'Cancel'"></span>
-                                </button>
-
-                                <button type="button" 
-                                        @click="goToStep(3)" 
-                                        :disabled="isLoadingQuote || mruConflict" 
-                                        class="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer">
-                                    <span>Continue to Payment</span>
-                                    <span>➔</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- ========================================== -->
-                        <!-- STEP 3: PAYMENT / CONFIRMATION SECTION     -->
-                        <!-- ========================================== -->
-                        <div x-show="currentStep === 3" class="space-y-4">
-                            <!-- 🌟 5. Downgrade Refund Theme (Green & Clear) -->
-                            <template x-if="quote.action_type === 'downgrade'">
-                                <div class="space-y-4">
-                                    <div class="p-5 rounded-3xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-center space-y-2">
-                                        <span class="text-3xl">💰</span>
-                                        <h4 class="text-sm font-black text-emerald-900 dark:text-emerald-100">Wallet Credit Refund</h4>
-                                        <div class="text-3xl font-black font-mono text-emerald-700 dark:text-emerald-300">
-                                            +₹<span x-text="quote.prorated_credit.toLocaleString('en-IN')"></span>
-                                        </div>
-                                        <p class="text-xs text-emerald-800 dark:text-emerald-300 max-w-xs mx-auto">
-                                            You will NOT be charged. The unused balance of your previous plan will be deposited into your wallet balance instantly.
-                                        </p>
-                                    </div>
-
-                                    <!-- Error alert -->
-                                    <div x-show="walletError" x-cloak class="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 text-rose-800 text-xs font-bold">
-                                        <span>❌ </span><span x-text="walletError"></span>
-                                    </div>
-
-                                    <button type="button" @click="confirmWalletPayment()" :disabled="isProcessingWallet || mruConflict" class="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
-                                        <span x-show="!isProcessingWallet">✓ Confirm Downgrade & Receive +₹<span x-text="quote.prorated_credit.toLocaleString('en-IN')"></span></span>
-                                        <span x-show="isProcessingWallet" x-cloak>Applying Downgrade...</span>
-                                    </button>
-                                </div>
-                            </template>
-
-                            <!-- Normal Payment Theme (Upgrade, Extension, or New Subscription) -->
-                            <template x-if="quote.action_type !== 'downgrade'">
-                                <div class="space-y-3">
-                                    <!-- Summary Banner -->
-                                    <div class="p-4 rounded-2xl bg-indigo-50/90 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 flex items-center justify-between">
-                                        <div>
-                                            <span class="text-[10px] uppercase tracking-wider font-bold text-indigo-700 dark:text-indigo-300 block">Total Payable</span>
-                                            <span class="text-2xl font-black font-mono text-indigo-950 dark:text-white">
-                                                ₹<span x-text="quote.final_amount.toLocaleString('en-IN')"></span>
-                                            </span>
-                                        </div>
-                                        <div class="text-right text-xs">
-                                            <span class="text-indigo-800 dark:text-indigo-300 block font-medium">Your Wallet Balance</span>
-                                            <strong class="font-mono text-slate-900 dark:text-white text-sm font-bold">₹<span x-text="walletBalance.toLocaleString('en-IN')"></span></strong>
-                                        </div>
-                                    </div>
-
-                                    <!-- Error alert -->
-                                    <div x-show="walletError" x-cloak class="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 text-rose-800 text-xs font-bold">
-                                        <span>❌ </span><span x-text="walletError"></span>
-                                    </div>
-
-                                    <!-- Option 1: Pay from Wallet -->
-                                    <div class="p-4 rounded-2xl border-2 transition" :class="walletBalance >= quote.final_amount ? 'border-emerald-500/40 bg-emerald-50/30 dark:bg-emerald-950/20' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950'">
-                                        <div class="flex items-start justify-between gap-3">
-                                            <div class="flex items-center gap-2">
-                                                <span class="text-xl">👛</span>
+                                    <!-- Normal Payment Theme -->
+                                    <template x-if="quote.action_type !== 'downgrade'">
+                                        <div class="space-y-3">
+                                            <!-- Summary Banner -->
+                                            <div class="p-4 rounded-2xl bg-indigo-50/90 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 flex items-center justify-between">
                                                 <div>
-                                                    <h4 class="text-xs font-bold text-slate-900 dark:text-white">Pay from Wallet Balance</h4>
-                                                    <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Instant activation with no payment redirect.</p>
+                                                    <span class="text-[10px] uppercase tracking-wider font-bold text-indigo-700 dark:text-indigo-300 block">Total Payable</span>
+                                                    <span class="text-2xl font-black font-mono text-indigo-950 dark:text-white">
+                                                        ₹<span x-text="quote.final_amount.toLocaleString('en-IN')"></span>
+                                                    </span>
+                                                </div>
+                                                <div class="text-right text-xs">
+                                                    <span class="text-indigo-800 dark:text-indigo-300 block font-medium">Your Wallet Balance</span>
+                                                    <strong class="font-mono text-slate-900 dark:text-white text-sm font-bold">₹<span x-text="walletBalance.toLocaleString('en-IN')"></span></strong>
                                                 </div>
                                             </div>
+
+                                            <div x-show="walletError" x-cloak class="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 text-rose-800 text-xs font-bold">
+                                                <span>❌ </span><span x-text="walletError"></span>
+                                            </div>
+
+                                            <!-- Pay from Wallet -->
+                                            <div class="p-4 rounded-2xl border-2 transition" :class="walletBalance >= quote.final_amount ? 'border-emerald-500/40 bg-emerald-50/30 dark:bg-emerald-950/20' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950'">
+                                                <div class="flex items-start justify-between gap-3">
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="text-xl">👛</span>
+                                                        <div>
+                                                            <h4 class="text-xs font-bold text-slate-900 dark:text-white">Pay from Wallet Balance</h4>
+                                                            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Instant activation with no payment redirect.</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="mt-3">
+                                                    <template x-if="walletBalance >= quote.final_amount">
+                                                        <button type="button" @click="confirmWalletPayment()" :disabled="isProcessingWallet || mruConflict" class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
+                                                            <span x-show="!isProcessingWallet">✓ Pay ₹<span x-text="quote.final_amount.toLocaleString('en-IN')"></span> from Wallet Balance</span>
+                                                            <span x-show="isProcessingWallet" x-cloak>Processing Payment...</span>
+                                                        </button>
+                                                    </template>
+
+                                                    <template x-if="walletBalance < quote.final_amount">
+                                                        <div class="space-y-2">
+                                                            <p class="text-[11px] text-rose-500 font-semibold">
+                                                                Insufficient balance (Deficit: ₹<span x-text="(quote.final_amount - walletBalance).toLocaleString('en-IN')"></span>).
+                                                            </p>
+                                                            <a href="{{ route('payments.create') }}" class="w-full py-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 font-bold text-xs flex items-center justify-center gap-1 hover:bg-indigo-100 transition">
+                                                                <span>👛 Top-Up Wallet First →</span>
+                                                            </a>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+
+                                            <!-- Pay Directly -->
+                                            <div class="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between">
+                                                <div class="flex items-center gap-2">
+                                                    <span class="text-lg">💳</span>
+                                                    <div>
+                                                        <h4 class="text-xs font-bold text-slate-900 dark:text-white">Pay Directly</h4>
+                                                        <p class="text-[10px] text-slate-500 dark:text-slate-400">Gateway / UPI QR / Bank Transfer</p>
+                                                    </div>
+                                                </div>
+                                                <a :href="directPurchaseUrl" class="py-2 px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs shadow-xs transition">
+                                                    <span>Pay ₹<span x-text="quote.final_amount.toLocaleString('en-IN')"></span> →</span>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <!-- Back to Step 2 Button -->
+                                    <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-start">
+                                        <button type="button" @click="goToStep(2)" class="py-2 px-4 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition cursor-pointer">
+                                            <span>⬅ Back to Duration</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- ======================================================= -->
+                        <!-- B. DIRECT 1-SCREEN CHECKOUT (FOR OTHER / NEW PLANS)     -->
+                        <!-- ======================================================= -->
+                        <template x-if="!isSamePlan">
+                            <div class="space-y-4">
+                                <!-- Duration Selector Cards -->
+                                <div>
+                                    <span class="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 block mb-1.5">
+                                        Select Billing Duration:
+                                    </span>
+                                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                                        <template x-for="d in availableDurations" :key="d.id">
+                                            <button type="button" 
+                                                    @click="selectDuration(d)"
+                                                    :class="selectedDuration && selectedDuration.id === d.id ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 ring-2 ring-indigo-400/50' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:border-indigo-300 dark:hover:border-indigo-700'"
+                                                    class="p-3 rounded-2xl border text-left transition flex flex-col justify-between relative cursor-pointer">
+                                                <div class="flex items-center justify-between gap-1">
+                                                    <span class="text-xs font-bold" :class="selectedDuration && selectedDuration.id === d.id ? 'text-white' : 'text-slate-900 dark:text-white'" x-text="d.name || (d.duration_value || d.duration_months) + (d.duration_unit === 'day' ? ' Days' : ' Month(s)')"></span>
+                                                    <template x-if="d.discount_percent > 0">
+                                                        <span class="text-[9px] font-black px-1.5 py-0.5 rounded-md" 
+                                                              :class="selectedDuration && selectedDuration.id === d.id ? 'bg-amber-400 text-amber-950 font-black' : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 font-bold'"
+                                                              x-text="d.discount_percent + '% OFF'"></span>
+                                                    </template>
+                                                </div>
+                                                <div class="mt-2 flex items-baseline justify-between">
+                                                    <div class="text-sm font-mono font-black" :class="selectedDuration && selectedDuration.id === d.id ? 'text-white' : 'text-slate-900 dark:text-white'">
+                                                        ₹<span x-text="parseFloat(d.final_price).toLocaleString('en-IN')"></span>
+                                                    </div>
+                                                    <span x-show="selectedDuration && selectedDuration.id === d.id" class="text-[10px] font-bold uppercase tracking-wider text-white bg-white/20 px-1.5 py-0.5 rounded">
+                                                        ✓ Selected
+                                                    </span>
+                                                </div>
+                                            </button>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <!-- Capacity & Quota Comparison Card -->
+                                <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 space-y-2 text-xs">
+                                    <div class="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">
+                                        Capacity & Quota Comparison
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-3 text-xs">
+                                        <div>
+                                            <span class="text-[11px] text-slate-400 block">MRU Workspaces</span>
+                                            <div class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 mt-0.5">
+                                                <template x-if="quote.current_subscription">
+                                                    <span class="text-slate-400 line-through" x-text="quote.current_subscription.included_mrus + ' MRUs'"></span>
+                                                </template>
+                                                <span class="text-indigo-600 dark:text-cyan-400 font-mono font-black" x-text="quote.plan.included_mrus + ' MRUs'"></span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span class="text-[11px] text-slate-400 block">Monthly Consumers</span>
+                                            <div class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 mt-0.5">
+                                                <template x-if="quote.current_subscription">
+                                                    <span class="text-slate-400 line-through" x-text="quote.current_subscription.included_consumers.toLocaleString()"></span>
+                                                </template>
+                                                <span class="text-indigo-600 dark:text-cyan-400 font-mono font-black" x-text="quote.plan.included_consumers.toLocaleString()"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Compact Mathematical Proration & Validity Preview Box -->
+                                <div class="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+                                    <div class="flex items-center justify-between font-semibold">
+                                        <span class="text-slate-600 dark:text-slate-300">📅 New Plan Validity:</span>
+                                        <strong class="font-mono text-slate-900 dark:text-white text-xs font-bold">
+                                            <span x-text="quote.start_date"></span> → <span x-text="quote.end_date"></span>
+                                        </strong>
+                                    </div>
+
+                                    <!-- Proration details if shifting with balance adjustment -->
+                                    <template x-if="quote.proration">
+                                        <div class="space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-700 text-xs">
+                                            <div class="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                                                <span>Unused Days Credit (<span x-text="quote.proration.days_remaining + ' of ' + quote.proration.total_days_in_cycle + ' days'"></span>):</span>
+                                                <span class="font-mono font-bold text-emerald-600 dark:text-emerald-400" x-text="'-₹' + quote.proration.old_plan_credit.toLocaleString('en-IN')"></span>
+                                            </div>
+                                            <div class="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                                                <span>Target Plan Cost:</span>
+                                                <span class="font-mono font-bold text-slate-900 dark:text-white" x-text="'₹' + quote.proration.new_plan_cost.toLocaleString('en-IN')"></span>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <!-- Net Payable / Refund Highlight -->
+                                    <div class="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                                        <span class="font-bold uppercase tracking-wider text-[11px]" :class="quote.action_type === 'downgrade' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'">
+                                            <span x-text="quote.action_type === 'downgrade' ? '💰 Prorated Wallet Refund:' : 'Total Amount to Pay:'"></span>
+                                        </span>
+                                        <span class="text-lg font-black font-mono" :class="quote.action_type === 'downgrade' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-950 dark:text-white'">
+                                            <span x-text="quote.action_type === 'downgrade' ? '+₹' + quote.prorated_credit.toLocaleString('en-IN') : '₹' + quote.final_amount.toLocaleString('en-IN')"></span>
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- MRU Quota Conflict (if downgrade requires locking MRUs) -->
+                                <div x-show="mruConflict" x-cloak class="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900/60 space-y-2.5">
+                                    <div class="flex items-center gap-2 text-xs font-bold text-amber-900 dark:text-amber-200">
+                                        <span>⚠️</span>
+                                        <span>Active MRUs Exceed Quota (Lock <strong x-text="excessMrus"></strong> MRU to continue)</span>
+                                    </div>
+                                    <div class="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                                        <template x-for="m in activeMrus" :key="m.id">
+                                            <div class="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-200/70 dark:border-slate-800 text-xs">
+                                                <span class="font-mono font-bold text-blue-600 dark:text-cyan-400" x-text="m.code + ' - ' + m.name"></span>
+                                                <button type="button" @click="lockMruFromModal(m.id)" :disabled="isLockingMru" class="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold transition disabled:opacity-50 cursor-pointer">
+                                                    <span>🔒 Lock</span>
+                                                </button>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <!-- Payment Actions Section for Direct Modal -->
+                                <template x-if="quote.action_type === 'downgrade'">
+                                    <div class="space-y-3">
+                                        <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-center space-y-1.5">
+                                            <span class="text-2xl">💰</span>
+                                            <h4 class="text-xs font-black text-emerald-900 dark:text-emerald-100">Wallet Credit Refund: +₹<span x-text="quote.prorated_credit.toLocaleString('en-IN')"></span></h4>
+                                            <p class="text-[11px] text-emerald-800 dark:text-emerald-300">
+                                                The unused balance of your previous plan will be credited to your wallet immediately.
+                                            </p>
                                         </div>
 
-                                        <div class="mt-3">
+                                        <div x-show="walletError" x-cloak class="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 text-rose-800 text-xs font-bold">
+                                            <span>❌ </span><span x-text="walletError"></span>
+                                        </div>
+
+                                        <button type="button" @click="confirmWalletPayment()" :disabled="isProcessingWallet || mruConflict" class="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
+                                            <span x-show="!isProcessingWallet">✓ Confirm Switch & Receive +₹<span x-text="quote.prorated_credit.toLocaleString('en-IN')"></span></span>
+                                            <span x-show="isProcessingWallet" x-cloak>Applying Switch...</span>
+                                        </button>
+                                    </div>
+                                </template>
+
+                                <template x-if="quote.action_type !== 'downgrade'">
+                                    <div class="space-y-3">
+                                        <div x-show="walletError" x-cloak class="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 text-rose-800 text-xs font-bold">
+                                            <span>❌ </span><span x-text="walletError"></span>
+                                        </div>
+
+                                        <!-- Pay from Wallet -->
+                                        <div class="p-3.5 rounded-2xl border-2 transition" :class="walletBalance >= quote.final_amount ? 'border-emerald-500/40 bg-emerald-50/30 dark:bg-emerald-950/20' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950'">
+                                            <div class="flex items-center justify-between gap-2 mb-2">
+                                                <div class="flex items-center gap-2">
+                                                    <span class="text-base">👛</span>
+                                                    <span class="text-xs font-bold text-slate-900 dark:text-white">Pay from Wallet</span>
+                                                </div>
+                                                <strong class="font-mono text-xs text-slate-900 dark:text-white">Balance: ₹<span x-text="walletBalance.toLocaleString('en-IN')"></span></strong>
+                                            </div>
+
                                             <template x-if="walletBalance >= quote.final_amount">
                                                 <button type="button" @click="confirmWalletPayment()" :disabled="isProcessingWallet || mruConflict" class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
-                                                    <span x-show="!isProcessingWallet">✓ Pay ₹<span x-text="quote.final_amount.toLocaleString('en-IN')"></span> from Wallet Balance</span>
+                                                    <span x-show="!isProcessingWallet">✓ Pay ₹<span x-text="quote.final_amount.toLocaleString('en-IN')"></span> from Wallet</span>
                                                     <span x-show="isProcessingWallet" x-cloak>Processing Payment...</span>
                                                 </button>
                                             </template>
 
                                             <template x-if="walletBalance < quote.final_amount">
-                                                <div class="space-y-2">
+                                                <div class="space-y-1.5">
                                                     <p class="text-[11px] text-rose-500 font-semibold">
                                                         Insufficient balance (Deficit: ₹<span x-text="(quote.final_amount - walletBalance).toLocaleString('en-IN')"></span>).
                                                     </p>
@@ -825,31 +1002,24 @@
                                                 </div>
                                             </template>
                                         </div>
-                                    </div>
 
-                                    <!-- Option 2: Pay Directly -->
-                                    <div class="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between">
-                                        <div class="flex items-center gap-2">
-                                            <span class="text-lg">💳</span>
-                                            <div>
-                                                <h4 class="text-xs font-bold text-slate-900 dark:text-white">Pay Directly</h4>
-                                                <p class="text-[10px] text-slate-500 dark:text-slate-400">Gateway / UPI QR / Bank Transfer</p>
+                                        <!-- Pay Directly -->
+                                        <div class="p-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between">
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-base">💳</span>
+                                                <div>
+                                                    <h4 class="text-xs font-bold text-slate-900 dark:text-white">Pay Directly</h4>
+                                                    <p class="text-[10px] text-slate-500 dark:text-slate-400">Gateway / UPI QR / Bank Transfer</p>
+                                                </div>
                                             </div>
+                                            <a :href="directPurchaseUrl" class="py-2 px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs shadow-xs transition">
+                                                <span>Pay ₹<span x-text="quote.final_amount.toLocaleString('en-IN')"></span> →</span>
+                                            </a>
                                         </div>
-                                        <a :href="directPurchaseUrl" class="py-2 px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs shadow-xs transition">
-                                            <span>Pay ₹<span x-text="quote.final_amount.toLocaleString('en-IN')"></span> →</span>
-                                        </a>
                                     </div>
-                                </div>
-                            </template>
-
-                            <!-- Back to Step 2 Button -->
-                            <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-start">
-                                <button type="button" @click="goToStep(2)" class="py-2 px-4 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition cursor-pointer">
-                                    <span>⬅ Back to Duration</span>
-                                </button>
+                                </template>
                             </div>
-                        </div>
+                        </template>
 
                     </div>
                 </div>
