@@ -232,12 +232,12 @@
 
         <!-- Storage & Quota Status Hero -->
         <div class="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200/80 dark:border-slate-800 shadow-xl relative overflow-hidden">
-            <div class="absolute top-0 right-0 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div class="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
                 <div>
                     <div class="flex flex-wrap items-center gap-2 mb-2">
-                        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-brand-50 dark:bg-brand-950/80 text-brand-700 dark:text-cyan-300 border border-brand-200/60 dark:border-brand-800/60">
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-cyan-300 border border-blue-200 dark:border-blue-800">
                             Current Plan: {{ $activeSubscription ? $activeSubscription->plan?->name : 'No Active Plan' }}
                         </span>
                         @if($activeSubscription)
@@ -260,7 +260,7 @@
                 <div class="bg-slate-50 dark:bg-slate-950/60 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 min-w-[260px] space-y-3">
                     <div class="flex items-center justify-between text-xs">
                         <span class="text-slate-500 dark:text-slate-400 font-semibold">Active MRU Quota</span>
-                        <span class="font-mono font-black text-brand-600 dark:text-cyan-400">
+                        <span class="font-mono font-black text-blue-600 dark:text-cyan-400">
                             {{ $stats['mru_count'] }} / {{ $activeSubscription ? $activeSubscription->included_mrus_locked : '0' }}
                         </span>
                     </div>
@@ -269,7 +269,7 @@
                             $includedMrus = $activeSubscription ? $activeSubscription->included_mrus_locked : 1;
                             $pct = $includedMrus > 0 ? min(100, round(($stats['mru_count'] / $includedMrus) * 100)) : 100;
                         @endphp
-                        <div class="h-full bg-gradient-to-r from-brand-500 to-cyan-400 rounded-full transition-all duration-300" style="width: {{ $pct }}%"></div>
+                        <div class="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full transition-all duration-300" style="width: {{ $pct }}%"></div>
                     </div>
                     <div class="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400">
                         <span>{{ $stats['consumer_count'] }} Total Consumers</span>
@@ -318,9 +318,9 @@
                             get currentDiscount() {
                                 return this.currentDuration ? this.currentDuration.discount_percent : 0;
                             }
-                        }" class="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border flex flex-col justify-between relative transition duration-200 {{ $isCurrentPlan ? 'border-brand-500 dark:border-cyan-400 shadow-xl ring-2 ring-brand-500/20' : 'border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-md' }}">
+                        }" class="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border flex flex-col justify-between relative transition duration-200 {{ $isCurrentPlan ? 'border-indigo-600 dark:border-indigo-500 shadow-xl ring-2 ring-indigo-500/20' : 'border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-md' }}">
                             @if($isCurrentPlan)
-                                <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-600 text-white text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-md">
+                                <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-md">
                                     Current Active Plan
                                 </div>
                             @endif
@@ -345,9 +345,9 @@
                                         <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Select Duration:</span>
                                         <div class="flex flex-wrap gap-1.5 bg-slate-100 dark:bg-slate-950 p-1.5 rounded-xl">
                                             <template x-for="(d, idx) in durations" :key="d.id">
-                                                <button type="button" @click="activeDurationIndex = idx" :class="activeDurationIndex === idx ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-white shadow-sm font-bold border border-indigo-500/30' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 font-medium'" class="py-1.5 px-2.5 rounded-lg text-[11px] transition text-center flex items-center gap-1">
+                                                <button type="button" @click="activeDurationIndex = idx" :class="activeDurationIndex === idx ? 'bg-indigo-600 text-white font-black shadow-sm border border-indigo-600' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-bold border border-slate-200 dark:border-slate-800'" class="py-1.5 px-2.5 rounded-lg text-[11px] transition text-center flex items-center gap-1 cursor-pointer">
                                                     <span x-text="(d.duration_value || d.duration_months) + (d.duration_unit === 'day' ? 'd' : 'm')"></span>
-                                                    <span x-show="d.discount_percent > 0" class="text-[9px] text-amber-500 font-black" x-text="'-' + d.discount_percent + '%'"></span>
+                                                    <span x-show="d.discount_percent > 0" :class="activeDurationIndex === idx ? 'text-amber-200 font-black' : 'text-amber-600 dark:text-amber-400 font-black'" class="text-[9px]" x-text="'-' + d.discount_percent + '%'"></span>
                                                 </button>
                                             </template>
                                         </div>
@@ -387,12 +387,12 @@
 
                             <div class="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
                                 @if($isCurrentPlan)
-                                    <button type="button" @click="openCheckoutModal(Object.assign({{ $plan->toJson() }}, { durations: {{ $durations->values()->toJson() }} }), currentDuration)" class="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs shadow-sm transition text-center flex items-center justify-center gap-1">
+                                    <button type="button" @click="openCheckoutModal(Object.assign({{ $plan->toJson() }}, { durations: {{ $durations->values()->toJson() }} }), currentDuration)" class="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 font-bold text-xs shadow-sm transition text-center flex items-center justify-center gap-1 cursor-pointer">
                                         <span>Manage / Extend Plan</span>
                                         <span>→</span>
                                     </button>
                                 @else
-                                    <button type="button" @click="openCheckoutModal(Object.assign({{ $plan->toJson() }}, { durations: {{ $durations->values()->toJson() }} }), currentDuration)" class="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-md shadow-brand-500/20 transition text-center">
+                                    <button type="button" @click="openCheckoutModal(Object.assign({{ $plan->toJson() }}, { durations: {{ $durations->values()->toJson() }} }), currentDuration)" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-md shadow-indigo-600/20 transition text-center cursor-pointer">
                                         <span>{{ $activeSubscription ? 'Change / Upgrade Plan' : 'Subscribe Now' }}</span>
                                         <span>→</span>
                                     </button>
@@ -514,15 +514,15 @@
                     </div>
 
                     <!-- 🌟 1. Modern Top Stepper Bar (Step 1 -> Step 2 -> Step 3) -->
-                    <div class="grid grid-cols-3 gap-2 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl text-xs font-semibold">
+                    <div class="grid grid-cols-3 gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl text-xs font-semibold">
                         <!-- Step 1: Action (Only clickable if user has an active subscription) -->
                         <button type="button" 
                                 @click="hasActiveSubscription && goToStep(1)" 
                                 :disabled="!hasActiveSubscription"
-                                :class="currentStep === 1 ? 'bg-white dark:bg-slate-900 text-brand-600 dark:text-cyan-400 shadow-sm' : (currentStep > 1 ? 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700' : 'text-slate-400 dark:text-slate-500 opacity-60 cursor-not-allowed')"
-                                class="py-1.5 px-2 rounded-xl transition flex items-center justify-center gap-1.5 text-center">
-                            <span class="w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center font-mono"
-                                  :class="currentStep === 1 ? 'bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-cyan-300' : (currentStep > 1 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-500')">
+                                :class="currentStep === 1 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' : (currentStep > 1 ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800' : 'text-slate-400 dark:text-slate-500 opacity-60 cursor-not-allowed')"
+                                class="py-2 px-2.5 rounded-xl transition flex items-center justify-center gap-1.5 text-center font-bold">
+                            <span class="w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center font-mono"
+                                  :class="currentStep === 1 ? 'bg-white text-indigo-700' : (currentStep > 1 ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500')">
                                 <template x-if="currentStep > 1"><span>✓</span></template>
                                 <template x-if="currentStep <= 1"><span>1</span></template>
                             </span>
@@ -532,10 +532,10 @@
                         <!-- Step 2: Duration -->
                         <button type="button" 
                                 @click="currentStep >= 2 && goToStep(2)"
-                                :class="currentStep === 2 ? 'bg-white dark:bg-slate-900 text-brand-600 dark:text-cyan-400 shadow-sm' : (currentStep > 2 ? 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700' : 'text-slate-400 dark:text-slate-500')"
-                                class="py-1.5 px-2 rounded-xl transition flex items-center justify-center gap-1.5 text-center">
-                            <span class="w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center font-mono"
-                                  :class="currentStep === 2 ? 'bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-cyan-300' : (currentStep > 2 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-500')">
+                                :class="currentStep === 2 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' : (currentStep > 2 ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800' : 'text-slate-600 dark:text-slate-400')"
+                                class="py-2 px-2.5 rounded-xl transition flex items-center justify-center gap-1.5 text-center font-bold">
+                            <span class="w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center font-mono"
+                                  :class="currentStep === 2 ? 'bg-white text-indigo-700' : (currentStep > 2 ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500')">
                                 <template x-if="currentStep > 2"><span>✓</span></template>
                                 <template x-if="currentStep <= 2"><span>2</span></template>
                             </span>
@@ -545,10 +545,10 @@
                         <!-- Step 3: Payment -->
                         <button type="button" 
                                 @click="currentStep === 3 && goToStep(3)"
-                                :class="currentStep === 3 ? 'bg-white dark:bg-slate-900 text-brand-600 dark:text-cyan-400 shadow-sm' : 'text-slate-400 dark:text-slate-500'"
-                                class="py-1.5 px-2 rounded-xl transition flex items-center justify-center gap-1.5 text-center">
-                            <span class="w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center font-mono"
-                                  :class="currentStep === 3 ? 'bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-cyan-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'">
+                                :class="currentStep === 3 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' : 'text-slate-600 dark:text-slate-400'"
+                                class="py-2 px-2.5 rounded-xl transition flex items-center justify-center gap-1.5 text-center font-bold">
+                            <span class="w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center font-mono"
+                                  :class="currentStep === 3 ? 'bg-white text-indigo-700' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'">
                                 <span>3</span>
                             </span>
                             <span class="truncate">3. Payment</span>
@@ -567,7 +567,7 @@
                         <!-- STEP 1: CHOOSE ACTION INTENT               -->
                         <!-- ========================================== -->
                         <div x-show="currentStep === 1" class="space-y-4">
-                            <div class="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                            <div class="text-xs font-semibold text-slate-600 dark:text-slate-300">
                                 Select what you would like to do with your active plan:
                             </div>
 
@@ -575,26 +575,26 @@
                                 <!-- Option A: Extend Validity -->
                                 <button type="button" 
                                         @click="switchActionMode('extend')"
-                                        :class="selectedActionMode === 'extend' ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-950/40 ring-2 ring-brand-500/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300'"
+                                        :class="selectedActionMode === 'extend' ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/90 dark:bg-indigo-950/70 ring-2 ring-indigo-500/30' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'"
                                         class="w-full p-4 rounded-2xl border text-left transition flex items-start justify-between gap-3 cursor-pointer">
                                     <div class="flex items-start gap-3">
-                                        <span class="text-2xl p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/60 dark:border-indigo-900/60">⏳</span>
+                                        <span class="text-2xl p-2 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800">⏳</span>
                                         <div>
                                             <div class="flex items-center gap-2">
-                                                <span class="text-sm font-bold text-slate-900 dark:text-white">Extend Current Validity</span>
+                                                <span class="text-sm font-bold" :class="selectedActionMode === 'extend' ? 'text-indigo-950 dark:text-indigo-100' : 'text-slate-900 dark:text-white'">Extend Current Validity</span>
                                                 <template x-if="isSamePlan">
-                                                    <span class="text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 px-2 py-0.5 rounded-full">Recommended</span>
+                                                    <span class="text-[9px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800">Recommended</span>
                                                 </template>
                                             </div>
-                                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-snug">
+                                            <p class="text-xs mt-1 leading-snug" :class="selectedActionMode === 'extend' ? 'text-indigo-800 dark:text-indigo-300 font-medium' : 'text-slate-500 dark:text-slate-400'">
                                                 Keeps your active cycle and adds extra time directly onto your current expiration date.
                                             </p>
                                         </div>
                                     </div>
                                     <div class="mt-1">
-                                        <span class="w-5 h-5 rounded-full border-2 flex items-center justify-center"
-                                              :class="selectedActionMode === 'extend' ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-300 dark:border-slate-600'">
-                                            <span x-show="selectedActionMode === 'extend'" class="text-[10px] font-bold">✓</span>
+                                        <span class="w-6 h-6 rounded-full border-2 flex items-center justify-center font-black text-xs"
+                                              :class="selectedActionMode === 'extend' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-transparent'">
+                                            ✓
                                         </span>
                                     </div>
                                 </button>
@@ -602,26 +602,26 @@
                                 <!-- Option B: Shift Plan Period -->
                                 <button type="button" 
                                         @click="switchActionMode('shift')"
-                                        :class="selectedActionMode === 'shift' ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-950/40 ring-2 ring-brand-500/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300'"
+                                        :class="selectedActionMode === 'shift' ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/90 dark:bg-indigo-950/70 ring-2 ring-indigo-500/30' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'"
                                         class="w-full p-4 rounded-2xl border text-left transition flex items-start justify-between gap-3 cursor-pointer">
                                     <div class="flex items-start gap-3">
-                                        <span class="text-2xl p-2 rounded-xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200/60 dark:border-purple-900/60">🔄</span>
+                                        <span class="text-2xl p-2 rounded-xl bg-purple-100 dark:bg-purple-900/60 border border-purple-200 dark:border-purple-800">🔄</span>
                                         <div>
                                             <div class="flex items-center gap-2">
-                                                <span class="text-sm font-bold text-slate-900 dark:text-white">Shift / Switch Plan Period</span>
+                                                <span class="text-sm font-bold" :class="selectedActionMode === 'shift' ? 'text-indigo-950 dark:text-indigo-100' : 'text-slate-900 dark:text-white'">Shift / Switch Plan Period</span>
                                                 <template x-if="!isSamePlan">
-                                                    <span class="text-[9px] font-black uppercase tracking-wider text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/80 px-2 py-0.5 rounded-full">Recommended</span>
+                                                    <span class="text-[9px] font-black uppercase tracking-wider text-purple-800 dark:text-purple-200 bg-purple-100 dark:bg-purple-950 px-2 py-0.5 rounded-full border border-purple-300 dark:border-purple-800">Recommended</span>
                                                 </template>
                                             </div>
-                                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-snug">
+                                            <p class="text-xs mt-1 leading-snug" :class="selectedActionMode === 'shift' ? 'text-indigo-800 dark:text-indigo-300 font-medium' : 'text-slate-500 dark:text-slate-400'">
                                                 Start a fresh period from today. Remaining unused days from your current cycle are <strong>credited / deducted</strong>.
                                             </p>
                                         </div>
                                     </div>
                                     <div class="mt-1">
-                                        <span class="w-5 h-5 rounded-full border-2 flex items-center justify-center"
-                                              :class="selectedActionMode === 'shift' ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-300 dark:border-slate-600'">
-                                            <span x-show="selectedActionMode === 'shift'" class="text-[10px] font-bold">✓</span>
+                                        <span class="w-6 h-6 rounded-full border-2 flex items-center justify-center font-black text-xs"
+                                              :class="selectedActionMode === 'shift' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-transparent'">
+                                            ✓
                                         </span>
                                     </div>
                                 </button>
@@ -629,7 +629,7 @@
 
                             <!-- Next Button -->
                             <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-                                <button type="button" @click="goToStep(2)" class="py-2.5 px-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs shadow-md shadow-brand-500/20 transition flex items-center gap-1.5">
+                                <button type="button" @click="goToStep(2)" class="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5 cursor-pointer">
                                     <span>Continue to Duration</span>
                                     <span>➔</span>
                                 </button>
@@ -641,24 +641,31 @@
                         <!-- ========================================== -->
                         <div x-show="currentStep === 2" class="space-y-4">
                             <div>
-                                <span class="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500 block mb-1.5">
+                                <span class="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 block mb-1.5">
                                     Select Billing Duration:
                                 </span>
-                                <!-- 🌟 3. Duration Cards with Discount Badges -->
+                                <!-- 🌟 3. Duration Cards with High-Contrast Selection -->
                                 <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                                     <template x-for="d in availableDurations" :key="d.id">
                                         <button type="button" 
                                                 @click="selectDuration(d)"
-                                                :class="selectedDuration && selectedDuration.id === d.id ? 'border-brand-500 bg-brand-50/70 dark:bg-brand-950/50 ring-2 ring-brand-500/30' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300'"
-                                                class="p-3 rounded-2xl border text-left transition flex flex-col justify-between relative cursor-pointer">
-                                            <div class="flex items-center justify-between">
-                                                <span class="text-xs font-bold text-slate-900 dark:text-white" x-text="d.name || (d.duration_value || d.duration_months) + (d.duration_unit === 'day' ? ' Days' : ' Month(s)')"></span>
+                                                :class="selectedDuration && selectedDuration.id === d.id ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 ring-2 ring-indigo-400/50' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:border-indigo-300 dark:hover:border-indigo-700'"
+                                                class="p-3.5 rounded-2xl border text-left transition flex flex-col justify-between relative cursor-pointer">
+                                            <div class="flex items-center justify-between gap-1">
+                                                <span class="text-xs font-bold" :class="selectedDuration && selectedDuration.id === d.id ? 'text-white' : 'text-slate-900 dark:text-white'" x-text="d.name || (d.duration_value || d.duration_months) + (d.duration_unit === 'day' ? ' Days' : ' Month(s)')"></span>
                                                 <template x-if="d.discount_percent > 0">
-                                                    <span class="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300" x-text="d.discount_percent + '% OFF'"></span>
+                                                    <span class="text-[9px] font-black px-1.5 py-0.5 rounded-md" 
+                                                          :class="selectedDuration && selectedDuration.id === d.id ? 'bg-amber-400 text-amber-950 font-black' : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 font-bold'"
+                                                          x-text="d.discount_percent + '% OFF'"></span>
                                                 </template>
                                             </div>
-                                            <div class="mt-2 text-sm font-mono font-black text-slate-900 dark:text-white">
-                                                ₹<span x-text="parseFloat(d.final_price).toLocaleString('en-IN')"></span>
+                                            <div class="mt-2.5 flex items-baseline justify-between">
+                                                <div class="text-base font-mono font-black" :class="selectedDuration && selectedDuration.id === d.id ? 'text-white' : 'text-slate-900 dark:text-white'">
+                                                    ₹<span x-text="parseFloat(d.final_price).toLocaleString('en-IN')"></span>
+                                                </div>
+                                                <span x-show="selectedDuration && selectedDuration.id === d.id" class="text-[10px] font-bold uppercase tracking-wider text-white bg-white/20 px-1.5 py-0.5 rounded">
+                                                    ✓ Selected
+                                                </span>
                                             </div>
                                         </button>
                                     </template>
@@ -666,34 +673,34 @@
                             </div>
 
                             <!-- Compact 2-Line Math & Validity Preview Box -->
-                            <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 space-y-2.5 text-xs">
+                            <div class="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2.5 text-xs">
                                 <div class="flex items-center justify-between font-semibold">
-                                    <span class="text-slate-500 dark:text-slate-400">📅 New Plan Validity:</span>
-                                    <strong class="font-mono text-slate-900 dark:text-white text-[11px] font-bold">
+                                    <span class="text-slate-600 dark:text-slate-300">📅 New Plan Validity:</span>
+                                    <strong class="font-mono text-slate-900 dark:text-white text-xs font-bold">
                                         <span x-text="quote.start_date"></span> → <span x-text="quote.end_date"></span>
                                     </strong>
                                 </div>
 
                                 <!-- Proration details if shifting with balance adjustment -->
                                 <template x-if="selectedActionMode === 'shift' && quote.proration">
-                                    <div class="space-y-1.5 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-[11px]">
-                                        <div class="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                                    <div class="space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-700 text-xs">
+                                        <div class="flex items-center justify-between text-slate-700 dark:text-slate-300">
                                             <span>Unused Days Credit (<span x-text="quote.proration.days_remaining + ' of ' + quote.proration.total_days_in_cycle + ' days'"></span>):</span>
                                             <span class="font-mono font-bold text-emerald-600 dark:text-emerald-400" x-text="'-₹' + quote.proration.old_plan_credit.toLocaleString('en-IN')"></span>
                                         </div>
-                                        <div class="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                                        <div class="flex items-center justify-between text-slate-700 dark:text-slate-300">
                                             <span>Target Duration Cost:</span>
-                                            <span class="font-mono font-bold text-slate-700 dark:text-slate-300" x-text="'₹' + quote.proration.new_plan_cost.toLocaleString('en-IN')"></span>
+                                            <span class="font-mono font-bold text-slate-900 dark:text-white" x-text="'₹' + quote.proration.new_plan_cost.toLocaleString('en-IN')"></span>
                                         </div>
                                     </div>
                                 </template>
 
                                 <!-- Net Payable / Refund Highlight -->
-                                <div class="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
-                                    <span class="font-bold uppercase tracking-wider text-[10px]" :class="quote.action_type === 'downgrade' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'">
+                                <div class="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                                    <span class="font-bold uppercase tracking-wider text-[11px]" :class="quote.action_type === 'downgrade' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'">
                                         <span x-text="quote.action_type === 'downgrade' ? '💰 Prorated Wallet Refund:' : 'Total Amount to Pay:'"></span>
                                     </span>
-                                    <span class="text-base font-black font-mono" :class="quote.action_type === 'downgrade' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'">
+                                    <span class="text-lg font-black font-mono" :class="quote.action_type === 'downgrade' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-950 dark:text-white'">
                                         <span x-text="quote.action_type === 'downgrade' ? '+₹' + quote.prorated_credit.toLocaleString('en-IN') : '₹' + quote.final_amount.toLocaleString('en-IN')"></span>
                                     </span>
                                 </div>
@@ -709,7 +716,7 @@
                                     <template x-for="m in activeMrus" :key="m.id">
                                         <div class="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-200/70 dark:border-slate-800 text-xs">
                                             <span class="font-mono font-bold text-blue-600 dark:text-cyan-400" x-text="m.code + ' - ' + m.name"></span>
-                                            <button type="button" @click="lockMruFromModal(m.id)" :disabled="isLockingMru" class="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold transition disabled:opacity-50">
+                                            <button type="button" @click="lockMruFromModal(m.id)" :disabled="isLockingMru" class="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold transition disabled:opacity-50 cursor-pointer">
                                                 <span>🔒 Lock</span>
                                             </button>
                                         </div>
@@ -721,14 +728,14 @@
                             <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                                 <button type="button" 
                                         @click="hasActiveSubscription ? goToStep(1) : (showModal = false)" 
-                                        class="py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition">
+                                        class="py-2.5 px-4 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition cursor-pointer">
                                     <span x-text="hasActiveSubscription ? '⬅ Back to Action' : 'Cancel'"></span>
                                 </button>
 
                                 <button type="button" 
                                         @click="goToStep(3)" 
                                         :disabled="isLoadingQuote || mruConflict" 
-                                        class="py-2.5 px-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs shadow-md shadow-brand-500/20 transition flex items-center gap-1.5 disabled:opacity-50">
+                                        class="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer">
                                     <span>Continue to Payment</span>
                                     <span>➔</span>
                                 </button>
@@ -758,7 +765,7 @@
                                         <span>❌ </span><span x-text="walletError"></span>
                                     </div>
 
-                                    <button type="button" @click="confirmWalletPayment()" :disabled="isProcessingWallet || mruConflict" class="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-2 disabled:opacity-50">
+                                    <button type="button" @click="confirmWalletPayment()" :disabled="isProcessingWallet || mruConflict" class="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
                                         <span x-show="!isProcessingWallet">✓ Confirm Downgrade & Receive +₹<span x-text="quote.prorated_credit.toLocaleString('en-IN')"></span></span>
                                         <span x-show="isProcessingWallet" x-cloak>Applying Downgrade...</span>
                                     </button>
@@ -769,16 +776,16 @@
                             <template x-if="quote.action_type !== 'downgrade'">
                                 <div class="space-y-3">
                                     <!-- Summary Banner -->
-                                    <div class="p-4 rounded-2xl bg-brand-50/60 dark:bg-brand-950/40 border border-brand-100 dark:border-brand-900/60 flex items-center justify-between">
+                                    <div class="p-4 rounded-2xl bg-indigo-50/90 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 flex items-center justify-between">
                                         <div>
-                                            <span class="text-[10px] uppercase tracking-wider font-bold text-brand-600 dark:text-cyan-400 block">Total Payable</span>
-                                            <span class="text-2xl font-black font-mono text-slate-900 dark:text-white">
+                                            <span class="text-[10px] uppercase tracking-wider font-bold text-indigo-700 dark:text-indigo-300 block">Total Payable</span>
+                                            <span class="text-2xl font-black font-mono text-indigo-950 dark:text-white">
                                                 ₹<span x-text="quote.final_amount.toLocaleString('en-IN')"></span>
                                             </span>
                                         </div>
                                         <div class="text-right text-xs">
-                                            <span class="text-slate-500 dark:text-slate-400 block">Your Wallet Balance</span>
-                                            <strong class="font-mono text-slate-900 dark:text-white text-sm">₹<span x-text="walletBalance.toLocaleString('en-IN')"></span></strong>
+                                            <span class="text-indigo-800 dark:text-indigo-300 block font-medium">Your Wallet Balance</span>
+                                            <strong class="font-mono text-slate-900 dark:text-white text-sm font-bold">₹<span x-text="walletBalance.toLocaleString('en-IN')"></span></strong>
                                         </div>
                                     </div>
 
@@ -801,7 +808,7 @@
 
                                         <div class="mt-3">
                                             <template x-if="walletBalance >= quote.final_amount">
-                                                <button type="button" @click="confirmWalletPayment()" :disabled="isProcessingWallet || mruConflict" class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50">
+                                                <button type="button" @click="confirmWalletPayment()" :disabled="isProcessingWallet || mruConflict" class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
                                                     <span x-show="!isProcessingWallet">✓ Pay ₹<span x-text="quote.final_amount.toLocaleString('en-IN')"></span> from Wallet Balance</span>
                                                     <span x-show="isProcessingWallet" x-cloak>Processing Payment...</span>
                                                 </button>
@@ -838,7 +845,7 @@
 
                             <!-- Back to Step 2 Button -->
                             <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-start">
-                                <button type="button" @click="goToStep(2)" class="py-2 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition">
+                                <button type="button" @click="goToStep(2)" class="py-2 px-4 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition cursor-pointer">
                                     <span>⬅ Back to Duration</span>
                                 </button>
                             </div>
