@@ -345,18 +345,20 @@ class SubscriptionLifecycleExtensionAndPlanChangeTest extends TestCase
             return $activeSub && $activeSub->id === $sub->id && $activeSub->lifecycle_status === 'grace_period';
         });
 
-        // 2. Verify SubscriptionCheckoutController quote recognizes it as renewal
+        // 2. Verify SubscriptionCheckoutController quote recognizes it as extend
         $quoteRes = $this->actingAs($user)->getJson(route('subscription.quote', ['plan' => $plan->id, 'duration' => $duration->id]));
         $quoteRes->assertStatus(200);
         $quoteRes->assertJson([
             'success' => true,
-            'action_type' => 'renewal',
+            'action_type' => 'extend',
+            'action_mode' => 'extend',
         ]);
 
         // 3. Renew from wallet during grace period
         $renewRes = $this->actingAs($user)->postJson('/subscription/subscribe-wallet', [
             'plan_id' => $plan->id,
             'duration_id' => $duration->id,
+            'action_mode' => 'extend',
         ]);
         $renewRes->assertStatus(200);
 
@@ -367,5 +369,188 @@ class SubscriptionLifecycleExtensionAndPlanChangeTest extends TestCase
         $this->assertEquals('active', $recoveredSub->lifecycle_status);
         $this->assertNull($recoveredSub->grace_period_ends_at);
         $this->assertTrue($recoveredSub->billing_end->isFuture());
+    }
+
+    public function test_user_can_shift_same_plan_duration_with_prorated_balance_adjustment(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        app(WalletService::class)->credit($user, 5000.00, 'test_topup');
+
+        $plan = Plan::create([
+            'name' => 'Starter Plan',
+            'included_mrus' => 2,
+            'included_consumers' => 2500,
+            'base_price' => 500.00,
+            'extra_mru_rate' => 20.00,
+            'extra_consumer_rate' => 0.20,
+            'is_active' => true,
+        ]);
+        $duration1m = $plan->durations()->create([
+            'duration_unit' => 'month',
+            'duration_value' => 1,
+            'final_price' => 500.00,
+            'is_active' => true,
+        ]);
+        $duration3m = $plan->durations()->create([
+            'duration_unit' => 'month',
+            'duration_value' => 3,
+            'final_price' => 1200.00,
+            'is_active' => true,
+        ]);
+
+        // Initial 1-month subscription
+        $sub1 = app(PlanService::class)->subscribeAgent($user, $plan, $duration1m);
+        // Simulate 15 days elapsed out of 30 (15 remaining days = ₹250 unused credit)
+        $sub1->update([
+            'billing_start' => now()->subDays(15),
+            'billing_end' => now()->addDays(15),
+        ]);
+
+        $walletBefore = (float) app(WalletService::class)->getBalance($user);
+
+        // User chooses to SHIFT (not extend) to 3-month cycle with balance adjustment
+        $response = $this->actingAs($user)->postJson('/subscription/subscribe-wallet', [
+            'plan_id' => $plan->id,
+            'duration_id' => $duration3m->id,
+            'action_mode' => 'shift',
+        ]);
+
+        $response->assertStatus(200);
+
+        // Verify previous 1-month subscription is marked upgraded
+        $this->assertEquals('upgraded', $sub1->fresh()->status);
+
+        // Verify new 3-month subscription starts NOW and is valid for 3 full months
+        $activeSub = $user->fresh()->activeSubscription;
+        $this->assertNotNull($activeSub);
+        $this->assertNotEquals($sub1->id, $activeSub->id);
+        $this->assertEquals(3, $activeSub->duration_value);
+        $this->assertEquals('month', $activeSub->duration_unit);
+        $this->assertEquals(1200.00, (float) $activeSub->base_price_paid);
+
+        // Verify net amount charged was ₹950 (₹1,200 New 3M - ₹250 Unused 1M)
+        $walletAfter = (float) app(WalletService::class)->getBalance($user);
+        $this->assertEquals($walletBefore - 950.00, $walletAfter);
+    }
+
+    public function test_user_can_extend_same_plan_different_duration_by_stacking_validity_without_proration(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        app(WalletService::class)->credit($user, 5000.00, 'test_topup');
+
+        $plan = Plan::create([
+            'name' => 'Starter Plan',
+            'included_mrus' => 2,
+            'included_consumers' => 2500,
+            'base_price' => 500.00,
+            'extra_mru_rate' => 20.00,
+            'extra_consumer_rate' => 0.20,
+            'is_active' => true,
+        ]);
+        $duration1m = $plan->durations()->create([
+            'duration_unit' => 'month',
+            'duration_value' => 1,
+            'final_price' => 500.00,
+            'is_active' => true,
+        ]);
+        $duration3m = $plan->durations()->create([
+            'duration_unit' => 'month',
+            'duration_value' => 3,
+            'final_price' => 1200.00,
+            'is_active' => true,
+        ]);
+
+        // Initial 1-month subscription expiring in 15 days
+        $sub1 = app(PlanService::class)->subscribeAgent($user, $plan, $duration1m);
+        $existingEnd = now()->addDays(15);
+        $sub1->update([
+            'billing_start' => now()->subDays(15),
+            'billing_end' => $existingEnd->copy(),
+        ]);
+
+        $walletBefore = (float) app(WalletService::class)->getBalance($user);
+
+        // User chooses to EXTEND (+3 Months added to end of existing validity)
+        $response = $this->actingAs($user)->postJson('/subscription/subscribe-wallet', [
+            'plan_id' => $plan->id,
+            'duration_id' => $duration3m->id,
+            'action_mode' => 'extend',
+        ]);
+
+        $response->assertStatus(200);
+
+        // Verify existing subscription remains active and billing_end extended by 3 months onto $existingEnd
+        $activeSub = $user->fresh()->activeSubscription;
+        $this->assertNotNull($activeSub);
+        $this->assertEquals($sub1->id, $activeSub->id);
+        $this->assertEquals('active', $activeSub->status);
+        
+        $expectedNewEnd = $duration3m->calculateBillingEnd($existingEnd);
+        $this->assertEquals($expectedNewEnd->timestamp, $activeSub->billing_end->timestamp);
+
+        // Verify FULL ₹1,200 was charged (No proration subtracted on extension)
+        $walletAfter = (float) app(WalletService::class)->getBalance($user);
+        $this->assertEquals($walletBefore - 1200.00, $walletAfter);
+    }
+
+    public function test_user_can_shift_same_plan_duration_down_with_prorated_credit_refund(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        app(WalletService::class)->credit($user, 5000.00, 'test_topup');
+
+        $plan = Plan::create([
+            'name' => 'Starter Plan',
+            'included_mrus' => 2,
+            'included_consumers' => 2500,
+            'base_price' => 500.00,
+            'extra_mru_rate' => 20.00,
+            'extra_consumer_rate' => 0.20,
+            'is_active' => true,
+        ]);
+        $duration7d = $plan->durations()->create([
+            'duration_unit' => 'day',
+            'duration_value' => 7,
+            'final_price' => 100.00,
+            'is_active' => true,
+        ]);
+        $duration3m = $plan->durations()->create([
+            'duration_unit' => 'month',
+            'duration_value' => 3,
+            'final_price' => 1200.00,
+            'is_active' => true,
+        ]);
+
+        // User has 3-month subscription with 75 days remaining out of 90 (Unused credit = 75/90 * 1200 = ₹1,000)
+        $sub3m = app(PlanService::class)->subscribeAgent($user, $plan, $duration3m);
+        $sub3m->update([
+            'billing_start' => now()->subDays(15),
+            'billing_end' => now()->addDays(75),
+            'base_price_paid' => 1200.00,
+        ]);
+
+        $walletBefore = (float) app(WalletService::class)->getBalance($user);
+
+        // User shifts down to 7-Day option
+        $response = $this->actingAs($user)->postJson('/subscription/subscribe-wallet', [
+            'plan_id' => $plan->id,
+            'duration_id' => $duration7d->id,
+            'action_mode' => 'shift',
+        ]);
+
+        $response->assertStatus(200);
+
+        // Verify previous 3-month subscription is marked downgraded
+        $this->assertEquals('downgraded', $sub3m->fresh()->status);
+
+        // Verify new 7-day subscription starts NOW
+        $activeSub = $user->fresh()->activeSubscription;
+        $this->assertNotNull($activeSub);
+        $this->assertEquals('day', $activeSub->duration_unit);
+        $this->assertEquals(7, $activeSub->duration_value);
+        $this->assertEquals(7, (int) round(now()->floatDiffInDays($activeSub->billing_end)));
+
+        // Verify wallet received prorated credit of ₹900 (Old Credit ₹1,000 - New 7d Price ₹100 = +₹900)
+        $walletAfter = (float) app(WalletService::class)->getBalance($user);
+        $this->assertEquals($walletBefore + 900.00, $walletAfter);
     }
 }

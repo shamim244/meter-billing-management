@@ -54,16 +54,23 @@ class SubscriptionCheckoutController extends Controller
 
         $activeSubscription = $user->activeSubscription;
 
-        $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription);
+        $actionMode = $request->input('action_mode', 'auto');
+        $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription, $actionMode);
 
         $downgradeEligibility = null;
-        if ($pricingDetails['action_type'] === 'downgrade' && $activeSubscription) {
+        if (($pricingDetails['action_type'] === 'downgrade' || ($pricingDetails['shift_option']['action_type'] ?? null) === 'downgrade') && $activeSubscription) {
             $downgradeEligibility = $this->planChangeService->checkDowngradeEligibility($activeSubscription, $plan);
         }
 
         return response()->json([
             'success' => true,
             'action_type' => $pricingDetails['action_type'],
+            'action_mode' => $pricingDetails['action_mode'],
+            'available_actions' => $pricingDetails['available_actions'],
+            'shift_option' => $pricingDetails['shift_option'] ?? null,
+            'extend_option' => $pricingDetails['extend_option'] ?? null,
+            'start_date' => $pricingDetails['start_date'] ?? null,
+            'end_date' => $pricingDetails['end_date'] ?? null,
             'plan' => [
                 'id' => $plan->id,
                 'name' => $plan->name,
@@ -127,7 +134,8 @@ class SubscriptionCheckoutController extends Controller
 
         $activeSubscription = $user->activeSubscription;
 
-        $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription);
+        $actionMode = $request->input('action_mode', 'auto');
+        $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription, $actionMode);
 
         $downgradeEligibility = null;
         if ($pricingDetails['action_type'] === 'downgrade' && $activeSubscription) {
@@ -142,7 +150,8 @@ class SubscriptionCheckoutController extends Controller
             'pricingDetails',
             'settings',
             'walletBalance',
-            'downgradeEligibility'
+            'downgradeEligibility',
+            'actionMode'
         ));
     }
 
@@ -160,6 +169,7 @@ class SubscriptionCheckoutController extends Controller
 
         $request->validate([
             'mode' => 'required|string|in:' . implode(',', PaymentMode::values()),
+            'action_mode' => 'nullable|string|in:auto,shift,extend',
             'utr_number' => 'required_if:mode,manual_upi|nullable|string|max:100',
             'bank_reference' => 'required_if:mode,bank_transfer|nullable|string|max:100',
             'screenshot' => 'nullable|image|max:5120',
@@ -171,7 +181,8 @@ class SubscriptionCheckoutController extends Controller
 
         $activeSubscription = $user->activeSubscription;
 
-        $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription);
+        $actionMode = $request->input('action_mode', 'auto');
+        $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription, $actionMode);
         $amount = (float) $pricingDetails['final_amount'];
 
         // If upgrade/purchase requires 0 payment (e.g. covered by credit or free tier)
@@ -179,7 +190,7 @@ class SubscriptionCheckoutController extends Controller
             if ($pricingDetails['action_type'] === 'downgrade' && $activeSubscription) {
                 $eligibility = $this->planChangeService->checkDowngradeEligibility($activeSubscription, $plan);
                 if (!$eligibility['eligible']) {
-                    return redirect()->route('subscription.purchase', ['plan' => $plan->id, 'duration' => $duration->id])
+                    return redirect()->route('subscription.purchase', ['plan' => $plan->id, 'duration' => $duration->id, 'action_mode' => $actionMode])
                         ->with('error', $eligibility['message']);
                 }
                 $downgradeResult = $this->planChangeService->downgradePlan($activeSubscription, $plan, $duration);
@@ -199,6 +210,7 @@ class SubscriptionCheckoutController extends Controller
             'plan_id' => $plan->id,
             'duration_id' => $duration->id,
             'action_type' => $pricingDetails['action_type'],
+            'action_mode' => $pricingDetails['action_mode'],
         ];
 
         try {
@@ -261,8 +273,9 @@ class SubscriptionCheckoutController extends Controller
     public function subscribeWallet(Request $request): JsonResponse|RedirectResponse
     {
         $request->validate([
-            'plan_id' => 'required|exists:plans,id',
-            'duration_id' => 'required|exists:plan_durations,id',
+            'plan_id' => 'required|integer|exists:plans,id',
+            'duration_id' => 'required|integer|exists:plan_durations,id',
+            'action_mode' => 'nullable|string|in:auto,shift,extend',
         ]);
 
         $plan = Plan::findOrFail($request->input('plan_id'));
@@ -280,7 +293,8 @@ class SubscriptionCheckoutController extends Controller
 
         $activeSubscription = $user->activeSubscription;
 
-        $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription);
+        $actionMode = $request->input('action_mode', 'auto');
+        $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription, $actionMode);
         $amountDue = (float) $pricingDetails['final_amount'];
         $walletBalance = (float) $this->walletService->getBalance($user);
 
@@ -289,18 +303,19 @@ class SubscriptionCheckoutController extends Controller
             return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg, 'requires_topup' => true], 422) : back()->with('error', $msg);
         }
 
-        // Case 1: Mid-cycle upgrade
-        if ($pricingDetails['action_type'] === 'upgrade' && $activeSubscription) {
+        // Case 1: Shift Mode - Upgrade (Prorated difference debited, new cycle starts today)
+        if ($pricingDetails['action_mode'] === 'shift' && $pricingDetails['is_upgrade'] && $activeSubscription) {
             $res = $this->planChangeService->upgradePlan($activeSubscription, $plan, $duration);
             if (!$res['success']) {
                 $msg = $res['message'] ?? 'Upgrade failed.';
                 return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
             }
-            $msg = "🎉 Upgraded to {$plan->name} successfully! Prorated fee of ₹" . number_format($amountDue, 2) . " was debited from your wallet.";
-            return $request->wantsJson() ? response()->json(['success' => true, 'message' => $msg]) : back()->with('success', $msg);
+            $msg = "🎉 Switched to {$plan->name} ({$duration->formatted_duration}) successfully! Prorated fee of ₹" . number_format($amountDue, 2) . " was debited from your wallet. Valid from today until " . $res['subscription']->billing_end->format('M d, Y') . ".";
+            return $request->wantsJson() ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $res['subscription']->id]) : back()->with('success', $msg);
         }
 
-        if ($pricingDetails['action_type'] === 'downgrade' && $activeSubscription) {
+        // Case 2: Shift Mode - Downgrade (Prorated credit added to wallet, new cycle starts today)
+        if ($pricingDetails['action_mode'] === 'shift' && $pricingDetails['is_downgrade'] && $activeSubscription) {
             $eligibility = $this->planChangeService->checkDowngradeEligibility($activeSubscription, $plan);
             if (!$eligibility['eligible']) {
                 $msg = $eligibility['message'] ?? 'Downgrade ineligible due to active MRU count.';
@@ -329,22 +344,22 @@ class SubscriptionCheckoutController extends Controller
                 $msg = $res['message'] ?? 'Downgrade failed.';
                 return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
             }
-            $msg = "🎉 Downgraded to {$plan->name} successfully! Prorated credit of ₹" . number_format($res['amount_credited'], 2) . " was credited to your wallet.";
-            return $request->wantsJson() ? response()->json(['success' => true, 'message' => $msg]) : back()->with('success', $msg);
+            $msg = "🎉 Switched to {$plan->name} ({$duration->formatted_duration}) successfully! Prorated credit of ₹" . number_format($res['amount_credited'], 2) . " was credited to your wallet. Valid from today until " . $res['subscription']->billing_end->format('M d, Y') . ".";
+            return $request->wantsJson() ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $res['subscription']->id]) : back()->with('success', $msg);
         }
 
-        // Case 3: Initial Subscription or Same Plan Renewal
-        $isRenewal = $activeSubscription && $activeSubscription->plan_id === $plan->id;
-        $txDesc = $isRenewal
+        // Case 3: Extend Mode OR Brand New Subscription
+        $isExtend = ($pricingDetails['action_mode'] === 'extend') && $activeSubscription;
+        $txDesc = $isExtend
             ? "Plan Extension: +{$duration->formatted_duration} added to {$plan->name}"
             : "Subscription to {$plan->name} ({$duration->formatted_duration})";
 
-        return DB::transaction(function () use ($user, $plan, $duration, $amountDue, $isRenewal, $txDesc, $request) {
+        return DB::transaction(function () use ($user, $plan, $duration, $amountDue, $isExtend, $txDesc, $request) {
             if ($amountDue > 0) {
                 $debitResult = $this->walletService->debit(
                     user: $user,
                     amount: $amountDue,
-                    source: $isRenewal ? 'subscription_renewal' : 'subscription_purchase',
+                    source: $isExtend ? 'subscription_renewal' : 'subscription_purchase',
                     referenceType: Plan::class,
                     referenceId: (string) $plan->id,
                     description: $txDesc
@@ -357,8 +372,8 @@ class SubscriptionCheckoutController extends Controller
             }
 
             $subscription = $this->planService->subscribeAgent($user, $plan, $duration);
-            $msg = $isRenewal
-                ? "🎉 Extended {$plan->name} (+{$duration->formatted_duration}) successfully! Valid until " . $subscription->billing_end->format('M d, Y') . "."
+            $msg = $isExtend
+                ? "🎉 Extended {$plan->name} (+{$duration->formatted_duration}) successfully! New validity until " . $subscription->billing_end->format('M d, Y') . "."
                 : "🎉 Subscribed to {$plan->name} ({$duration->formatted_duration}) successfully! Valid until " . $subscription->billing_end->format('M d, Y') . ".";
 
             return $request->wantsJson()
@@ -369,49 +384,96 @@ class SubscriptionCheckoutController extends Controller
 
     /**
      * Compute pricing details and proration server-side.
+     * Supports both 'shift' (starts today with unused balance adjustment)
+     * and 'extend' (adds validity onto existing end date).
      */
-    protected function calculatePricingDetails($user, Plan $plan, PlanDuration $duration, ?AgentSubscription $activeSub): array
+    protected function calculatePricingDetails($user, Plan $plan, PlanDuration $duration, ?AgentSubscription $activeSub, string $actionMode = 'auto'): array
     {
         $basePrice = (float) $duration->final_price;
 
         if (!$activeSub || !$activeSub->plan) {
+            $now = now();
+            $newEnd = $duration->calculateBillingEnd($now);
             return [
                 'action_type' => 'new',
+                'action_mode' => 'new',
                 'base_price' => $basePrice,
                 'proration' => null,
                 'final_amount' => $basePrice,
+                'prorated_credit' => 0.0,
                 'discount_percent' => (float) $duration->discount_percent,
                 'is_upgrade' => false,
                 'is_downgrade' => false,
+                'start_date' => $now->format('M d, Y'),
+                'end_date' => $newEnd->format('M d, Y'),
+                'available_actions' => ['new'],
             ];
         }
 
-        if ($activeSub->plan_id === $plan->id) {
-            return [
-                'action_type' => 'renewal',
-                'base_price' => $basePrice,
-                'proration' => null,
-                'final_amount' => $basePrice,
-                'discount_percent' => (float) $duration->discount_percent,
-                'is_upgrade' => false,
-                'is_downgrade' => false,
-            ];
-        }
-
+        // Calculate Prorated Shift details (Starts Today, Replaces Old Plan with Day-Based Credit)
         $proration = $this->planChangeService->calculateProration($activeSub, $plan, $duration);
         $amountDue = (float) $proration['amount_due'];
         $isUpgrade = $amountDue > 0;
         $proratedCredit = $amountDue < 0 ? abs($amountDue) : 0.0;
+        $shiftNow = now();
+        $shiftEnd = $duration->calculateBillingEnd($shiftNow);
 
-        return [
-            'action_type' => $isUpgrade ? 'upgrade' : 'downgrade',
+        $shiftDetails = [
+            'action_type' => $isUpgrade ? 'upgrade' : ($amountDue < 0 ? 'downgrade' : 'shift'),
+            'action_mode' => 'shift',
             'base_price' => $basePrice,
             'proration' => $proration,
             'final_amount' => $isUpgrade ? $amountDue : 0.0,
             'prorated_credit' => $proratedCredit,
             'discount_percent' => (float) $duration->discount_percent,
             'is_upgrade' => $isUpgrade,
-            'is_downgrade' => !$isUpgrade,
+            'is_downgrade' => $amountDue < 0,
+            'start_date' => $shiftNow->format('M d, Y'),
+            'end_date' => $shiftEnd->format('M d, Y'),
         ];
+
+        // Calculate Extend details (Adds Duration to End of Existing Validity)
+        $extendBaseDate = ($activeSub->billing_end && $activeSub->billing_end > now()) ? $activeSub->billing_end->copy() : now();
+        $extendEnd = $duration->calculateBillingEnd($extendBaseDate);
+
+        $extendDetails = [
+            'action_type' => 'extend',
+            'action_mode' => 'extend',
+            'base_price' => $basePrice,
+            'proration' => null,
+            'final_amount' => $basePrice,
+            'prorated_credit' => 0.0,
+            'discount_percent' => (float) $duration->discount_percent,
+            'is_upgrade' => false,
+            'is_downgrade' => false,
+            'start_date' => $extendBaseDate->format('M d, Y'),
+            'end_date' => $extendEnd->format('M d, Y'),
+        ];
+
+        $availableActions = ['shift', 'extend'];
+
+        // Determine which mode to return as primary
+        $effectiveMode = $actionMode;
+        if ($effectiveMode === 'auto') {
+            if ($activeSub->plan_id !== $plan->id) {
+                $effectiveMode = 'shift';
+            } else {
+                // If same plan and same duration, default to 'extend'. If different duration (e.g. 1m -> 3m or 3m -> 7d), default to 'shift'
+                $currentDurationValue = $activeSub->duration_value ?: $activeSub->duration_months;
+                $targetDurationValue = $duration->duration_value ?: $duration->duration_months;
+                $currentDurationUnit = $activeSub->duration_unit ?: 'month';
+                $targetDurationUnit = $duration->duration_unit ?: 'month';
+
+                $isSameExactDuration = ($currentDurationValue == $targetDurationValue && $currentDurationUnit == $targetDurationUnit);
+                $effectiveMode = $isSameExactDuration ? 'extend' : 'shift';
+            }
+        }
+
+        $chosen = ($effectiveMode === 'extend') ? $extendDetails : $shiftDetails;
+
+        $chosen['available_actions'] = $availableActions;
+        $chosen['shift_option'] = $shiftDetails;
+        $chosen['extend_option'] = $extendDetails;
+        return $chosen;
     }
 }

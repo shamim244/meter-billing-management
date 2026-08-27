@@ -69,23 +69,30 @@ class ActivateSubscriptionOnPaymentSuccess
         }
 
         $activeSubscription = $user->activeSubscription;
+        $meta = $payment->meta ?? [];
+        $actionMode = $meta['action_mode'] ?? null;
+        if (!$actionMode) {
+            $actionMode = ($activeSubscription && $activeSubscription->plan_id !== $plan->id) ? 'shift' : 'extend';
+        }
 
         try {
-            if ($activeSubscription && $activeSubscription->plan_id !== $plan->id) {
+            if ($activeSubscription && $actionMode === 'shift') {
                 $proration = $this->planChangeService->calculateProration($activeSubscription, $plan, $duration);
                 if ($proration['is_upgrade']) {
                     $res = $this->planChangeService->upgradePlan($activeSubscription, $plan, $duration);
                     $subId = $res['subscription']->id ?? $activeSubscription->id;
-                    $actionText = "Upgraded to plan {$plan->name} ({$duration->formatted_duration})";
+                    $actionText = "Switched / Upgraded to plan {$plan->name} ({$duration->formatted_duration})";
                 } else {
                     $res = $this->planChangeService->downgradePlan($activeSubscription, $plan, $duration);
                     $subId = $res['subscription']->id ?? $activeSubscription->id;
-                    $actionText = "Downgraded to plan {$plan->name} ({$duration->formatted_duration})";
+                    $actionText = "Switched / Downgraded to plan {$plan->name} ({$duration->formatted_duration})";
                 }
             } else {
                 $subscription = $this->planService->subscribeAgent($user, $plan, $duration);
                 $subId = $subscription->id;
-                $actionText = "Directly subscribed to plan {$plan->name} ({$duration->formatted_duration})";
+                $actionText = ($activeSubscription && $activeSubscription->plan_id === $plan->id)
+                    ? "Extended plan {$plan->name} (+{$duration->formatted_duration})"
+                    : "Directly subscribed to plan {$plan->name} ({$duration->formatted_duration})";
             }
 
             PaymentAuditLog::create([

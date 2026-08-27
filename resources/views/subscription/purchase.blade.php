@@ -50,7 +50,8 @@
                         'X-CSRF-TOKEN': '{{ csrf_token() }}'
                     },
                     body: JSON.stringify({
-                        mode: 'pg'
+                        mode: 'pg',
+                        action_mode: '{{ $pricingDetails['action_mode'] }}'
                     })
                 });
 
@@ -300,6 +301,7 @@
                                 @csrf
                                 <input type="hidden" name="plan_id" value="{{ $plan->id }}">
                                 <input type="hidden" name="duration_id" value="{{ $duration->id }}">
+                                <input type="hidden" name="action_mode" value="{{ $pricingDetails['action_mode'] }}">
                                 <button type="submit" class="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-1.5">
                                     <span>👛 Pay from Wallet Balance (₹{{ number_format($walletBalance, 2) }})</span>
                                 </button>
@@ -312,6 +314,7 @@
             <!-- 2. Payment Method Form (Scope to Fixed Amount) -->
             <form action="{{ route('subscription.purchase.process', ['plan' => $plan->id, 'duration' => $duration->id]) }}" method="POST" enctype="multipart/form-data" @submit="handleCheckout($event)" class="space-y-6">
                 @csrf
+                <input type="hidden" name="action_mode" value="{{ $pricingDetails['action_mode'] }}">
 
                 <div class="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-6">
                     <div>
