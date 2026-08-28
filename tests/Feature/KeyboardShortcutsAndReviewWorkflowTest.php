@@ -88,6 +88,39 @@ class KeyboardShortcutsAndReviewWorkflowTest extends TestCase
         $this->assertEquals('Space', $this->user->getShortcutMap()['submit_ok']);
     }
 
+    public function test_user_can_save_multi_key_combo_shortcuts(): void
+    {
+        $combos = [
+            'copy_ca' => 'Ctrl+C',
+            'submit_ok' => 'Ctrl+Enter',
+            'mark_doubt' => 'Alt+2',
+            'mark_critical' => 'Alt+3',
+            'next_card' => 'Alt+ArrowDown',
+            'prev_card' => 'Alt+ArrowUp',
+            'focus_reading' => 'Alt+R',
+            'open_remark' => 'Shift+M',
+            'auto_fill_reading' => 'Ctrl+Shift+A',
+            'exit_box' => 'Escape',
+        ];
+
+        $response = $this->actingAs($this->user)->postJson('/user/shortcuts', [
+            'shortcuts' => $combos,
+        ]);
+
+        $response->assertOk()
+            ->assertJson([
+                'success' => true,
+                'message' => 'Custom shortcuts saved successfully!',
+            ]);
+
+        $this->user->refresh();
+        $map = $this->user->getShortcutMap();
+        $this->assertEquals('Ctrl+C', $map['copy_ca']);
+        $this->assertEquals('Ctrl+Enter', $map['submit_ok']);
+        $this->assertEquals('Shift+M', $map['open_remark']);
+        $this->assertEquals('Ctrl+Shift+A', $map['auto_fill_reading']);
+    }
+
     public function test_user_can_reset_shortcuts_to_defaults(): void
     {
         $this->user->shortcuts = ['copy_ca' => 'z', 'submit_ok' => 'q'];

@@ -85,6 +85,39 @@ class AdminShortcutSettingsTest extends TestCase
         $this->assertEquals('q', $operatorShortcuts['auto_fill_reading']);
     }
 
+    public function test_admin_can_set_multi_key_combos_as_system_defaults(): void
+    {
+        $comboShortcuts = [
+            'copy_ca' => 'Ctrl+C',
+            'focus_reading' => 'Alt+R',
+            'auto_fill_reading' => 'Ctrl+Shift+A',
+            'submit_ok' => 'Ctrl+Enter',
+            'mark_doubt' => 'Alt+2',
+            'mark_critical' => 'Alt+3',
+            'next_card' => 'Alt+ArrowDown',
+            'prev_card' => 'Alt+ArrowUp',
+            'open_remark' => 'Shift+M',
+            'exit_box' => 'Escape',
+        ];
+
+        $response = $this->actingAs($this->adminUser)
+            ->post('/admin/shortcuts', [
+                'shortcuts' => $comboShortcuts,
+            ]);
+
+        $response->assertRedirect('/admin/shortcuts')
+            ->assertSessionHas('success');
+
+        $saved = SystemSetting::get('shortcuts_default');
+        $this->assertEquals('Ctrl+C', $saved['copy_ca']);
+        $this->assertEquals('Alt+R', $saved['focus_reading']);
+        $this->assertEquals('Shift+M', $saved['open_remark']);
+
+        $operatorShortcuts = $this->operatorUser->getShortcutMap();
+        $this->assertEquals('Ctrl+C', $operatorShortcuts['copy_ca']);
+        $this->assertEquals('Shift+M', $operatorShortcuts['open_remark']);
+    }
+
     public function test_admin_can_reset_system_defaults_to_factory(): void
     {
         SystemSetting::set('shortcuts_default', [

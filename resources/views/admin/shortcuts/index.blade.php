@@ -7,22 +7,77 @@
         shortcuts: {{ Js::from($systemShortcuts) }},
         labels: {{ Js::from($labels) }},
         rebindingAction: null,
-        rebindKey(actionKey) {
+        rebindDisplay: '',
+        rebindSession: null,
+
+        get conflicts() {
+            if (!window.KeyboardShortcuts) return [];
+            const map = {};
+            const conflictingActions = [];
+            for (const [action, key] of Object.entries(this.shortcuts)) {
+                if (!key) continue;
+                const norm = window.KeyboardShortcuts.normalize(key);
+                if (map[norm]) {
+                    conflictingActions.push({ key: key, actions: [map[norm], action] });
+                } else {
+                    map[norm] = action;
+                }
+            }
+            return conflictingActions;
+        },
+
+        isActionInConflict(actionKey) {
+            const currentKey = this.shortcuts[actionKey];
+            if (!currentKey || !window.KeyboardShortcuts) return false;
+            const norm = window.KeyboardShortcuts.normalize(currentKey);
+            let count = 0;
+            for (const [act, k] of Object.entries(this.shortcuts)) {
+                if (k && window.KeyboardShortcuts.normalize(k) === norm) {
+                    count++;
+                }
+            }
+            return count > 1;
+        },
+
+        renderBadge(shortcut) {
+            if (window.KeyboardShortcuts) {
+                return window.KeyboardShortcuts.renderBadgesHtml(shortcut);
+            }
+            return shortcut || 'Unset';
+        },
+
+        startRebind(actionKey) {
+            if (this.rebindSession) {
+                this.rebindSession.cancel();
+            }
+
             this.rebindingAction = actionKey;
-            
-            const handleKey = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
+            this.rebindDisplay = 'Press any key or combo (e.g. Ctrl+C)...';
 
-                let keyName = e.key;
-                if (keyName === ' ') keyName = 'Space';
-                
-                this.shortcuts[actionKey] = keyName;
-                this.rebindingAction = null;
-                window.removeEventListener('keydown', handleKey, { capture: true });
-            };
+            if (window.KeyboardShortcuts) {
+                this.rebindSession = window.KeyboardShortcuts.startRebindSession({
+                    onUpdate: (data) => {
+                        this.rebindDisplay = data.display;
+                    },
+                    onComplete: (combo) => {
+                        this.shortcuts[actionKey] = combo;
+                        this.rebindingAction = null;
+                        this.rebindSession = null;
+                    },
+                    onCancel: () => {
+                        this.rebindingAction = null;
+                        this.rebindSession = null;
+                    }
+                });
+            }
+        },
 
-            window.addEventListener('keydown', handleKey, { capture: true, once: true });
+        cancelRebind() {
+            if (this.rebindSession) {
+                this.rebindSession.cancel();
+            }
+            this.rebindingAction = null;
+            this.rebindSession = null;
         }
     }" class="space-y-8">
 
@@ -39,9 +94,11 @@
                         <span class="text-xs text-slate-500">•</span>
                         <span class="text-xs text-slate-400 font-medium">NBPDCL Billing Engine</span>
                     </div>
-                    <h1 class="text-2xl font-black text-white tracking-tight">Platform Default Keybindings</h1>
+                    <h1 class="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                        <span>⌨️</span> Platform Default Keybindings
+                    </h1>
                     <p class="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-                        These keyboard shortcuts serve as the system-wide baseline for all operators reviewing consumer cards and entering working readings on the Dashboard.
+                        These keyboard shortcuts serve as the platform baseline for all operators reviewing consumer cards on the Dashboard. Single keys (<kbd class="font-mono text-[10px] px-1 bg-slate-800 rounded">C</kbd>, <kbd class="font-mono text-[10px] px-1 bg-slate-800 rounded">R</kbd>) and multi-key combos (<kbd class="font-mono text-[10px] px-1 bg-slate-800 rounded">Ctrl+C</kbd>, <kbd class="font-mono text-[10px] px-1 bg-slate-800 rounded">Shift+M</kbd>) are fully supported.
                     </p>
                 </div>
 
@@ -63,12 +120,45 @@
             </div>
         </div>
 
+        <!-- Conflict Warning Banner -->
+        <template x-if="conflicts.length > 0">
+            <div class="p-4 rounded-2xl bg-amber-950/60 border border-amber-500/40 text-amber-300 text-xs shadow-xs space-y-1">
+                <div class="font-bold flex items-center gap-1.5 text-amber-200">
+                    <span>⚠️</span> System Key Conflict Detected
+                </div>
+                <template x-for="c in conflicts" :key="c.key">
+                    <p class="text-[11px] leading-relaxed">
+                        Shortcut <strong class="font-mono bg-amber-900/80 px-1.5 py-0.5 rounded text-amber-100" x-text="c.key"></strong> is assigned to multiple actions (<span class="font-semibold" x-text="c.actions.map(a => labels[a] || a).join(', ')"></span>).
+                    </p>
+                </template>
+            </div>
+        </template>
+
+        <!-- Rebinding Banner Modal Alert (Live Key Listening) -->
+        <div x-show="rebindingAction" class="p-6 rounded-3xl bg-indigo-950/90 border-2 border-indigo-500 text-center shadow-xl transition-all" x-cloak>
+            <div class="flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-300">
+                <span class="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
+                Listening for System Keypress
+            </div>
+            <div class="text-lg font-black text-white mt-1.5">
+                Assign key for: <span class="text-cyan-300 underline decoration-2 underline-offset-4" x-text="labels[rebindingAction] || rebindingAction"></span>
+            </div>
+            <div class="mt-3 inline-block px-5 py-2 rounded-2xl bg-slate-900 border border-indigo-700 shadow-sm">
+                <span class="text-sm font-mono font-black text-cyan-300" x-text="rebindDisplay"></span>
+            </div>
+            <div class="mt-4 flex items-center justify-center gap-2">
+                <button type="button" @click="cancelRebind()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold rounded-xl transition">
+                    Cancel (Escape)
+                </button>
+            </div>
+        </div>
+
         <!-- Shortcut Configuration Card Form -->
         <div class="bg-slate-950 p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-xl space-y-6">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800 pb-4">
                 <div>
                     <h2 class="text-lg font-bold text-white">System Keybinding Assignments</h2>
-                    <p class="text-xs text-slate-400 mt-0.5">Click any action's key badge to listen and assign a physical keyboard key.</p>
+                    <p class="text-xs text-slate-400 mt-0.5">Click any action's key badge to assign single keys or multi-key combinations.</p>
                 </div>
 
                 <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
@@ -90,28 +180,19 @@
                 </div>
             </div>
 
-            <!-- Rebinding Banner Modal Alert (Live Key Listening) -->
-            <div x-show="rebindingAction" class="p-4 rounded-2xl bg-indigo-950/80 border-2 border-indigo-500 text-center animate-pulse" x-cloak>
-                <div class="text-xs font-bold uppercase tracking-wider text-indigo-300">Listening for keypress...</div>
-                <div class="text-base font-black text-white mt-1">
-                    Press any key on your keyboard to assign to: <span class="text-cyan-300" x-text="labels[rebindingAction] || rebindingAction"></span>
-                </div>
-                <button type="button" @click="rebindingAction = null" class="mt-2 px-3 py-1 bg-slate-800 text-slate-300 hover:text-white text-xs font-semibold rounded-lg">
-                    Cancel (Escape)
-                </button>
-            </div>
-
             <!-- Form -->
             <form method="POST" action="{{ route('admin.shortcuts.update') }}" class="space-y-6">
                 @csrf
 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     @foreach($systemShortcuts as $key => $binding)
-                        <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/90 hover:border-slate-700 transition flex flex-col justify-between space-y-3">
+                        <div class="p-4 rounded-2xl bg-slate-900/60 border transition flex flex-col justify-between space-y-3"
+                             :class="isActionInConflict('{{ $key }}') ? 'border-amber-500/60 bg-amber-950/20' : 'border-slate-800/90 hover:border-slate-700'">
                             <div>
                                 <div class="flex items-center justify-between">
-                                    <span class="text-xs font-bold text-white">
-                                        {{ $labels[$key] ?? ucwords(str_replace('_', ' ', $key)) }}
+                                    <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                                        <span>{{ $labels[$key] ?? ucwords(str_replace('_', ' ', $key)) }}</span>
+                                        <span x-show="isActionInConflict('{{ $key }}')" class="text-[10px] font-bold text-amber-400">⚠️</span>
                                     </span>
                                     <span class="text-[10px] font-mono text-slate-500 font-bold uppercase">
                                         {{ $key }}
@@ -136,6 +217,8 @@
                                         Slides carousel backward to the previous consumer card.
                                     @elseif($key === 'open_remark')
                                         Focuses observation notes textarea field.
+                                    @elseif($key === 'exit_box')
+                                        Unfocuses input field and re-enables navigation.
                                     @else
                                         Action trigger keybinding.
                                     @endif
@@ -149,11 +232,15 @@
                                     <input type="hidden" :name="'shortcuts[' + '{{ $key }}' + ']'" :value="shortcuts['{{ $key }}']">
                                     
                                     <button type="button" 
-                                            @click="rebindKey('{{ $key }}')"
-                                            class="px-3 py-1.5 rounded-xl font-mono font-extrabold text-xs bg-indigo-500/15 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 hover:border-indigo-400 shadow-sm transition active:scale-95 flex items-center gap-1.5"
-                                            :class="rebindingAction === '{{ $key }}' ? 'ring-2 ring-indigo-400 animate-pulse bg-indigo-500/40' : ''">
-                                        <span x-text="shortcuts['{{ $key }}'] ? shortcuts['{{ $key }}'].toUpperCase() : 'NONE'"></span>
-                                        <span class="text-[9px] text-slate-400">✎</span>
+                                            @click="startRebind('{{ $key }}')"
+                                            class="px-3 py-1.5 rounded-xl font-mono text-xs transition active:scale-95 flex items-center gap-1.5 shadow-xs"
+                                            :class="rebindingAction === '{{ $key }}' ? 'ring-2 ring-indigo-400 animate-pulse bg-indigo-500 text-white' : 'bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-slate-700'">
+                                        <template x-if="rebindingAction === '{{ $key }}'">
+                                            <span class="font-bold text-white">Press Key...</span>
+                                        </template>
+                                        <template x-if="rebindingAction !== '{{ $key }}'">
+                                            <span x-html="renderBadge(shortcuts['{{ $key }}'])"></span>
+                                        </template>
                                     </button>
                                 </div>
                             </div>

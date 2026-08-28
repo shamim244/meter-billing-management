@@ -1200,18 +1200,30 @@
                         <div class="flex items-center gap-2.5">
                             <span class="text-xl">⌨️</span>
                             <div>
-                                <h3 class="text-base font-bold text-slate-900 dark:text-white">Keyboard Shortcuts</h3>
-                                <p class="text-[11px] text-slate-400 dark:text-slate-500">Click any key to re-bind, or use Admin defaults</p>
+                                <h3 class="text-base font-bold text-slate-900 dark:text-white">Keyboard Shortcuts & Combos</h3>
+                                <p class="text-[11px] text-slate-400 dark:text-slate-500">Supports single keys & multi-key combinations (e.g. Ctrl+C)</p>
                             </div>
                         </div>
                         <button @click="showShortcutsModal = false" :disabled="rebindingAction !== null" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1">✕</button>
+                    </div>
+
+                    <!-- Live Rebinding Listening Banner inside Modal -->
+                    <div x-show="rebindingAction" class="p-4 bg-brand-50 dark:bg-brand-950/90 border-b border-brand-200 dark:border-cyan-800 text-center shrink-0" x-cloak>
+                        <div class="text-[10px] font-bold uppercase tracking-wider text-brand-700 dark:text-cyan-300 flex items-center justify-center gap-1.5">
+                            <span class="w-1.5 h-1.5 rounded-full bg-brand-500 animate-ping"></span>
+                            Listening for Input
+                        </div>
+                        <div class="text-xs font-black text-slate-900 dark:text-white mt-0.5">
+                            Assigning: <span class="text-brand-600 dark:text-cyan-400" x-text="shortcutLabels[rebindingAction] || rebindingAction"></span>
+                        </div>
+                        <div class="mt-1 text-xs font-mono font-bold text-brand-700 dark:text-cyan-300" x-text="rebindDisplay"></div>
                     </div>
 
                     <!-- Shortcut Action Rows -->
                     <div class="p-4 sm:p-6 space-y-3 overflow-y-auto">
                         <div class="p-3 bg-blue-50/60 dark:bg-blue-950/40 rounded-2xl border border-blue-100 dark:border-blue-900/60 text-[11px] text-blue-800 dark:text-cyan-300 leading-relaxed flex items-start gap-2">
                             <span class="text-sm">💡</span>
-                            <span><strong>Box Exit Tip:</strong> Press <strong>Escape (Esc)</strong> inside Working Reading or Remark to exit the box back to card navigation. In Remark, press <strong>Ctrl + Enter</strong> to save and exit instantly.</span>
+                            <span><strong>Review Speed Tip:</strong> Single-key and multi-key combos are supported. Press <strong>Escape (Esc)</strong> anytime to exit input boxes. Press <strong>?</strong> to open this shortcuts sheet anytime.</span>
                         </div>
 
                         <template x-for="(label, actionKey) in shortcutLabels" :key="actionKey">
@@ -1224,8 +1236,13 @@
                                     <button type="button" 
                                              @click="startRebind(actionKey)" 
                                              :class="rebindingAction === actionKey ? 'bg-amber-500 text-white animate-pulse ring-2 ring-amber-400' : 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 hover:bg-slate-300 dark:hover:bg-slate-600 border border-slate-300 dark:border-slate-600'" 
-                                             class="px-3.5 py-1.5 rounded-xl text-xs font-mono font-black transition min-w-[75px] text-center shadow-xs">
-                                        <span x-text="rebindingAction === actionKey ? 'Press key...' : (shortcuts[actionKey] || 'Unset')"></span>
+                                             class="px-3.5 py-1.5 rounded-xl text-xs font-mono font-bold transition min-w-[80px] text-center shadow-xs flex items-center justify-center">
+                                        <template x-if="rebindingAction === actionKey">
+                                            <span class="text-[10px] font-bold text-white">Press Key...</span>
+                                        </template>
+                                        <template x-if="rebindingAction !== actionKey">
+                                            <span x-html="renderShortcutBadge(shortcuts[actionKey])"></span>
+                                        </template>
                                     </button>
                                 </div>
                             </div>
@@ -1235,7 +1252,7 @@
                     <!-- Modal Footer -->
                     <div class="p-4 sm:p-6 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <button type="button" @click="resetToDefaults()" class="text-xs text-rose-600 dark:text-rose-400 hover:underline font-bold text-left">
-                            🔄 Reset to Admin Defaults
+                            🔄 Reset Defaults
                         </button>
                         <div class="flex flex-col-reverse sm:flex-row items-center gap-2 w-full sm:w-auto">
                             <button type="button" @click="showShortcutsModal = false" class="w-full sm:w-auto px-4 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition text-center">
@@ -1284,6 +1301,8 @@
                 // Shortcuts State
                 showShortcutsModal: false,
                 rebindingAction: null,
+                rebindDisplay: '',
+                rebindSession: null,
                 shortcuts: @json(Auth::user()->getShortcutMap()),
                 shortcutLabels: @json(Auth::user()->getShortcutLabels()),
                 cardDensity: '{{ session('pref_card_density', 'compact') }}',
@@ -2210,6 +2229,13 @@
                     }
                 },
 
+                renderShortcutBadge(shortcut) {
+                    if (window.KeyboardShortcuts) {
+                        return window.KeyboardShortcuts.renderBadgesHtml(shortcut);
+                    }
+                    return shortcut || 'Unset';
+                },
+
                 openShortcutsModal() {
                     fetch('/user/shortcuts')
                         .then(r => r.json())
@@ -2220,25 +2246,42 @@
                         .catch(err => console.error(err));
                     this.showShortcutsModal = true;
                     this.rebindingAction = null;
+                    this.rebindSession = null;
                 },
 
                 startRebind(actionKey) {
-                    this.rebindingAction = actionKey;
-                    
-                    const handleKey = (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        
-                        let keyName = e.key;
-                        if (keyName === ' ') keyName = 'Space';
-                        
-                        this.shortcuts[actionKey] = keyName;
-                        this.rebindingAction = null;
-                        window.removeEventListener('keydown', handleKey, { capture: true });
-                        this.showToastNotification('⌨️', `Key for ${this.shortcutLabels[actionKey] || actionKey} set to: ${keyName}`, null);
-                    };
+                    if (this.rebindSession) {
+                        this.rebindSession.cancel();
+                    }
 
-                    window.addEventListener('keydown', handleKey, { capture: true, once: true });
+                    this.rebindingAction = actionKey;
+                    this.rebindDisplay = 'Press any key or combo...';
+
+                    if (window.KeyboardShortcuts) {
+                        this.rebindSession = window.KeyboardShortcuts.startRebindSession({
+                            onUpdate: (data) => {
+                                this.rebindDisplay = data.display;
+                            },
+                            onComplete: (combo) => {
+                                this.shortcuts[actionKey] = combo;
+                                this.rebindingAction = null;
+                                this.rebindSession = null;
+                                this.showToastNotification('⌨️', `Key for ${this.shortcutLabels[actionKey] || actionKey} set to: ${combo}`, null);
+                            },
+                            onCancel: () => {
+                                this.rebindingAction = null;
+                                this.rebindSession = null;
+                            }
+                        });
+                    }
+                },
+
+                cancelRebind() {
+                    if (this.rebindSession) {
+                        this.rebindSession.cancel();
+                    }
+                    this.rebindingAction = null;
+                    this.rebindSession = null;
                 },
 
                 saveCustomShortcuts() {
@@ -2280,16 +2323,25 @@
                 },
 
                 onKeyNav(e) {
+                    // Quick cheat-sheet overlay with '?' key (when not inside input)
+                    if ((e.key === '?' || (e.shiftKey && e.key === '/')) && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                        if (!this.showCreateMruModal && !this.showExistingMruPopup && !this.showNewCycleModal && !this.showPdfViewerModal && !this.showQuickPullModal) {
+                            e.preventDefault();
+                            this.openShortcutsModal();
+                            return;
+                        }
+                    }
+
                     // Do nothing if any modal is open or rebinding
                     if (this.showShortcutsModal || this.showCreateMruModal || this.showExistingMruPopup || this.showNewCycleModal || this.showPdfViewerModal || this.showQuickPullModal || this.rebindingAction) return;
 
                     // If typing inside an input/textarea
                     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-                        const exitKey = this.shortcuts.exit_box || 'Escape';
-                        const isExitKey = (e.key === exitKey || e.key.toLowerCase() === exitKey.toLowerCase() || e.key === 'Escape');
+                        const exitShortcut = this.shortcuts.exit_box || 'Escape';
+                        const isExit = window.KeyboardShortcuts ? window.KeyboardShortcuts.matches(e, exitShortcut) : (e.key === 'Escape');
 
                         // 1. Exit / Blur input on Escape or configured Exit Key
-                        if (isExitKey) {
+                        if (isExit || e.key === 'Escape') {
                             e.preventDefault();
                             e.target.blur();
                             this.showToastNotification('↩️', 'Exited input field (Keyboard shortcuts active)', null);
@@ -2316,18 +2368,17 @@
                     const currentBill = this.items[this.currentCardIndex];
                     if (!currentBill) return;
 
-                    const key = e.key;
-                    const keyLower = key.toLowerCase();
+                    const ks = window.KeyboardShortcuts;
 
                     // 1. Copy CA Number
-                    if (this.shortcuts.copy_ca && (key === this.shortcuts.copy_ca || keyLower === this.shortcuts.copy_ca.toLowerCase())) {
+                    if (ks ? ks.matches(e, this.shortcuts.copy_ca) : (e.key === this.shortcuts.copy_ca)) {
                         e.preventDefault();
                         this.copyText(currentBill.ca_number);
                         return;
                     }
 
                     // 2. Submit / OK
-                    if (this.shortcuts.submit_ok && (key === this.shortcuts.submit_ok || keyLower === this.shortcuts.submit_ok.toLowerCase())) {
+                    if (ks ? ks.matches(e, this.shortcuts.submit_ok) : (e.key === this.shortcuts.submit_ok)) {
                         e.preventDefault();
                         const wasFilteredOut = this.updateBillStatus(currentBill, 'submitted');
                         if (!wasFilteredOut) {
@@ -2337,7 +2388,7 @@
                     }
 
                     // 3. Mark Doubt
-                    if (this.shortcuts.mark_doubt && (key === this.shortcuts.mark_doubt || keyLower === this.shortcuts.mark_doubt.toLowerCase())) {
+                    if (ks ? ks.matches(e, this.shortcuts.mark_doubt) : (e.key === this.shortcuts.mark_doubt)) {
                         e.preventDefault();
                         const wasFilteredOut = this.updateBillStatus(currentBill, 'doubt');
                         if (!wasFilteredOut && this.filterStatus === 'all') {
@@ -2347,7 +2398,7 @@
                     }
 
                     // 4. Mark Critical
-                    if (this.shortcuts.mark_critical && (key === this.shortcuts.mark_critical || keyLower === this.shortcuts.mark_critical.toLowerCase())) {
+                    if (ks ? ks.matches(e, this.shortcuts.mark_critical) : (e.key === this.shortcuts.mark_critical)) {
                         e.preventDefault();
                         const wasFilteredOut = this.updateBillStatus(currentBill, 'critical');
                         if (!wasFilteredOut && this.filterStatus === 'all') {
@@ -2356,22 +2407,24 @@
                         return;
                     }
 
-                    // 5. Next Card
-                    if (this.shortcuts.next_card && (key === this.shortcuts.next_card || keyLower === this.shortcuts.next_card.toLowerCase()) || key === 'ArrowRight' || key === 'ArrowDown') {
+                    // 5. Next Card (Configured shortcut OR un-modified arrow keys)
+                    const isNextArrow = !e.ctrlKey && !e.altKey && !e.metaKey && (e.key === 'ArrowRight' || e.key === 'ArrowDown');
+                    if ((ks && ks.matches(e, this.shortcuts.next_card)) || isNextArrow) {
                         e.preventDefault();
                         this.nextCard();
                         return;
                     }
 
-                    // 6. Previous Card
-                    if (this.shortcuts.prev_card && (key === this.shortcuts.prev_card || keyLower === this.shortcuts.prev_card.toLowerCase()) || key === 'ArrowLeft' || key === 'ArrowUp') {
+                    // 6. Previous Card (Configured shortcut OR un-modified arrow keys)
+                    const isPrevArrow = !e.ctrlKey && !e.altKey && !e.metaKey && (e.key === 'ArrowLeft' || e.key === 'ArrowUp');
+                    if ((ks && ks.matches(e, this.shortcuts.prev_card)) || isPrevArrow) {
                         e.preventDefault();
                         this.prevCard();
                         return;
                     }
 
                     // 7. Focus / Edit Working Reading
-                    if (this.shortcuts.focus_reading && (key === this.shortcuts.focus_reading || keyLower === this.shortcuts.focus_reading.toLowerCase())) {
+                    if (ks ? ks.matches(e, this.shortcuts.focus_reading) : (e.key === this.shortcuts.focus_reading)) {
                         e.preventDefault();
                         const el = document.getElementById('working-reading-input-' + currentBill.id);
                         if (el) {
@@ -2382,14 +2435,14 @@
                     }
 
                     // 8. Auto-Fill Working Reading (Prev + Avg)
-                    if (this.shortcuts.auto_fill_reading && (key === this.shortcuts.auto_fill_reading || keyLower === this.shortcuts.auto_fill_reading.toLowerCase())) {
+                    if (ks ? ks.matches(e, this.shortcuts.auto_fill_reading) : (e.key === this.shortcuts.auto_fill_reading)) {
                         e.preventDefault();
                         this.autoFillWorkingReading(currentBill);
                         return;
                     }
 
                     // 9. Open / Focus Remark
-                    if (this.shortcuts.open_remark && (key === this.shortcuts.open_remark || keyLower === this.shortcuts.open_remark.toLowerCase())) {
+                    if (ks ? ks.matches(e, this.shortcuts.open_remark) : (e.key === this.shortcuts.open_remark)) {
                         e.preventDefault();
                         const el = document.getElementById('remark-input-' + currentBill.id);
                         if (el) {
