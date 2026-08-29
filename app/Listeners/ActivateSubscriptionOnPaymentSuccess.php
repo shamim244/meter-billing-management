@@ -95,6 +95,24 @@ class ActivateSubscriptionOnPaymentSuccess
                     : "Directly subscribed to plan {$plan->name} ({$duration->formatted_duration})";
             }
 
+            $meta = $payment->meta ?? [];
+            if (!empty($meta['coupon_code'])) {
+                $coupon = \App\Models\CouponCode::where('code', $meta['coupon_code'])->first();
+                if ($coupon && $coupon->type === 'subscription_discount') {
+                    $redemptionService = app(\App\Services\Coupon\CouponRedemptionService::class);
+                    try {
+                        $redemptionService->redeemForSubscription(
+                            coupon: $coupon,
+                            user: $user,
+                            originalAmount: (float)($meta['original_amount'] ?? $payment->amount),
+                            referenceId: 'payment_' . $payment->id
+                        );
+                    } catch (\Throwable $e) {
+                        Log::error("[SubscriptionActivationListener] Failed to redeem coupon for Payment #{$payment->id}: " . $e->getMessage());
+                    }
+                }
+            }
+
             PaymentAuditLog::create([
                 'payment_id' => $payment->id,
                 'admin_id' => $payment->verified_by,

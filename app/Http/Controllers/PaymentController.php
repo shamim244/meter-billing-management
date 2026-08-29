@@ -78,6 +78,34 @@ class PaymentController extends Controller
     }
 
     /**
+     * Real-time AJAX validation for coupon codes on payment / topup forms.
+     */
+    public function validateCoupon(Request $request): JsonResponse
+    {
+        $request->validate([
+            'code' => 'required|string',
+            'amount' => 'required|numeric|min:1',
+            'action_type' => 'nullable|string|in:topup_bonus,subscription_discount',
+            'plan_id' => 'nullable|integer',
+        ]);
+
+        $actionType = $request->input('action_type', 'topup_bonus');
+        $amount = (float) $request->input('amount');
+        $code = $request->input('code');
+        $planId = $request->input('plan_id') ? (int)$request->input('plan_id') : null;
+
+        $validation = app(\App\Services\Coupon\CouponRedemptionService::class)->validateCode(
+            code: $code,
+            user: $request->user(),
+            actionType: $actionType,
+            amount: $amount,
+            planId: $planId
+        );
+
+        return response()->json($validation, $validation['valid'] ? 200 : 422);
+    }
+
+    /**
      * Client Sandbox / Testing Payment Playground View.
      */
     public function sandbox(Request $request): View
@@ -252,10 +280,32 @@ class PaymentController extends Controller
         $purpose = PaymentPurpose::from($request->input('purpose'));
         $amount = (float) $request->input('amount');
 
+        $meta = [];
+        $couponCode = trim($request->input('coupon_code', ''));
+        if (!empty($couponCode)) {
+            $couponValidation = app(\App\Services\Coupon\CouponRedemptionService::class)->validateCode(
+                code: $couponCode,
+                user: $user,
+                actionType: 'topup_bonus',
+                amount: $amount
+            );
+
+            if (!$couponValidation['valid']) {
+                if ($request->wantsJson() || $request->ajax()) {
+                    return response()->json(['success' => false, 'error' => $couponValidation['message']], 422);
+                }
+                return redirect()->back()->withInput()->with('error', $couponValidation['message']);
+            }
+
+            $meta['coupon_code'] = $couponValidation['code'];
+            $meta['bonus_percent'] = $couponValidation['bonus_percent'];
+            $meta['bonus_amount'] = $couponValidation['discount_or_bonus_amount'];
+        }
+
         try {
             switch ($mode) {
                 case PaymentMode::PG:
-                    $orderData = $this->onlinePgService->createOrder($user, $amount, $purpose);
+                    $orderData = $this->onlinePgService->createOrder($user, $amount, $purpose, null, $meta);
                     if ($request->wantsJson() || $request->ajax()) {
                         return response()->json([
                             'success' => true,
@@ -271,7 +321,8 @@ class PaymentController extends Controller
                         $amount,
                         $purpose,
                         $request->input('utr_number'),
-                        $request->file('screenshot')
+                        $request->file('screenshot'),
+                        $meta
                     );
                     return redirect()->route('payments.index')->with('success', "Payment submitted with UTR: {$payment->utr_number}. Status is Pending Admin Verification.");
 
@@ -281,7 +332,8 @@ class PaymentController extends Controller
                         $amount,
                         $purpose,
                         $request->input('bank_reference'),
-                        $request->file('screenshot')
+                        $request->file('screenshot'),
+                        $meta
                     );
                     return redirect()->route('payments.index')->with('success', "Bank transfer submitted with Ref: {$payment->bank_reference}. Status is Pending Admin Verification.");
             }

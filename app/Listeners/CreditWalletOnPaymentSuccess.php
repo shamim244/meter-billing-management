@@ -54,6 +54,26 @@ class CreditWalletOnPaymentSuccess
             description: $description
         );
 
+        // 4. Check and credit Top-Up Bonus coupon if applied
+        $meta = $payment->meta ?? [];
+        if (!empty($meta['coupon_code'])) {
+            $coupon = \App\Models\CouponCode::where('code', $meta['coupon_code'])->first();
+            if ($coupon && $coupon->type === 'topup_bonus') {
+                $redemptionService = app(\App\Services\Coupon\CouponRedemptionService::class);
+                try {
+                    $redemptionService->redeemForTopup(
+                        coupon: $coupon,
+                        user: $payment->user,
+                        topupAmount: (float) $payment->amount,
+                        payment: $payment
+                    );
+                    Log::info("[WalletListener] Successfully applied topup coupon #{$coupon->code} for Payment #{$payment->id}");
+                } catch (\Throwable $e) {
+                    Log::error("[WalletListener] Failed to apply topup coupon for Payment #{$payment->id}: " . $e->getMessage());
+                }
+            }
+        }
+
         Log::info("[WalletListener] Successfully credited ₹{$payment->amount} to user #{$payment->user_id} for Payment #{$payment->id}");
     }
 }

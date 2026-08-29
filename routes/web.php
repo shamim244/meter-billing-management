@@ -93,6 +93,7 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
     Route::get('/payments', [\App\Http\Controllers\PaymentController::class, 'index'])->name('payments.index');
     Route::get('/payments/create', [\App\Http\Controllers\PaymentController::class, 'create'])->name('payments.create');
     Route::post('/payments', [\App\Http\Controllers\PaymentController::class, 'store'])->name('payments.store');
+    Route::post('/payments/validate-coupon', [\App\Http\Controllers\PaymentController::class, 'validateCoupon'])->name('payments.validate-coupon');
     Route::get('/payments/verify', [\App\Http\Controllers\PaymentController::class, 'verify'])->name('payments.verify');
     Route::get('/payments/sandbox', [\App\Http\Controllers\PaymentController::class, 'sandbox'])->name('payments.sandbox');
     Route::post('/payments/sandbox/checkout', [\App\Http\Controllers\PaymentController::class, 'sandboxCheckout'])->name('payments.sandbox.checkout');
@@ -192,6 +193,17 @@ Route::middleware(['auth', 'admin.restore_impersonation', 'role:admin', 'active'
     Route::post('/plans/migrate-agent', [\App\Http\Controllers\Admin\AdminPlanController::class, 'migrateAgent'])->name('plans.migrate_agent');
     Route::post('/plans/unlock-mru/{mru}', [\App\Http\Controllers\Admin\AdminPlanController::class, 'unlockMru'])->name('plans.unlock_mru');
     Route::get('/plans/{plan}/agents', [\App\Http\Controllers\Admin\AdminPlanController::class, 'agents'])->name('plans.agents');
+
+    // Admin Coupon Code Management Hub
+    Route::get('/coupons', [\App\Http\Controllers\Admin\AdminCouponController::class, 'index'])->name('coupons.index');
+    Route::get('/coupons/create', [\App\Http\Controllers\Admin\AdminCouponController::class, 'create'])->name('coupons.create');
+    Route::post('/coupons', [\App\Http\Controllers\Admin\AdminCouponController::class, 'store'])->name('coupons.store');
+    Route::post('/coupons/bulk-deactivate', [\App\Http\Controllers\Admin\AdminCouponController::class, 'bulkDeactivate'])->name('coupons.bulk-deactivate');
+    Route::get('/coupons/{coupon}', [\App\Http\Controllers\Admin\AdminCouponController::class, 'show'])->name('coupons.show');
+    Route::get('/coupons/{coupon}/edit', [\App\Http\Controllers\Admin\AdminCouponController::class, 'edit'])->name('coupons.edit');
+    Route::put('/coupons/{coupon}', [\App\Http\Controllers\Admin\AdminCouponController::class, 'update'])->name('coupons.update');
+    Route::patch('/coupons/{coupon}/toggle', [\App\Http\Controllers\Admin\AdminCouponController::class, 'toggle'])->name('coupons.toggle');
+    Route::delete('/coupons/{coupon}', [\App\Http\Controllers\Admin\AdminCouponController::class, 'destroy'])->name('coupons.destroy');
     Route::post('/plans/{plan}/force-delete', [\App\Http\Controllers\Admin\AdminPlanController::class, 'forceDelete'])->name('plans.force-delete');
     Route::resource('plans', \App\Http\Controllers\Admin\AdminPlanController::class);
 

@@ -16,8 +16,53 @@
         copiedBank: false,
         isSubmitting: false,
         errorMessage: null,
+        couponCodeInput: '',
+        appliedCoupon: null,
+        couponError: null,
+        isValidatingCoupon: false,
         setAmount(val) {
             this.amount = val;
+            if (this.appliedCoupon) {
+                this.validateCoupon();
+            }
+        },
+        async validateCoupon() {
+            if (!this.couponCodeInput.trim()) return;
+            this.isValidatingCoupon = true;
+            this.couponError = null;
+            try {
+                const response = await fetch('{{ route('payments.validate-coupon', [], false) }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        code: this.couponCodeInput.trim(),
+                        amount: this.amount,
+                        action_type: 'topup_bonus'
+                    })
+                });
+
+                const data = await response.json();
+                if (data.valid) {
+                    this.appliedCoupon = data;
+                    this.couponError = null;
+                } else {
+                    this.couponError = data.message || 'Invalid coupon code for this recharge amount.';
+                    this.appliedCoupon = null;
+                }
+            } catch (err) {
+                this.couponError = 'Failed to validate coupon code.';
+            } finally {
+                this.isValidatingCoupon = false;
+            }
+        },
+        removeCoupon() {
+            this.couponCodeInput = '';
+            this.appliedCoupon = null;
+            this.couponError = null;
         },
         copyText(text, type) {
             navigator.clipboard.writeText(text);
@@ -57,7 +102,8 @@
                     body: JSON.stringify({
                         mode: 'pg',
                         purpose: 'wallet_topup',
-                        amount: this.amount
+                        amount: this.amount,
+                        coupon_code: this.appliedCoupon ? this.appliedCoupon.code : null
                     })
                 });
 
@@ -207,7 +253,53 @@
                             <button type="button" @click="setAmount(5000)" class="px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-300 transition">₹5,000</button>
                         </div>
                     </div>
+
+                    <!-- Coupon Code Card (Recharge Bonus Promo) -->
+                    <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                                <span>🎟️</span>
+                                <span>Have a Top-Up Bonus Promo Code?</span>
+                            </span>
+                            <template x-if="appliedCoupon">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                                    Bonus Activated
+                                </span>
+                            </template>
+                        </div>
+
+                        <template x-if="!appliedCoupon">
+                            <div class="space-y-1.5">
+                                <div class="flex gap-2 max-w-sm">
+                                    <input type="text" x-model="couponCodeInput" @keydown.enter.prevent="validateCoupon()" placeholder="e.g. EXTRAWALLET" class="flex-1 text-xs font-mono font-bold uppercase bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-indigo-500">
+                                    <button type="button" @click="validateCoupon()" :disabled="isValidatingCoupon || !couponCodeInput.trim()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer">
+                                        <span x-show="!isValidatingCoupon">Apply</span>
+                                        <span x-show="isValidatingCoupon" x-cloak>...</span>
+                                    </button>
+                                </div>
+                                <p x-show="couponError" x-text="couponError" class="text-[11px] text-rose-500 font-semibold"></p>
+                            </div>
+                        </template>
+
+                        <template x-if="appliedCoupon">
+                            <div class="flex items-center justify-between p-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/80">
+                                <div>
+                                    <div class="font-mono font-bold text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                                        <span>🎁</span>
+                                        <span x-text="appliedCoupon.code"></span>
+                                        <span>(+₹<span x-text="appliedCoupon.discount_or_bonus_amount.toLocaleString('en-IN')"></span> Bonus Credit)</span>
+                                    </div>
+                                    <div class="text-[10px] text-emerald-700 dark:text-emerald-400 mt-0.5" x-text="appliedCoupon.message"></div>
+                                </div>
+                                <button type="button" @click="removeCoupon()" class="text-xs text-rose-500 hover:text-rose-600 font-bold px-2 py-1 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition">
+                                    Remove
+                                </button>
+                            </div>
+                        </template>
+                    </div>
                 </div>
+
+                <input type="hidden" name="coupon_code" :value="appliedCoupon ? appliedCoupon.code : ''">
 
                 <!-- 2. Payment Method Selection -->
                 @php
