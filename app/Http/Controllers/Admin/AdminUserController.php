@@ -103,7 +103,7 @@ class AdminUserController extends Controller
      */
     public function show(User $user): View
     {
-        $user->load(['roles', 'wallet', 'activeSubscription.plan', 'activeSubscription.duration']);
+        $user->load(['roles', 'wallet', 'activeSubscription.plan']);
 
         $mrus = Mru::where('user_id', $user->id)
             ->withCount(['consumerAccounts', 'billingCycles'])
@@ -124,7 +124,7 @@ class AdminUserController extends Controller
             ->get();
 
         $subscriptionHistory = AgentSubscription::where('user_id', $user->id)
-            ->with(['plan', 'duration'])
+            ->with('plan')
             ->latest('id')
             ->take(6)
             ->get();
