@@ -31,6 +31,19 @@
         <form method="POST" action="{{ route('admin.coupons.store') }}" class="bg-slate-950 p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-xl space-y-6">
             @csrf
 
+            @if ($errors->any())
+                <div class="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-semibold space-y-1">
+                    <div class="font-bold flex items-center gap-1.5">
+                        <span>❌</span> Validation Errors:
+                    </div>
+                    <ul class="list-disc list-inside space-y-0.5 text-[11px] text-rose-400">
+                        @foreach ($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
             <!-- Coupon Type Toggle -->
             <div>
                 <label class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">1. Choose Coupon Category</label>
@@ -68,7 +81,7 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold text-slate-300 mb-1">Discount Kind</label>
-                            <select name="discount_kind" x-model="discountKind" class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl py-2 px-3 text-white">
+                            <select name="discount_kind" x-model="discountKind" :disabled="type !== 'subscription_discount'" class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl py-2 px-3 text-white">
                                 <option value="percentage">Percentage (% OFF)</option>
                                 <option value="flat">Flat Amount (₹ FLAT OFF)</option>
                             </select>
@@ -79,12 +92,12 @@
                                 <span x-text="discountKind === 'percentage' ? 'Discount Percentage (%)' : 'Flat Discount Amount (₹)'"></span>
                                 <span class="text-rose-400">*</span>
                             </label>
-                            <input type="number" step="0.01" min="0.01" name="discount_value" value="{{ old('discount_value', 20) }}" class="w-full text-xs font-mono font-bold bg-slate-950 border-slate-800 rounded-xl py-2 px-3 text-white">
+                            <input type="number" step="0.01" min="0.01" name="discount_value" value="{{ old('discount_value', 20) }}" :disabled="type !== 'subscription_discount'" class="w-full text-xs font-mono font-bold bg-slate-950 border-slate-800 rounded-xl py-2 px-3 text-white">
                         </div>
 
                         <div>
                             <label class="block text-xs font-bold text-slate-300 mb-1">Plan Restriction (Optional)</label>
-                            <select name="plan_restriction_id" class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl py-2 px-3 text-white">
+                            <select name="plan_restriction_id" :disabled="type !== 'subscription_discount'" class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl py-2 px-3 text-white">
                                 <option value="">All Subscription Plans</option>
                                 @foreach($plans as $plan)
                                     <option value="{{ $plan->id }}">{{ $plan->name }}</option>
@@ -94,7 +107,7 @@
 
                         <div>
                             <label class="block text-xs font-bold text-slate-300 mb-1">Minimum Purchase (₹)</label>
-                            <input type="number" step="0.01" name="minimum_amount" value="{{ old('minimum_amount') }}" placeholder="Optional (e.g. 299.00)" class="w-full text-xs font-mono bg-slate-950 border-slate-800 rounded-xl py-2 px-3 text-white">
+                            <input type="number" step="0.01" name="minimum_amount" value="{{ old('minimum_amount') }}" :disabled="type !== 'subscription_discount'" placeholder="Optional (e.g. 299.00)" class="w-full text-xs font-mono bg-slate-950 border-slate-800 rounded-xl py-2 px-3 text-white">
                         </div>
                     </div>
                 </div>
@@ -113,15 +126,15 @@
                             <div class="grid grid-cols-12 gap-2 items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
                                 <div class="col-span-4">
                                     <label class="block text-[10px] font-bold text-slate-400 mb-0.5">Min Amount (₹)</label>
-                                    <input type="number" :name="'slabs['+index+'][min_amount]'" x-model="slab.min_amount" required min="0" class="w-full text-xs font-mono bg-slate-900 border-slate-800 rounded-lg py-1.5 px-2 text-white">
+                                    <input type="number" :name="'slabs['+index+'][min_amount]'" x-model="slab.min_amount" :disabled="type !== 'topup_bonus'" min="0" class="w-full text-xs font-mono bg-slate-900 border-slate-800 rounded-lg py-1.5 px-2 text-white">
                                 </div>
                                 <div class="col-span-4">
                                     <label class="block text-[10px] font-bold text-slate-400 mb-0.5">Max Amount (₹)</label>
-                                    <input type="number" :name="'slabs['+index+'][max_amount]'" x-model="slab.max_amount" placeholder="No limit" class="w-full text-xs font-mono bg-slate-900 border-slate-800 rounded-lg py-1.5 px-2 text-white">
+                                    <input type="number" :name="'slabs['+index+'][max_amount]'" x-model="slab.max_amount" :disabled="type !== 'topup_bonus'" placeholder="No limit" class="w-full text-xs font-mono bg-slate-900 border-slate-800 rounded-lg py-1.5 px-2 text-white">
                                 </div>
                                 <div class="col-span-3">
                                     <label class="block text-[10px] font-bold text-slate-400 mb-0.5">Bonus %</label>
-                                    <input type="number" step="0.1" :name="'slabs['+index+'][bonus_percent]'" x-model="slab.bonus_percent" required min="0.01" max="100" class="w-full text-xs font-mono font-bold bg-slate-900 border-slate-800 rounded-lg py-1.5 px-2 text-emerald-400">
+                                    <input type="number" step="0.1" :name="'slabs['+index+'][bonus_percent]'" x-model="slab.bonus_percent" :disabled="type !== 'topup_bonus'" min="0.01" max="100" class="w-full text-xs font-mono font-bold bg-slate-900 border-slate-800 rounded-lg py-1.5 px-2 text-emerald-400">
                                 </div>
                                 <div class="col-span-1 text-center pt-3">
                                     <button type="button" @click="removeSlab(index)" x-show="slabs.length > 1" class="text-rose-400 hover:text-rose-300 p-1 font-bold">✕</button>
