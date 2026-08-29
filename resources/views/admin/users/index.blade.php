@@ -3,7 +3,19 @@
         Billing Agents & User Management
     </x-slot>
 
-    <div class="space-y-6">
+    <div class="space-y-6" x-data="{
+        selectedUsers: [],
+        selectAll: false,
+        toggleAll() {
+            if (this.selectAll) {
+                this.selectedUsers = Array.from(document.querySelectorAll('.user-checkbox')).map(cb => parseInt(cb.value));
+            } else {
+                this.selectedUsers = [];
+            }
+        },
+        bulkAction: '',
+        bulkPlanTier: 'pro'
+    }">
         <!-- Top Stats Banner -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
             <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-sm flex items-center justify-between">
@@ -40,9 +52,9 @@
         </div>
 
         <!-- Top Toolbar & Filters -->
-        <div class="bg-slate-950 p-4 rounded-3xl border border-slate-800 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div class="bg-slate-950 p-4 rounded-3xl border border-slate-800 shadow-lg flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <form method="GET" action="{{ route('admin.users.index') }}" class="flex flex-wrap items-center gap-2 flex-1">
-                <div class="flex-1 min-w-[200px]">
+                <div class="flex-1 min-w-[180px]">
                     <input type="text" name="search" value="{{ $search }}" placeholder="Search by name, email, or phone..." class="w-full text-xs bg-slate-900 border-slate-800 rounded-xl px-3.5 py-2 text-white placeholder-slate-500 focus:ring-indigo-500 focus:border-indigo-500">
                 </div>
 
@@ -69,9 +81,50 @@
                 @endif
             </form>
 
-            <a href="{{ route('admin.users.create') }}" class="w-full md:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 transition text-center shrink-0">
-                <span>+</span> Add New User
-            </a>
+            <div class="flex items-center gap-2 shrink-0 flex-wrap">
+                <!-- Export to CSV Button -->
+                <a href="{{ route('admin.users.export', request()->query()) }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 hover:border-slate-600 rounded-xl text-xs font-bold transition">
+                    <span>📥</span> Export CSV
+                </a>
+
+                <a href="{{ route('admin.users.create') }}" class="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 transition text-center shrink-0">
+                    <span>+</span> Add New User
+                </a>
+            </div>
+        </div>
+
+        <!-- Bulk Action Floating Bar -->
+        <div x-show="selectedUsers.length > 0" x-cloak class="bg-indigo-950/90 border border-indigo-500/40 p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-2 duration-150">
+            <div class="flex items-center gap-2 text-xs font-bold text-indigo-200">
+                <span class="px-2 py-0.5 bg-indigo-600 text-white rounded-md font-mono" x-text="selectedUsers.length"></span>
+                <span>user(s) selected</span>
+            </div>
+
+            <form method="POST" action="{{ route('admin.users.bulk-action') }}" class="flex flex-wrap items-center gap-2">
+                @csrf
+                <template x-for="id in selectedUsers" :key="id">
+                    <input type="hidden" name="user_ids[]" :value="id">
+                </template>
+
+                <select name="bulk_action" x-model="bulkAction" required class="text-xs bg-slate-950 border border-indigo-400/40 rounded-xl px-3 py-1.5 text-white">
+                    <option value="">-- Choose Bulk Action --</option>
+                    <option value="activate">✓ Activate Accounts</option>
+                    <option value="suspend">🚫 Suspend Accounts</option>
+                    <option value="change_plan_tier">⚡ Change Plan Tier</option>
+                    <option value="delete">🗑️ Purge Accounts & Files</option>
+                </select>
+
+                <select x-show="bulkAction === 'change_plan_tier'" name="plan_tier" x-model="bulkPlanTier" class="text-xs bg-slate-950 border border-indigo-400/40 rounded-xl px-3 py-1.5 text-white">
+                    <option value="free">Free Tier</option>
+                    <option value="starter">Starter</option>
+                    <option value="pro">Pro Operator</option>
+                    <option value="enterprise">Enterprise Hub</option>
+                </select>
+
+                <button type="submit" @click="if (bulkAction === 'delete' && !confirm('Permanently purge selected users and all their storage PDFs?')) { $event.preventDefault(); }" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow transition">
+                    Apply Action
+                </button>
+            </form>
         </div>
 
         <!-- Users Table -->
@@ -80,7 +133,10 @@
                 <table class="w-full text-left text-xs text-slate-300">
                     <thead class="bg-slate-900/90 border-b border-slate-800 text-[11px] uppercase font-bold text-slate-400 tracking-wider">
                         <tr>
-                            <th class="py-3.5 px-5">User / Contact</th>
+                            <th class="py-3.5 px-4 text-center w-10">
+                                <input type="checkbox" x-model="selectAll" @change="toggleAll()" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500">
+                            </th>
+                            <th class="py-3.5 px-4">User / Contact</th>
                             <th class="py-3.5 px-4">Role</th>
                             <th class="py-3.5 px-4 text-center">Subscription Plan</th>
                             <th class="py-3.5 px-4 text-center">MRUs & Base</th>
@@ -93,8 +149,13 @@
                     <tbody class="divide-y divide-slate-800/70 font-medium">
                         @forelse($users as $user)
                             <tr class="hover:bg-slate-900/40 transition">
+                                <!-- Checkbox -->
+                                <td class="py-3.5 px-4 text-center">
+                                    <input type="checkbox" value="{{ $user->id }}" x-model="selectedUsers" class="user-checkbox rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500">
+                                </td>
+
                                 <!-- User / Contact -->
-                                <td class="py-3.5 px-5">
+                                <td class="py-3.5 px-4">
                                     <a href="{{ route('admin.users.show', $user) }}" class="font-bold text-white hover:text-indigo-400 text-sm flex items-center gap-1.5 transition">
                                         <span>{{ $user->name }}</span>
                                         @if($user->email_verified_at)
@@ -191,7 +252,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="py-12 text-center text-slate-500">
+                                <td colspan="9" class="py-12 text-center text-slate-500">
                                     No users found matching query.
                                 </td>
                             </tr>

@@ -3,7 +3,15 @@
         User 360° Dossier — {{ $user->name }}
     </x-slot>
 
-    <div class="space-y-6">
+    <div class="space-y-6" x-data="{
+        showGrantModal: false,
+        showQuotaModal: false,
+        showNotificationModal: false,
+        showPurgeModal: false,
+        grantMode: 'new_plan',
+        selectedPlanId: '{{ $availablePlans->first()?->id ?? '' }}',
+        purgeConfirm: ''
+    }">
         <!-- Top Back & Action Bar -->
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <a href="{{ route('admin.users.index') }}" class="inline-flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition">
@@ -11,31 +19,55 @@
             </a>
 
             <div class="flex flex-wrap items-center gap-2">
+                <!-- Impersonate Button -->
                 @if($user->id !== auth()->id() && !$user->hasRole('admin'))
                     <form method="POST" action="{{ route('admin.users.impersonate', $user) }}">
                         @csrf
-                        <button type="submit" onclick="return confirm('Log in as {{ $user->name }}? You will be redirected to their dashboard.');" class="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl text-xs font-black shadow-lg shadow-amber-600/20 transition active:scale-95">
-                            <span>🎭</span> Login as {{ $user->name }}
+                        <button type="submit" onclick="return confirm('Log in as {{ $user->name }}? You will be redirected to their dashboard.');" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl text-xs font-black shadow-lg shadow-amber-600/20 transition active:scale-95">
+                            <span>🎭</span> Login as User
                         </button>
                     </form>
                 @endif
 
+                <!-- Direct Notification Dispatcher -->
+                <button type="button" @click="showNotificationModal = true" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-bold transition">
+                    <span>📢</span> Send Alert
+                </button>
+
+                <!-- Grant Plan / Extend Button -->
+                <button type="button" @click="showGrantModal = true" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/20 transition">
+                    <span>🎁</span> Grant / Extend Plan
+                </button>
+
+                <!-- Override Quotas Button -->
+                <button type="button" @click="showQuotaModal = true" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold transition">
+                    <span>🎯</span> Quotas
+                </button>
+
+                <!-- Manage Wallet Link -->
                 <a href="{{ route('admin.wallets.show', $user->id) }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-indigo-300 border border-indigo-500/30 rounded-xl text-xs font-bold transition">
-                    <span>👛</span> Manage Wallet
+                    <span>👛</span> Wallet
                 </a>
 
-                <a href="{{ route('admin.users.edit', $user) }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/20 transition">
-                    <span>✏️</span> Edit Profile & Password
+                <!-- Edit Profile -->
+                <a href="{{ route('admin.users.edit', $user) }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 rounded-xl text-xs font-bold transition">
+                    <span>✏️</span> Edit
                 </a>
 
+                <!-- Suspend / Activate Toggle -->
                 @if($user->id !== auth()->id())
                     <form method="POST" action="{{ route('admin.users.toggle-status', $user) }}">
                         @csrf
                         @method('PATCH')
-                        <button type="submit" class="px-3.5 py-2 rounded-xl text-xs font-bold transition {{ $user->status === 'active' ? 'bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-500/30' : 'bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/30' }}">
-                            {{ $user->status === 'active' ? '🚫 Suspend Account' : '✓ Activate Account' }}
+                        <button type="submit" class="px-3.5 py-2 rounded-xl text-xs font-bold transition {{ $user->status === 'active' ? 'bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-500/30' : 'bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/30' }}">
+                            {{ $user->status === 'active' ? '🚫 Suspend' : '✓ Activate' }}
                         </button>
                     </form>
+
+                    <!-- Danger Purge Button -->
+                    <button type="button" @click="showPurgeModal = true" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-600/40 transition">
+                        <span>🗑️</span> Purge
+                    </button>
                 @endif
             </div>
         </div>
@@ -107,7 +139,9 @@
                 <div>
                     <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
                         <span class="font-bold uppercase tracking-wider text-[10px]">Active Subscription</span>
-                        <span>⚡</span>
+                        <button type="button" @click="showGrantModal = true" class="text-[10px] text-indigo-400 hover:underline font-bold">
+                            + Grant Plan
+                        </button>
                     </div>
                     @if($user->activeSubscription)
                         <div class="text-lg font-black text-white">
@@ -127,9 +161,10 @@
                     @endif
                 </div>
 
-                <div class="pt-3 border-t border-slate-800/80 mt-3 text-xs text-slate-400">
-                    @if($user->activeSubscription && $user->activeSubscription->ends_at)
-                        <span>Expires: <strong>{{ \Carbon\Carbon::parse($user->activeSubscription->ends_at)->format('M d, Y') }}</strong></span>
+                <div class="pt-3 border-t border-slate-800/80 mt-3 text-xs text-slate-400 flex items-center justify-between">
+                    @if($user->activeSubscription && $user->activeSubscription->billing_end)
+                        <span>Expires: <strong>{{ $user->activeSubscription->billing_end->format('M d, Y') }}</strong></span>
+                        <button type="button" @click="showGrantModal = true; grantMode = 'extend_validity'" class="text-[10px] text-cyan-400 hover:underline font-bold">+ Extend</button>
                     @else
                         <span>Lifetime / Manual quota</span>
                     @endif
@@ -160,7 +195,7 @@
                 </div>
 
                 <div class="pt-3 border-t border-slate-800/80 mt-3 flex items-center justify-between text-xs">
-                    <span class="text-slate-400">Total Adjustments:</span>
+                    <span class="text-slate-400">Adjustments:</span>
                     <a href="{{ route('admin.wallets.show', $user->id) }}" class="text-cyan-400 hover:underline font-bold">
                         View Ledger →
                     </a>
@@ -172,7 +207,9 @@
                 <div>
                     <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
                         <span class="font-bold uppercase tracking-wider text-[10px]">MRUs & Master Base</span>
-                        <span>📊</span>
+                        <button type="button" @click="showQuotaModal = true" class="text-[10px] text-amber-400 hover:underline font-bold">
+                            ⚙️ Quota
+                        </button>
                     </div>
                     <div class="text-2xl font-black font-mono text-cyan-400">
                         {{ $mrus->count() }} <span class="text-sm font-sans font-bold text-slate-400">MRU(s)</span>
@@ -183,7 +220,7 @@
                 </div>
 
                 <div class="pt-3 border-t border-slate-800/80 mt-3 text-xs text-slate-400">
-                    <span>Quota: <strong>{{ $user->activeSubscription->plan->included_mrus ?? 1 }} MRU / {{ number_format($user->activeSubscription->plan->included_consumers ?? 500) }} CAs</strong></span>
+                    <span>Locked Quota: <strong>{{ $user->activeSubscription->included_mrus_locked ?? ($user->activeSubscription->plan->included_mrus ?? 1) }} MRUs / {{ number_format($user->activeSubscription->included_consumers_locked ?? ($user->activeSubscription->plan->included_consumers ?? 500)) }} CAs</strong></span>
                 </div>
             </div>
 
@@ -377,6 +414,208 @@
                         @endforelse
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- ================= MODALS ================= -->
+
+        <!-- MODAL 1: Grant Plan / Extend Validity -->
+        <div x-show="showGrantModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div @click.away="showGrantModal = false" class="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <span>🎁</span> Grant Plan / Extend Validity
+                    </h3>
+                    <button type="button" @click="showGrantModal = false" class="text-slate-400 hover:text-white text-lg">✕</button>
+                </div>
+
+                <form method="POST" action="{{ route('admin.users.grant-plan', $user) }}" class="space-y-4">
+                    @csrf
+                    
+                    <!-- Mode Switch -->
+                    <div class="grid grid-cols-2 gap-2 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs">
+                        <button type="button" @click="grantMode = 'new_plan'" :class="grantMode === 'new_plan' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-white'" class="py-2 rounded-lg transition text-center">
+                            Assign New Plan
+                        </button>
+                        <button type="button" @click="grantMode = 'extend_validity'" :class="grantMode === 'extend_validity' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-white'" class="py-2 rounded-lg transition text-center">
+                            + Add Days to Expiry
+                        </button>
+                    </div>
+                    <input type="hidden" name="grant_mode" :value="grantMode">
+
+                    <!-- Mode A: Assign New Plan -->
+                    <div x-show="grantMode === 'new_plan'" class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-300 mb-1">Select Subscription Plan</label>
+                            <select name="plan_id" x-model="selectedPlanId" class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl text-white py-2 px-3">
+                                @foreach($availablePlans as $plan)
+                                    <option value="{{ $plan->id }}">{{ $plan->name }} ({{ $plan->included_mrus }} MRUs / {{ number_format($plan->included_consumers) }} CAs)</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-300 mb-1">Select Validity Duration</label>
+                            @foreach($availablePlans as $plan)
+                                <div x-show="selectedPlanId == '{{ $plan->id }}'" class="space-y-1">
+                                    <select name="duration_id" class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl text-white py-2 px-3" :disabled="selectedPlanId != '{{ $plan->id }}'">
+                                        @foreach($plan->activeDurations as $dur)
+                                            <option value="{{ $dur->id }}">{{ $dur->formatted_duration }} (Standard: ₹{{ number_format($dur->final_price, 2) }})</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+
+                    <!-- Mode B: Extend Validity Days -->
+                    <div x-show="grantMode === 'extend_validity'" class="space-y-3">
+                        <label class="block text-xs font-bold text-slate-300">Days to add to active subscription</label>
+                        <div class="grid grid-cols-4 gap-2">
+                            <button type="button" @click="$refs.daysInput.value = 30" class="py-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-bold text-white transition">+30 Days</button>
+                            <button type="button" @click="$refs.daysInput.value = 60" class="py-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-bold text-white transition">+60 Days</button>
+                            <button type="button" @click="$refs.daysInput.value = 90" class="py-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-bold text-white transition">+90 Days</button>
+                            <button type="button" @click="$refs.daysInput.value = 365" class="py-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-bold text-white transition">+1 Year</button>
+                        </div>
+                        <input x-ref="daysInput" type="number" name="days_to_add" value="30" min="1" max="365" class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl text-white py-2 px-3 font-mono" placeholder="Custom days (e.g. 45)">
+                    </div>
+
+                    <div class="pt-3 border-t border-slate-800 flex justify-end gap-2">
+                        <button type="button" @click="showGrantModal = false" class="px-4 py-2 text-xs rounded-xl bg-slate-800 text-slate-300">Cancel</button>
+                        <button type="submit" class="px-5 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow">Apply Grant / Extension</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- MODAL 2: Override Quotas -->
+        <div x-show="showQuotaModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div @click.away="showQuotaModal = false" class="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <span>🎯</span> Custom Quota & Rate Overrides
+                    </h3>
+                    <button type="button" @click="showQuotaModal = false" class="text-slate-400 hover:text-white text-lg">✕</button>
+                </div>
+
+                <form method="POST" action="{{ route('admin.users.override-quotas', $user) }}" class="space-y-4">
+                    @csrf
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-300 mb-1">Included MRUs Locked</label>
+                            <input type="number" name="included_mrus_locked" value="{{ $user->activeSubscription->included_mrus_locked ?? ($user->activeSubscription->plan->included_mrus ?? 1) }}" min="1" max="1000" required class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl text-white py-2 px-3 font-mono">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-300 mb-1">Included Consumers Locked</label>
+                            <input type="number" name="included_consumers_locked" value="{{ $user->activeSubscription->included_consumers_locked ?? ($user->activeSubscription->plan->included_consumers ?? 500) }}" min="10" max="1000000" required class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl text-white py-2 px-3 font-mono">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-300 mb-1">Extra MRU Rate (₹)</label>
+                            <input type="number" step="0.01" name="extra_mru_rate_locked" value="{{ $user->activeSubscription->extra_mru_rate_locked ?? 20.00 }}" min="0" class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl text-white py-2 px-3 font-mono">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-300 mb-1">Extra Consumer Rate (₹)</label>
+                            <input type="number" step="0.01" name="extra_consumer_rate_locked" value="{{ $user->activeSubscription->extra_consumer_rate_locked ?? 0.20 }}" min="0" class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl text-white py-2 px-3 font-mono">
+                        </div>
+                    </div>
+
+                    <div class="pt-3 border-t border-slate-800 flex justify-end gap-2">
+                        <button type="button" @click="showQuotaModal = false" class="px-4 py-2 text-xs rounded-xl bg-slate-800 text-slate-300">Cancel</button>
+                        <button type="submit" class="px-5 py-2 text-xs font-bold rounded-xl bg-amber-600 hover:bg-amber-500 text-white shadow">Save Quota Overrides</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- MODAL 3: Direct Notification Dispatcher -->
+        <div x-show="showNotificationModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div @click.away="showNotificationModal = false" class="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <span>📢</span> Send Direct Notification to {{ $user->name }}
+                    </h3>
+                    <button type="button" @click="showNotificationModal = false" class="text-slate-400 hover:text-white text-lg">✕</button>
+                </div>
+
+                <form method="POST" action="{{ route('admin.users.send-notification', $user) }}" class="space-y-4">
+                    @csrf
+                    
+                    <div>
+                        <label class="block text-xs font-bold text-slate-300 mb-1">Notification Title <span class="text-rose-400">*</span></label>
+                        <input type="text" name="title" required placeholder="e.g. Account Update / Action Required" class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl text-white py-2 px-3">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-300 mb-1">Message Body <span class="text-rose-400">*</span></label>
+                        <textarea name="body" rows="4" required placeholder="Enter the message you wish to send to this operator..." class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl text-white py-2 px-3"></textarea>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-300 mb-1">Priority</label>
+                            <select name="priority" class="w-full text-xs bg-slate-950 border-slate-800 rounded-xl text-white py-2 px-3">
+                                <option value="routine">Routine (Info)</option>
+                                <option value="critical">Critical (High Importance)</option>
+                                <option value="urgent">Urgent (Immediate Action)</option>
+                            </select>
+                        </div>
+
+                        <div class="flex items-center pt-5">
+                            <label class="flex items-center gap-2 cursor-pointer text-xs font-bold text-white">
+                                <input type="checkbox" name="send_email" value="1" checked class="rounded bg-slate-950 border-slate-800 text-indigo-600 focus:ring-indigo-500">
+                                <span>Also send to email</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="pt-3 border-t border-slate-800 flex justify-end gap-2">
+                        <button type="button" @click="showNotificationModal = false" class="px-4 py-2 text-xs rounded-xl bg-slate-800 text-slate-300">Cancel</button>
+                        <button type="submit" class="px-5 py-2 text-xs font-bold rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white shadow">Dispatch Alert</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- MODAL 4: Danger Zone Purge Account -->
+        <div x-show="showPurgeModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div @click.away="showPurgeModal = false" class="bg-rose-950/90 border border-rose-600/50 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+                <div class="flex items-center justify-between border-b border-rose-700/50 pb-3">
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <span>⚠️</span> Purge User Account & Storage
+                    </h3>
+                    <button type="button" @click="showPurgeModal = false" class="text-rose-300 hover:text-white text-lg">✕</button>
+                </div>
+
+                <div class="text-xs text-rose-200 space-y-2 leading-relaxed">
+                    <p>This action is <strong>irreversible</strong>. It will permanently delete:</p>
+                    <ul class="list-disc list-inside space-y-0.5 text-rose-300 font-mono text-[11px]">
+                        <li>All stored private PDF files on disk</li>
+                        <li>MRU workspaces & consumer accounts</li>
+                        <li>Billing records, status tags, & history</li>
+                        <li>Wallet ledger and active subscriptions</li>
+                    </ul>
+                </div>
+
+                <form method="POST" action="{{ route('admin.users.purge', $user) }}" class="space-y-4">
+                    @csrf
+                    @method('DELETE')
+                    
+                    <div>
+                        <label class="block text-xs font-bold text-white mb-1">Type <code class="bg-black/40 px-1.5 py-0.5 rounded text-rose-300">DELETE</code> to confirm:</label>
+                        <input type="text" name="confirm_text" x-model="purgeConfirm" placeholder="DELETE" required class="w-full text-xs bg-slate-950 border-rose-500/50 rounded-xl text-white py-2 px-3 font-mono">
+                    </div>
+
+                    <div class="pt-3 border-t border-rose-700/50 flex justify-end gap-2">
+                        <button type="button" @click="showPurgeModal = false" class="px-4 py-2 text-xs rounded-xl bg-black/40 text-slate-300">Cancel</button>
+                        <button type="submit" :disabled="purgeConfirm !== 'DELETE'" class="px-5 py-2 text-xs font-black rounded-xl bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-40 disabled:cursor-not-allowed shadow transition">
+                            Permanently Purge Account
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

@@ -138,12 +138,18 @@ Route::middleware(['auth', 'admin.restore_impersonation', 'role:admin', 'active'
     Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
 
     Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
+    Route::get('/users/export', [AdminUserController::class, 'exportCsv'])->name('users.export');
+    Route::post('/users/bulk-action', [AdminUserController::class, 'bulkAction'])->name('users.bulk-action');
     Route::get('/users/create', [AdminUserController::class, 'create'])->name('users.create');
     Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
     Route::get('/users/{user}', [AdminUserController::class, 'show'])->name('users.show');
     Route::get('/users/{user}/edit', [AdminUserController::class, 'edit'])->name('users.edit');
     Route::put('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
     Route::put('/users/{user}/password', [AdminUserController::class, 'updatePassword'])->name('users.update-password');
+    Route::post('/users/{user}/grant-plan', [AdminUserController::class, 'grantPlan'])->name('users.grant-plan');
+    Route::post('/users/{user}/override-quotas', [AdminUserController::class, 'overrideQuotas'])->name('users.override-quotas');
+    Route::post('/users/{user}/send-notification', [AdminUserController::class, 'sendDirectNotification'])->name('users.send-notification');
+    Route::delete('/users/{user}/purge', [AdminUserController::class, 'purgeUser'])->name('users.purge');
     Route::post('/users/{user}/impersonate', [AdminUserController::class, 'impersonate'])->name('users.impersonate');
     Route::patch('/users/{user}/toggle-status', [AdminUserController::class, 'toggleStatus'])->name('users.toggle-status');
     Route::patch('/users/{user}/update-quota', [AdminUserController::class, 'updateQuota'])->name('users.update-quota');
