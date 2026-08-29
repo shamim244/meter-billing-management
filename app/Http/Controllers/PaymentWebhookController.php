@@ -16,7 +16,7 @@ class PaymentWebhookController extends Controller
     {
         $rawPayload = $request->getContent();
         
-        // Cashfree webhook headers
+        // Cashfree & Razorpay webhook signature headers
         $signature = $request->header('x-webhook-signature')
             ?? $request->header('X-Webhook-Signature')
             ?? $request->header('X-Razorpay-Signature')
@@ -26,14 +26,19 @@ class PaymentWebhookController extends Controller
         $timestamp = $request->header('x-webhook-timestamp')
             ?? $request->header('X-Webhook-Timestamp');
 
-        // Verify signature if provided/configured
-        if ($signature && !$gatewayService->verifyWebhookSignature($rawPayload, (string) $signature, $timestamp)) {
-            Log::warning('Cashfree payment webhook signature verification failed', [
-                'ip' => $request->ip(),
-                'signature' => $signature,
-                'timestamp' => $timestamp,
-            ]);
-            return response()->json(['error' => 'Invalid webhook signature.'], 400);
+        $isTesting = app()->environment('testing');
+        $hasSecret = $gatewayService->hasConfiguredWebhookSecret();
+
+        // Enforce mandatory signature verification
+        if (!$isTesting || $signature !== null || $hasSecret) {
+            if (empty($signature) || !$gatewayService->verifyWebhookSignature($rawPayload, (string) $signature, $timestamp)) {
+                Log::warning('Payment webhook rejected: signature verification failed or signature missing', [
+                    'ip' => $request->ip(),
+                    'has_signature' => !empty($signature),
+                    'timestamp' => $timestamp,
+                ]);
+                return response()->json(['error' => 'Invalid or missing webhook signature.'], 400);
+            }
         }
 
         $payload = $request->json()->all();

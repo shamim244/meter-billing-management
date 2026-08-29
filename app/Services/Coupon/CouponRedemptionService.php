@@ -8,7 +8,9 @@ use App\Models\Payment;
 use App\Models\User;
 use App\Services\Wallet\WalletService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use RuntimeException;
 
 class CouponRedemptionService
 {
@@ -185,6 +187,7 @@ class CouponRedemptionService
 
     /**
      * Redeem a subscription discount coupon during checkout.
+     * Guaranteed idempotent by referenceId and protected by row-level pessimistic locks.
      */
     public function redeemForSubscription(
         CouponCode $coupon,
@@ -192,15 +195,54 @@ class CouponRedemptionService
         float $originalAmount,
         ?string $referenceId = null
     ): CouponRedemption {
-        $discountAmount = $coupon->calculateSubscriptionDiscount($originalAmount);
-        $finalAmount = max(0.00, round($originalAmount - $discountAmount, 2));
+        $referenceId = (string)($referenceId ?? 'sub_' . uniqid());
 
-        return DB::transaction(function () use ($coupon, $user, $originalAmount, $discountAmount, $finalAmount, $referenceId) {
+        // Fast-path idempotency check
+        $existing = CouponRedemption::where('coupon_code_id', $coupon->id)
+            ->where('redeemed_for_reference_id', $referenceId)
+            ->first();
+
+        if ($existing) {
+            Log::info("[CouponRedemption] Reference '{$referenceId}' already redeemed subscription coupon #{$coupon->code}. Idempotent return.");
+            return $existing;
+        }
+
+        return DB::transaction(function () use ($coupon, $user, $originalAmount, $referenceId) {
+            // Pessimistic row-level lock
+            $lockedCoupon = CouponCode::where('id', $coupon->id)->lockForUpdate()->first();
+            if (!$lockedCoupon || !$lockedCoupon->isValidNow()) {
+                throw new RuntimeException("Coupon '{$coupon->code}' is no longer active or valid.");
+            }
+
+            // Platform limit check under lock
+            if ($lockedCoupon->usage_limit_total !== null && $lockedCoupon->times_used_total >= $lockedCoupon->usage_limit_total) {
+                throw new RuntimeException("Coupon '{$coupon->code}' has reached its maximum total redemptions limit.");
+            }
+
+            // User limit check under lock
+            $userCount = CouponRedemption::where('coupon_code_id', $lockedCoupon->id)
+                ->where('user_id', $user->id)
+                ->count();
+            if ($userCount >= $lockedCoupon->usage_limit_per_user) {
+                throw new RuntimeException("User has already reached the maximum allowed redemptions for coupon '{$coupon->code}'.");
+            }
+
+            // In-transaction idempotency re-check
+            $existingUnderLock = CouponRedemption::where('coupon_code_id', $lockedCoupon->id)
+                ->where('redeemed_for_reference_id', $referenceId)
+                ->first();
+            if ($existingUnderLock) {
+                return $existingUnderLock;
+            }
+
+            $discountAmount = $lockedCoupon->calculateSubscriptionDiscount($originalAmount);
+            $finalAmount = max(0.00, round($originalAmount - $discountAmount, 2));
+
             $redemption = CouponRedemption::create([
-                'coupon_code_id' => $coupon->id,
+                'coupon_code_id' => $lockedCoupon->id,
                 'user_id' => $user->id,
                 'redeemed_for_type' => 'subscription_payment',
-                'redeemed_for_reference_id' => (string)($referenceId ?? 'sub_' . uniqid()),
+                'redeemed_for_reference_id' => $referenceId,
                 'original_amount' => $originalAmount,
                 'discount_or_bonus_amount' => $discountAmount,
                 'final_amount' => $finalAmount,
@@ -208,7 +250,7 @@ class CouponRedemptionService
                 'redeemed_at' => now(),
             ]);
 
-            $coupon->increment('times_used_total');
+            $lockedCoupon->increment('times_used_total');
 
             return $redemption;
         });
@@ -216,6 +258,7 @@ class CouponRedemptionService
 
     /**
      * Redeem a top-up bonus coupon upon wallet recharge completion.
+     * Guaranteed idempotent by payment reference ID and protected by row-level pessimistic locks.
      */
     public function redeemForTopup(
         CouponCode $coupon,
@@ -223,26 +266,82 @@ class CouponRedemptionService
         float $topupAmount,
         ?Payment $payment = null
     ): array {
-        $calc = $coupon->calculateTopupBonus($topupAmount);
-        $bonusAmount = $calc['bonus_amount'];
+        $referenceId = $payment ? (string)$payment->id : null;
 
-        if ($bonusAmount <= 0) {
-            throw new InvalidArgumentException("Top-up amount of ₹{$topupAmount} does not qualify for any bonus slab under coupon {$coupon->code}.");
+        // Fast-path idempotency check
+        if ($referenceId !== null) {
+            $existing = CouponRedemption::where('coupon_code_id', $coupon->id)
+                ->where('redeemed_for_reference_id', $referenceId)
+                ->first();
+
+            if ($existing) {
+                Log::info("[CouponRedemption] Payment #{$referenceId} already redeemed topup coupon #{$coupon->code}. Idempotent return without duplicate credit.");
+                return [
+                    'redemption' => $existing,
+                    'bonus_amount' => (float)$existing->discount_or_bonus_amount,
+                    'wallet_transaction' => null,
+                    'already_redeemed' => true,
+                ];
+            }
         }
 
-        return DB::transaction(function () use ($coupon, $user, $topupAmount, $bonusAmount, $payment) {
-            // Credit bonus to wallet with dedicated source tag
+        return DB::transaction(function () use ($coupon, $user, $topupAmount, $payment, $referenceId) {
+            // Pessimistic row-level lock
+            $lockedCoupon = CouponCode::where('id', $coupon->id)->lockForUpdate()->first();
+            if (!$lockedCoupon || !$lockedCoupon->isValidNow()) {
+                throw new RuntimeException("Coupon '{$coupon->code}' is no longer active or valid.");
+            }
+
+            // Platform limit check under lock
+            if ($lockedCoupon->usage_limit_total !== null && $lockedCoupon->times_used_total >= $lockedCoupon->usage_limit_total) {
+                throw new RuntimeException("Coupon '{$coupon->code}' has reached its maximum total redemptions limit.");
+            }
+
+            // User limit check under lock
+            $userCount = CouponRedemption::where('coupon_code_id', $lockedCoupon->id)
+                ->where('user_id', $user->id)
+                ->count();
+            if ($userCount >= $lockedCoupon->usage_limit_per_user) {
+                throw new RuntimeException("User has already reached the maximum allowed redemptions for coupon '{$coupon->code}'.");
+            }
+
+            // In-transaction idempotency re-check
+            if ($referenceId !== null) {
+                $existingUnderLock = CouponRedemption::where('coupon_code_id', $lockedCoupon->id)
+                    ->where('redeemed_for_reference_id', $referenceId)
+                    ->first();
+                if ($existingUnderLock) {
+                    return [
+                        'redemption' => $existingUnderLock,
+                        'bonus_amount' => (float)$existingUnderLock->discount_or_bonus_amount,
+                        'wallet_transaction' => null,
+                        'already_redeemed' => true,
+                    ];
+                }
+            }
+
+            $calc = $lockedCoupon->calculateTopupBonus($topupAmount);
+            $bonusAmount = $calc['bonus_amount'];
+
+            if ($bonusAmount <= 0) {
+                throw new InvalidArgumentException("Top-up amount of ₹{$topupAmount} does not qualify for any bonus slab under coupon {$lockedCoupon->code}.");
+            }
+
+            // Credit bonus to wallet with dedicated source tag, reference, and description
             $walletTx = $this->walletService->credit(
-                $user,
-                $bonusAmount,
-                'coupon_topup_bonus'
+                user: $user,
+                amount: $bonusAmount,
+                source: 'coupon_topup_bonus',
+                referenceType: $payment ? Payment::class : null,
+                referenceId: $referenceId,
+                description: "Bonus credit for promo {$lockedCoupon->code} on Payment #" . ($referenceId ?? 'N/A')
             );
 
             $redemption = CouponRedemption::create([
-                'coupon_code_id' => $coupon->id,
+                'coupon_code_id' => $lockedCoupon->id,
                 'user_id' => $user->id,
                 'redeemed_for_type' => 'topup',
-                'redeemed_for_reference_id' => $payment ? (string)$payment->id : null,
+                'redeemed_for_reference_id' => $referenceId,
                 'original_amount' => $topupAmount,
                 'discount_or_bonus_amount' => $bonusAmount,
                 'final_amount' => round($topupAmount + $bonusAmount, 2),
@@ -250,12 +349,13 @@ class CouponRedemptionService
                 'redeemed_at' => now(),
             ]);
 
-            $coupon->increment('times_used_total');
+            $lockedCoupon->increment('times_used_total');
 
             return [
                 'redemption' => $redemption,
                 'bonus_amount' => $bonusAmount,
                 'wallet_transaction' => $walletTx,
+                'already_redeemed' => false,
             ];
         });
     }

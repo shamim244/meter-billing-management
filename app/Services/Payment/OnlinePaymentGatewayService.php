@@ -280,6 +280,17 @@ class OnlinePaymentGatewayService
     }
 
     /**
+     * Check if a webhook signing secret is configured in settings or environment.
+     */
+    public function hasConfiguredWebhookSecret(): bool
+    {
+        return !empty($this->settings->getCashfreeSecretKey()) 
+            || !empty($this->settings->getRazorpayWebhookSecret())
+            || !empty(config('services.cashfree.secret_key'))
+            || !empty(config('services.razorpay.webhook_secret'));
+    }
+
+    /**
      * Verify Razorpay Payment Client Signature on return / callback.
      */
     public function verifyRazorpayPaymentSignature(string $orderId, string $paymentId, string $signature): bool
@@ -327,7 +338,7 @@ class OnlinePaymentGatewayService
         $gatewayPaymentId = $paymentData['cf_payment_id'] ?? ($paymentData['id'] ?? ($payload['payment_id'] ?? null));
         $paymentStatus = strtoupper($paymentData['payment_status'] ?? ($paymentData['status'] ?? ''));
 
-        // 3. Find payment record
+        // 3. Find payment record strictly by gateway IDs or tagged payment ID
         $payment = null;
         if ($gatewayOrderId) {
             $payment = Payment::where('gateway_order_id', $gatewayOrderId)->first();
@@ -340,12 +351,6 @@ class OnlinePaymentGatewayService
         }
         if (!$payment && isset($paymentData['notes']['payment_id'])) {
             $payment = Payment::find($paymentData['notes']['payment_id']);
-        }
-        if (!$payment && isset($payload['data']['customer_details']['customer_id'])) {
-            $userIdStr = str_replace('user_', '', $payload['data']['customer_details']['customer_id']);
-            if (is_numeric($userIdStr)) {
-                $payment = Payment::where('user_id', (int) $userIdStr)->latest('id')->first();
-            }
         }
 
         // 4. Handle Mandate / Subscription failure events
