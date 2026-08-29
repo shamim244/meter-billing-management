@@ -140,6 +140,11 @@ Route::middleware(['auth', 'role:admin', 'active'])->prefix('admin')->name('admi
     Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
     Route::get('/users/create', [AdminUserController::class, 'create'])->name('users.create');
     Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
+    Route::get('/users/{user}', [AdminUserController::class, 'show'])->name('users.show');
+    Route::get('/users/{user}/edit', [AdminUserController::class, 'edit'])->name('users.edit');
+    Route::put('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
+    Route::put('/users/{user}/password', [AdminUserController::class, 'updatePassword'])->name('users.update-password');
+    Route::post('/users/{user}/impersonate', [AdminUserController::class, 'impersonate'])->name('users.impersonate');
     Route::patch('/users/{user}/toggle-status', [AdminUserController::class, 'toggleStatus'])->name('users.toggle-status');
     Route::patch('/users/{user}/update-quota', [AdminUserController::class, 'updateQuota'])->name('users.update-quota');
 
@@ -241,6 +246,9 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/notifications/preferences', [\App\Http\Controllers\NotificationController::class, 'preferences'])->name('notifications.preferences');
     Route::post('/notifications/preferences', [\App\Http\Controllers\NotificationController::class, 'updatePreferences'])->name('notifications.preferences.update');
 });
+
+// Impersonation Exit Route (Any authenticated session with impersonation flag)
+Route::middleware(['auth'])->post('/impersonate/leave', [\App\Http\Controllers\Admin\AdminUserController::class, 'leaveImpersonation'])->name('impersonate.leave');
 
 require __DIR__.'/auth.php';
 

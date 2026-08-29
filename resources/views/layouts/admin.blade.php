@@ -218,6 +218,7 @@
 
     <!-- Main Content Area -->
     <div class="flex-1 flex flex-col min-h-screen overflow-x-hidden">
+        <x-impersonation-banner />
         <!-- Top Nav -->
         <header class="h-16 bg-slate-950/70 backdrop-blur-md border-b border-slate-800 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-20">
             <div class="flex items-center gap-3">

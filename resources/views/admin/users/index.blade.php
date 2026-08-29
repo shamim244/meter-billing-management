@@ -4,16 +4,72 @@
     </x-slot>
 
     <div class="space-y-6">
-        <!-- Top Toolbar -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <form method="GET" action="{{ route('admin.users.index') }}" class="flex items-center gap-2 max-w-md w-full">
-                <input type="text" name="search" value="{{ $search }}" placeholder="Search by name, email, or phone..." class="w-full text-xs sm:text-sm bg-slate-950 border-slate-800 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:ring-indigo-500 focus:border-indigo-500">
-                <button type="submit" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs sm:text-sm font-semibold transition shrink-0">
-                    Search
+        <!-- Top Stats Banner -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+            <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-sm flex items-center justify-between">
+                <div>
+                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Accounts</div>
+                    <div class="text-xl font-black text-white font-mono mt-0.5">{{ number_format($stats['total_users']) }}</div>
+                </div>
+                <span class="p-2 bg-indigo-500/10 rounded-xl text-indigo-400 text-base">👥</span>
+            </div>
+
+            <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-sm flex items-center justify-between">
+                <div>
+                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Operators</div>
+                    <div class="text-xl font-black text-emerald-400 font-mono mt-0.5">{{ number_format($stats['active_users']) }}</div>
+                </div>
+                <span class="p-2 bg-emerald-500/10 rounded-xl text-emerald-400 text-base">✓</span>
+            </div>
+
+            <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-sm flex items-center justify-between">
+                <div>
+                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Subscribed Agents</div>
+                    <div class="text-xl font-black text-cyan-400 font-mono mt-0.5">{{ number_format($stats['subscribed_users']) }}</div>
+                </div>
+                <span class="p-2 bg-cyan-500/10 rounded-xl text-cyan-400 text-base">⚡</span>
+            </div>
+
+            <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-sm flex items-center justify-between">
+                <div>
+                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Suspended</div>
+                    <div class="text-xl font-black text-rose-400 font-mono mt-0.5">{{ number_format($stats['suspended_users']) }}</div>
+                </div>
+                <span class="p-2 bg-rose-500/10 rounded-xl text-rose-400 text-base">🚫</span>
+            </div>
+        </div>
+
+        <!-- Top Toolbar & Filters -->
+        <div class="bg-slate-950 p-4 rounded-3xl border border-slate-800 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <form method="GET" action="{{ route('admin.users.index') }}" class="flex flex-wrap items-center gap-2 flex-1">
+                <div class="flex-1 min-w-[200px]">
+                    <input type="text" name="search" value="{{ $search }}" placeholder="Search by name, email, or phone..." class="w-full text-xs bg-slate-900 border-slate-800 rounded-xl px-3.5 py-2 text-white placeholder-slate-500 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+
+                <select name="role" class="text-xs bg-slate-900 border-slate-800 rounded-xl px-3 py-2 text-white focus:ring-indigo-500">
+                    <option value="all" {{ $roleFilter === 'all' ? 'selected' : '' }}>All Roles</option>
+                    <option value="admin" {{ $roleFilter === 'admin' ? 'selected' : '' }}>Administrators</option>
+                    <option value="user" {{ $roleFilter === 'user' ? 'selected' : '' }}>Billing Operators</option>
+                </select>
+
+                <select name="status" class="text-xs bg-slate-900 border-slate-800 rounded-xl px-3 py-2 text-white focus:ring-indigo-500">
+                    <option value="all" {{ $statusFilter === 'all' ? 'selected' : '' }}>All Statuses</option>
+                    <option value="active" {{ $statusFilter === 'active' ? 'selected' : '' }}>Active Only</option>
+                    <option value="suspended" {{ $statusFilter === 'suspended' ? 'selected' : '' }}>Suspended Only</option>
+                </select>
+
+                <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition shrink-0">
+                    Filter
                 </button>
+
+                @if(!empty($search) || $roleFilter !== 'all' || $statusFilter !== 'all')
+                    <a href="{{ route('admin.users.index') }}" class="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-400 rounded-xl text-xs font-medium transition shrink-0">
+                        Clear
+                    </a>
+                @endif
             </form>
 
-            <a href="{{ route('admin.users.create') }}" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-indigo-600/20 transition text-center">
+            <a href="{{ route('admin.users.create') }}" class="w-full md:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 transition text-center shrink-0">
                 <span>+</span> Add New User
             </a>
         </div>
@@ -21,101 +77,114 @@
         <!-- Users Table -->
         <div class="bg-slate-950 rounded-3xl border border-slate-800 shadow-xl overflow-hidden">
             <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm text-slate-300">
-                    <thead class="bg-slate-900 border-b border-slate-800 text-xs uppercase font-bold text-slate-500 tracking-wider">
+                <table class="w-full text-left text-xs text-slate-300">
+                    <thead class="bg-slate-900/90 border-b border-slate-800 text-[11px] uppercase font-bold text-slate-400 tracking-wider">
                         <tr>
-                            <th class="py-4 px-6">User</th>
-                            <th class="py-4 px-6">Role</th>
-                            <th class="py-4 px-6 text-center">Storage Quota</th>
-                            <th class="py-4 px-6 text-center">Consumers</th>
-                            <th class="py-4 px-6 text-center">Bills Processed</th>
-                            <th class="py-4 px-6 text-center">Status</th>
-                            <th class="py-4 px-6 text-center">Joined</th>
-                            <th class="py-4 px-6 text-center">Actions</th>
+                            <th class="py-3.5 px-5">User / Contact</th>
+                            <th class="py-3.5 px-4">Role</th>
+                            <th class="py-3.5 px-4 text-center">Subscription Plan</th>
+                            <th class="py-3.5 px-4 text-center">MRUs & Base</th>
+                            <th class="py-3.5 px-4 text-center">Wallet Balance</th>
+                            <th class="py-3.5 px-4 text-center">Status</th>
+                            <th class="py-3.5 px-4 text-center">Joined</th>
+                            <th class="py-3.5 px-5 text-center">Actions</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-800/80 font-medium">
+                    <tbody class="divide-y divide-slate-800/70 font-medium">
                         @forelse($users as $user)
                             <tr class="hover:bg-slate-900/40 transition">
-                                <td class="py-4 px-6">
-                                    <div class="font-bold text-white text-base">{{ $user->name }}</div>
-                                    <div class="text-xs text-slate-400">{{ $user->email }}</div>
+                                <!-- User / Contact -->
+                                <td class="py-3.5 px-5">
+                                    <a href="{{ route('admin.users.show', $user) }}" class="font-bold text-white hover:text-indigo-400 text-sm flex items-center gap-1.5 transition">
+                                        <span>{{ $user->name }}</span>
+                                        @if($user->email_verified_at)
+                                            <span class="text-[10px] text-emerald-400" title="Email verified">✓</span>
+                                        @endif
+                                    </a>
+                                    <div class="text-[11px] text-slate-400">{{ $user->email }}</div>
                                     @if($user->phone)
-                                        <div class="text-xs text-slate-500 font-mono mt-0.5">📞 {{ $user->phone }}</div>
+                                        <div class="text-[10px] text-slate-500 font-mono mt-0.5">📞 {{ $user->phone }}</div>
                                     @endif
                                 </td>
-                                <td class="py-4 px-6">
+
+                                <!-- Role -->
+                                <td class="py-3.5 px-4">
                                     @foreach($user->roles as $role)
-                                        <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase {{ $role->name === 'admin' ? 'bg-purple-950 text-purple-300 border border-purple-500/30' : 'bg-slate-800 text-slate-300' }}">
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase {{ $role->name === 'admin' ? 'bg-purple-950 text-purple-300 border border-purple-500/40' : 'bg-slate-800 text-slate-300' }}">
                                             {{ $role->name }}
                                         </span>
                                     @endforeach
                                 </td>
-                                <td class="py-4 px-6 text-center" x-data="{ editingQuota: false }">
-                                    <div x-show="!editingQuota" class="space-y-1">
-                                        <div class="flex items-center justify-center gap-1.5">
-                                            <span class="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-brand-950 text-brand-300 border border-brand-800/80">
-                                                {{ $user->plan_tier ?? 'free' }}
-                                            </span>
-                                            <span class="font-mono text-xs font-bold text-slate-200">
-                                                {{ $user->storage_limit_mb ?? 100 }} MB
-                                            </span>
-                                        </div>
-                                        <div class="text-[11px] font-mono text-slate-500">
-                                            {{ round($user->getStorageUsedBytes() / (1024 * 1024), 1) }} MB used ({{ $user->getStorageUsagePercent() }}%)
-                                        </div>
-                                        <button type="button" @click="editingQuota = true" class="text-[10px] text-brand-400 hover:text-brand-300 underline font-semibold">
-                                            Edit Quota
-                                        </button>
-                                    </div>
 
-                                    <form x-show="editingQuota" x-cloak method="POST" action="{{ route('admin.users.update-quota', $user) }}" class="space-y-2 p-2 bg-slate-900 rounded-xl border border-slate-800">
-                                        @csrf
-                                        @method('PATCH')
-                                        <div class="flex items-center gap-1">
-                                            <select name="plan_tier" class="text-[11px] bg-slate-950 border border-slate-700 rounded-lg text-white py-1 px-1.5 focus:ring-brand-500">
-                                                <option value="free" {{ ($user->plan_tier ?? 'free') === 'free' ? 'selected' : '' }}>Free</option>
-                                                <option value="starter" {{ ($user->plan_tier ?? '') === 'starter' ? 'selected' : '' }}>Starter</option>
-                                                <option value="pro" {{ ($user->plan_tier ?? '') === 'pro' ? 'selected' : '' }}>Pro</option>
-                                                <option value="enterprise" {{ ($user->plan_tier ?? '') === 'enterprise' ? 'selected' : '' }}>Enterprise</option>
-                                            </select>
-                                            <input type="number" name="storage_limit_mb" value="{{ $user->storage_limit_mb ?? 100 }}" class="w-16 text-[11px] bg-slate-950 border border-slate-700 rounded-lg text-white py-1 px-1.5 font-mono" placeholder="MB">
+                                <!-- Subscription Plan -->
+                                <td class="py-3.5 px-4 text-center">
+                                    @if($user->activeSubscription)
+                                        <div class="font-bold text-white text-xs">
+                                            {{ $user->activeSubscription->plan->name ?? 'Subscribed' }}
                                         </div>
-                                        <div class="flex items-center justify-end gap-1">
-                                            <button type="button" @click="editingQuota = false" class="px-2 py-0.5 text-[10px] rounded bg-slate-800 text-slate-400">Cancel</button>
-                                            <button type="submit" class="px-2 py-0.5 text-[10px] rounded bg-brand-600 text-white font-bold">Save</button>
+                                        <div class="text-[10px] text-emerald-400 font-bold uppercase">
+                                            {{ $user->activeSubscription->lifecycle_status }}
                                         </div>
-                                    </form>
+                                    @else
+                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-900 text-slate-400 border border-slate-800">
+                                            {{ $user->plan_tier ?? 'free' }}
+                                        </span>
+                                    @endif
                                 </td>
-                                <td class="py-4 px-6 text-center font-mono font-bold text-cyan-400">
-                                    {{ number_format($user->consumer_accounts_count) }}
+
+                                <!-- MRUs & Consumers -->
+                                <td class="py-3.5 px-4 text-center">
+                                    <div class="font-mono font-bold text-cyan-400">
+                                        {{ $user->mrus_count }} <span class="text-[10px] font-sans font-medium text-slate-500">MRUs</span>
+                                    </div>
+                                    <div class="text-[10px] font-mono text-slate-400">
+                                        {{ number_format($user->consumer_accounts_count) }} CAs
+                                    </div>
                                 </td>
-                                <td class="py-4 px-6 text-center font-mono font-bold text-indigo-400">
-                                    {{ number_format($user->bill_records_count) }}
+
+                                <!-- Wallet Balance -->
+                                <td class="py-3.5 px-4 text-center">
+                                    <div class="font-mono font-bold text-emerald-400">
+                                        ₹{{ number_format($user->wallet?->balance ?? 0, 2) }}
+                                    </div>
+                                    @if($user->isWalletFrozen())
+                                        <span class="text-[9px] font-bold uppercase text-rose-400">Frozen</span>
+                                    @endif
                                 </td>
-                                <td class="py-4 px-6 text-center">
-                                    <span class="px-3 py-1 rounded-full text-xs font-bold uppercase {{ $user->status === 'active' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950 text-rose-300 border border-rose-500/30' }}">
+
+                                <!-- Status -->
+                                <td class="py-3.5 px-4 text-center">
+                                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase {{ $user->status === 'active' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950 text-rose-300 border border-rose-500/30' }}">
                                         {{ $user->status }}
                                     </span>
                                 </td>
-                                <td class="py-4 px-6 text-center text-xs text-slate-500">
+
+                                <!-- Joined -->
+                                <td class="py-3.5 px-4 text-center text-[11px] text-slate-500">
                                     {{ $user->created_at->format('M d, Y') }}
                                 </td>
-                                <td class="py-4 px-6 text-center">
-                                    <div class="flex items-center justify-center gap-2">
-                                        <a href="{{ route('admin.wallets.show', $user->id) }}" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-950/60 hover:bg-indigo-900/80 text-indigo-300 border border-indigo-500/30 transition flex items-center gap-1">
-                                            <span>👛</span> Wallet
+
+                                <!-- Actions -->
+                                <td class="py-3.5 px-5 text-center">
+                                    <div class="flex items-center justify-center gap-1.5 flex-wrap">
+                                        <!-- View Dossier -->
+                                        <a href="{{ route('admin.users.show', $user) }}" class="px-2 py-1 rounded-lg text-xs font-bold bg-slate-900 hover:bg-slate-800 text-indigo-300 border border-indigo-500/30 transition" title="View 360° User Dossier">
+                                            👁️ View
                                         </a>
-                                        @if($user->id !== auth()->id())
-                                            <form method="POST" action="{{ route('admin.users.toggle-status', $user) }}">
+
+                                        <!-- Edit -->
+                                        <a href="{{ route('admin.users.edit', $user) }}" class="px-2 py-1 rounded-lg text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 transition" title="Edit Profile & Password">
+                                            ✏️ Edit
+                                        </a>
+
+                                        <!-- Impersonate -->
+                                        @if($user->id !== auth()->id() && !$user->hasRole('admin'))
+                                            <form method="POST" action="{{ route('admin.users.impersonate', $user) }}" class="inline">
                                                 @csrf
-                                                @method('PATCH')
-                                                <button type="submit" class="px-3 py-1 rounded-lg text-xs font-bold transition {{ $user->status === 'active' ? 'bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-500/30' : 'bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/30' }}">
-                                                    {{ $user->status === 'active' ? 'Suspend' : 'Activate' }}
+                                                <button type="submit" onclick="return confirm('Log in as {{ $user->name }}?');" class="px-2 py-1 rounded-lg text-xs font-bold bg-amber-950/70 hover:bg-amber-900/90 text-amber-300 border border-amber-500/30 transition" title="Login as this operator">
+                                                    🎭 Login
                                                 </button>
                                             </form>
-                                        @else
-                                            <span class="text-xs text-slate-600 italic">Self</span>
                                         @endif
                                     </div>
                                 </td>

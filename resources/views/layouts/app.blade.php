@@ -32,6 +32,7 @@
         </script>
     </head>
     <body class="font-sans antialiased bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-200">
+        <x-impersonation-banner />
         <div class="min-h-screen bg-slate-100 dark:bg-slate-950">
             @include('layouts.navigation')
 

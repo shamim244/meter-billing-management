@@ -181,6 +181,7 @@
 
     <!-- Main Content Area -->
     <div class="flex-1 flex flex-col min-h-screen overflow-x-hidden">
+        <x-impersonation-banner />
         <!-- Top Nav Header with Mode Switcher & Theme Toggle -->
         <header class="h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-30">
             <div class="flex items-center gap-3">
