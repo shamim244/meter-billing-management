@@ -184,4 +184,22 @@ class AdminUserManagementTest extends TestCase
             ->post("/admin/users/{$this->adminUser->id}/impersonate");
         $impersonateResponse->assertStatus(403);
     }
+
+    public function test_impersonating_session_auto_restores_admin_when_navigating_to_admin_route(): void
+    {
+        // Admin impersonates operator
+        $this->actingAs($this->adminUser)
+            ->post("/admin/users/{$this->operatorUser->id}/impersonate");
+
+        $this->assertEquals($this->operatorUser->id, auth()->id());
+        $this->assertTrue(session()->has('impersonated_by'));
+
+        // When navigating to an admin route like /admin/users/2, admin is auto-restored
+        $response = $this->get("/admin/users/{$this->operatorUser->id}");
+
+        $response->assertOk()
+            ->assertSessionMissing('impersonated_by');
+
+        $this->assertEquals($this->adminUser->id, auth()->id());
+    }
 }

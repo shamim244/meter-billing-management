@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'active' => \App\Http\Middleware\EnsureUserIsActive::class,
             'mru.not_locked' => \App\Http\Middleware\EnsureMruNotLocked::class,
             'subscription.not_suspended' => \App\Http\Middleware\EnsureSubscriptionNotSuspended::class,
+            'admin.restore_impersonation' => \App\Http\Middleware\RestoreAdminIfImpersonating::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

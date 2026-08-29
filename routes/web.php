@@ -133,8 +133,8 @@ Route::post('/webhooks/payments/pg', [\App\Http\Controllers\PaymentWebhookContro
     ->name('webhooks.payments.pg')
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class]);
 
-// Admin Panel Routes (Protected by role:admin and active)
-Route::middleware(['auth', 'role:admin', 'active'])->prefix('admin')->name('admin.')->group(function () {
+// Admin Panel Routes (Protected by role:admin and active, auto-restoring admin if impersonating)
+Route::middleware(['auth', 'admin.restore_impersonation', 'role:admin', 'active'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
 
     Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
