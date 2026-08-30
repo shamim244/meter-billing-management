@@ -150,6 +150,9 @@ Route::middleware(['auth', 'admin.restore_impersonation', 'role:admin', 'active'
     Route::post('/users/{user}/grant-plan', [AdminUserController::class, 'grantPlan'])->name('users.grant-plan');
     Route::post('/users/{user}/override-quotas', [AdminUserController::class, 'overrideQuotas'])->name('users.override-quotas');
     Route::post('/users/{user}/send-notification', [AdminUserController::class, 'sendDirectNotification'])->name('users.send-notification');
+    Route::post('/users/{user}/clean-pdfs', [AdminUserController::class, 'cleanPdfs'])->name('users.clean_pdfs');
+    Route::post('/users/{user}/clean-mrus', [AdminUserController::class, 'cleanMrus'])->name('users.clean_mrus');
+    Route::post('/users/{user}/clean-bills', [AdminUserController::class, 'cleanBills'])->name('users.clean_bills');
     Route::delete('/users/{user}/purge', [AdminUserController::class, 'purgeUser'])->name('users.purge');
     Route::post('/users/{user}/impersonate', [AdminUserController::class, 'impersonate'])->name('users.impersonate');
     Route::patch('/users/{user}/toggle-status', [AdminUserController::class, 'toggleStatus'])->name('users.toggle-status');

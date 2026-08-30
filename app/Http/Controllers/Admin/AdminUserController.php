@@ -308,6 +308,15 @@ class AdminUserController extends Controller
 
         $availablePlans = Plan::with('activeDurations')->where('is_active', true)->get();
 
+        $availableCycles = BillRecord::where('user_id', $user->id)
+            ->whereNotNull('billing_month')
+            ->whereNotNull('billing_year')
+            ->select('billing_month', 'billing_year')
+            ->distinct()
+            ->orderBy('billing_year', 'desc')
+            ->orderBy('billing_month', 'desc')
+            ->get();
+
         return view('admin.users.show', compact(
             'user',
             'mrus',
@@ -316,7 +325,8 @@ class AdminUserController extends Controller
             'subscriptionHistory',
             'transitions',
             'storageMetrics',
-            'availablePlans'
+            'availablePlans',
+            'availableCycles'
         ));
     }
 
@@ -487,6 +497,223 @@ class AdminUserController extends Controller
     }
 
     /**
+     * Clean PDF storage files selectively (Disk Space Optimizer).
+     * Deletes physical PDF files while safely preserving all database bill records, consumer readings, and amounts.
+     */
+    public function cleanPdfs(Request $request, User $user): RedirectResponse
+    {
+        $request->validate([
+            'scope' => 'required|string|in:all,older_than_30,older_than_60,older_than_90,mru,cycle',
+            'mru_id' => 'nullable|required_if:scope,mru|exists:mrus,id',
+            'billing_month' => 'nullable|required_if:scope,cycle|integer|min:1|max:12',
+            'billing_year' => 'nullable|required_if:scope,cycle|integer|min:2020|max:2035',
+        ]);
+
+        $scope = $request->scope;
+        $freedBytes = 0;
+        $deletedFiles = 0;
+
+        $query = BillRecord::where('user_id', $user->id)
+            ->whereNotNull('pdf_path');
+
+        if ($scope === 'older_than_30') {
+            $query->where('updated_at', '<=', now()->subDays(30));
+        } elseif ($scope === 'older_than_60') {
+            $query->where('updated_at', '<=', now()->subDays(60));
+        } elseif ($scope === 'older_than_90') {
+            $query->where('updated_at', '<=', now()->subDays(90));
+        } elseif ($scope === 'mru') {
+            $query->where('mru_id', $request->mru_id);
+        } elseif ($scope === 'cycle') {
+            $query->where('billing_month', $request->billing_month)
+                  ->where('billing_year', $request->billing_year);
+        }
+
+        $bills = $query->get();
+
+        foreach ($bills as $bill) {
+            if (!empty($bill->pdf_path)) {
+                if (Storage::disk('local')->exists($bill->pdf_path)) {
+                    $freedBytes += Storage::disk('local')->size($bill->pdf_path);
+                    Storage::disk('local')->delete($bill->pdf_path);
+                    $deletedFiles++;
+                } elseif (Storage::disk('private')->exists($bill->pdf_path)) {
+                    $freedBytes += Storage::disk('private')->size($bill->pdf_path);
+                    Storage::disk('private')->delete($bill->pdf_path);
+                    $deletedFiles++;
+                }
+            }
+
+            // CRITICAL: Reset pdf_path = null & download_status = 'pending', preserving all consumer readings, units, amounts, and review statuses!
+            $bill->update([
+                'pdf_path' => null,
+                'pdf_filename' => null,
+                'download_status' => 'pending',
+            ]);
+        }
+
+        // If scope is 'all', also clean up any orphaned files in users/{user_id}/pdfs and bills/{user_id}/
+        if ($scope === 'all') {
+            $dirsToPurge = [
+                "users/{$user->id}/pdfs",
+                "bills/{$user->id}",
+            ];
+            foreach ($dirsToPurge as $d) {
+                if (Storage::disk('local')->exists($d)) {
+                    $files = Storage::disk('local')->allFiles($d);
+                    foreach ($files as $f) {
+                        $freedBytes += Storage::disk('local')->size($f);
+                        $deletedFiles++;
+                    }
+                    Storage::disk('local')->deleteDirectory($d);
+                }
+                if (Storage::disk('private')->exists($d)) {
+                    $files = Storage::disk('private')->allFiles($d);
+                    foreach ($files as $f) {
+                        $freedBytes += Storage::disk('private')->size($f);
+                        $deletedFiles++;
+                    }
+                    Storage::disk('private')->deleteDirectory($d);
+                }
+            }
+        }
+
+        $freedFormatted = $this->formatBytes($freedBytes);
+
+        return back()->with('success', "✨ Cleaned {$deletedFiles} PDF file(s) ({$freedFormatted} storage freed) for user '{$user->name}'. All consumer database readings and billing records remain 100% intact.");
+    }
+
+    /**
+     * Clean selected MRUs and their associated bill records and storage files.
+     */
+    public function cleanMrus(Request $request, User $user): RedirectResponse
+    {
+        $request->validate([
+            'mru_ids' => 'required|array|min:1',
+            'mru_ids.*' => 'integer|exists:mrus,id',
+        ]);
+
+        $mruIds = $request->mru_ids;
+        $mrus = Mru::where('user_id', $user->id)->whereIn('id', $mruIds)->get();
+
+        if ($mrus->isEmpty()) {
+            return back()->with('error', 'No matching MRUs found for this user.');
+        }
+
+        $freedBytes = 0;
+        $deletedBillsCount = 0;
+        $deletedMrusCount = 0;
+
+        DB::transaction(function () use ($user, $mrus, &$freedBytes, &$deletedBillsCount, &$deletedMrusCount) {
+            foreach ($mrus as $mru) {
+                // 1. Delete associated PDFs on disk
+                $bills = BillRecord::where('user_id', $user->id)->where('mru_id', $mru->id)->get();
+                foreach ($bills as $bill) {
+                    if (!empty($bill->pdf_path)) {
+                        if (Storage::disk('local')->exists($bill->pdf_path)) {
+                            $freedBytes += Storage::disk('local')->size($bill->pdf_path);
+                            Storage::disk('local')->delete($bill->pdf_path);
+                        } elseif (Storage::disk('private')->exists($bill->pdf_path)) {
+                            $freedBytes += Storage::disk('private')->size($bill->pdf_path);
+                            Storage::disk('private')->delete($bill->pdf_path);
+                        }
+                    }
+                }
+
+                // Clean storage folder for MRU
+                $mruDirs = [
+                    "bills/{$user->id}/{$mru->code}",
+                    "users/{$user->id}/pdfs/{$mru->code}",
+                ];
+                foreach ($mruDirs as $dir) {
+                    if (Storage::disk('local')->exists($dir)) {
+                        Storage::disk('local')->deleteDirectory($dir);
+                    }
+                    if (Storage::disk('private')->exists($dir)) {
+                        Storage::disk('private')->deleteDirectory($dir);
+                    }
+                }
+
+                // 2. Delete bill records & consumer accounts for this MRU
+                $deletedBillsCount += BillRecord::where('user_id', $user->id)->where('mru_id', $mru->id)->delete();
+                \App\Models\ConsumerAccount::where('user_id', $user->id)->where('mru_id', $mru->id)->delete();
+                \App\Models\BillingCycle::where('mru_id', $mru->id)->delete();
+
+                // 3. Delete MRU record
+                $mru->delete();
+                $deletedMrusCount++;
+            }
+        });
+
+        $freedFormatted = $this->formatBytes($freedBytes);
+
+        return back()->with('success', "🗑️ Successfully removed {$deletedMrusCount} MRU(s), {$deletedBillsCount} consumer record(s), and freed {$freedFormatted} of storage for user '{$user->name}'.");
+    }
+
+    /**
+     * Clean consumer bill records selectively by MRU, cycle, or status.
+     */
+    public function cleanBills(Request $request, User $user): RedirectResponse
+    {
+        $request->validate([
+            'mru_id' => 'nullable|exists:mrus,id',
+            'billing_month' => 'nullable|integer|min:1|max:12',
+            'billing_year' => 'nullable|integer|min:2020|max:2035',
+            'status_scope' => 'nullable|in:all,doubt,critical,unparsed',
+        ]);
+
+        $query = BillRecord::where('user_id', $user->id);
+
+        if ($request->filled('mru_id')) {
+            $query->where('mru_id', $request->mru_id);
+        }
+        if ($request->filled('billing_month')) {
+            $query->where('billing_month', $request->billing_month);
+        }
+        if ($request->filled('billing_year')) {
+            $query->where('billing_year', $request->billing_year);
+        }
+        if ($request->filled('status_scope') && $request->status_scope !== 'all') {
+            if ($request->status_scope === 'unparsed') {
+                $query->where(function ($q) {
+                    $q->whereNull('parse_status')->orWhere('parse_status', '!=', 'parsed');
+                });
+            } else {
+                $query->where('review_status', $request->status_scope);
+            }
+        }
+
+        $bills = $query->get();
+
+        if ($bills->isEmpty()) {
+            return back()->with('error', 'No consumer bill records matched the selected filter criteria.');
+        }
+
+        $freedBytes = 0;
+        $deletedCount = 0;
+
+        DB::transaction(function () use ($bills, &$freedBytes, &$deletedCount) {
+            foreach ($bills as $bill) {
+                if (!empty($bill->pdf_path)) {
+                    if (Storage::disk('local')->exists($bill->pdf_path)) {
+                        $freedBytes += Storage::disk('local')->size($bill->pdf_path);
+                        Storage::disk('local')->delete($bill->pdf_path);
+                    } elseif (Storage::disk('private')->exists($bill->pdf_path)) {
+                        $freedBytes += Storage::disk('private')->size($bill->pdf_path);
+                        Storage::disk('private')->delete($bill->pdf_path);
+                    }
+                }
+                $bill->delete();
+                $deletedCount++;
+            }
+        });
+
+        $freedFormatted = $this->formatBytes($freedBytes);
+
+        return back()->with('success', "🗑️ Successfully flushed {$deletedCount} consumer bill record(s) and freed {$freedFormatted} of storage for user '{$user->name}'. MRU definitions and other cycles remain intact.");
+    }
+
+    /**
      * Safe user purge & disk cleanup console.
      */
     public function purgeUser(Request $request, User $user): RedirectResponse
@@ -506,17 +733,26 @@ class AdminUserController extends Controller
         $userName = $user->name;
 
         DB::transaction(function () use ($user) {
-            // 1. Purge private PDF files from storage disk
-            $userStoragePath = "users/{$user->id}";
-            if (Storage::disk('private')->exists($userStoragePath)) {
-                Storage::disk('private')->deleteDirectory($userStoragePath);
+            // 1. Purge all storage directories across local and private disks
+            $storagePaths = [
+                "users/{$user->id}",
+                "bills/{$user->id}",
+            ];
+
+            foreach ($storagePaths as $path) {
+                if (Storage::disk('local')->exists($path)) {
+                    Storage::disk('local')->deleteDirectory($path);
+                }
+                if (Storage::disk('private')->exists($path)) {
+                    Storage::disk('private')->deleteDirectory($path);
+                }
             }
 
             // 2. Refer & Earn: Cancel any pending referral payouts for this deleted referrer
             try {
                 app(\App\Services\Referral\ReferralService::class)->handleReferrerAccountDeleted($user->id);
             } catch (\Throwable $e) {
-                Log::error("[UserPurge] Error cancelling referral payouts for user #{$user->id}: " . $e->getMessage());
+                \Illuminate\Support\Facades\Log::error("[UserPurge] Error cancelling referral payouts for user #{$user->id}: " . $e->getMessage());
             }
 
             // 3. Cascade delete records
@@ -525,6 +761,17 @@ class AdminUserController extends Controller
 
         return redirect()->route('admin.users.index')
             ->with('success', "User '{$userName}' and all associated storage files have been permanently purged.");
+    }
+
+    /**
+     * Helper to format bytes into readable human strings (B, KB, MB, GB).
+     */
+    protected function formatBytes(int $bytes): string
+    {
+        if ($bytes < 1024) return $bytes . ' B';
+        if ($bytes < 1048576) return round($bytes / 1024, 2) . ' KB';
+        if ($bytes < 1073741824) return round($bytes / 1048576, 2) . ' MB';
+        return round($bytes / 1073741824, 2) . ' GB';
     }
 
     /**
