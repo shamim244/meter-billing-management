@@ -74,6 +74,18 @@ class CreditWalletOnPaymentSuccess
             }
         }
 
+        // 5. Refer & Earn: check if referee's topup payment qualifies for a referral reward
+        try {
+            app(\App\Services\Referral\ReferralService::class)->checkAndCreatePendingPayout(
+                user: $payment->user,
+                paymentReferenceType: 'topup',
+                paymentReferenceId: (string) $payment->id,
+                paymentAmount: (float) $payment->amount
+            );
+        } catch (\Throwable $e) {
+            Log::error("[WalletListener] Referral payout check error for topup payment #{$payment->id}: " . $e->getMessage());
+        }
+
         Log::info("[WalletListener] Successfully credited ₹{$payment->amount} to user #{$payment->user_id} for Payment #{$payment->id}");
     }
 }

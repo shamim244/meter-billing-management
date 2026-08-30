@@ -48,6 +48,19 @@ class RegisteredUserController extends Controller
         $userRole = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'user', 'guard_name' => 'web']);
         $user->assignRole($userRole);
 
+        // Refer & Earn: Auto-generate agent's referral code and link referee if ref code provided
+        $referralService = app(\App\Services\Referral\ReferralService::class);
+        try {
+            $referralService->generateCodeForNewAgent($user->id);
+
+            $refCode = $request->input('referral_code') ?? $request->input('ref');
+            if (!empty($refCode)) {
+                $referralService->recordReferralSignup($refCode, $user->id);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("[Registration] Referral processing error for user #{$user->id}: " . $e->getMessage());
+        }
+
         event(new Registered($user));
 
         Auth::login($user);

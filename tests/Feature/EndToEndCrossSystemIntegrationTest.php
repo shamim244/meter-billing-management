@@ -529,6 +529,10 @@ class EndToEndCrossSystemIntegrationTest extends TestCase
             'subscription.upgraded' => ['old_plan' => 'Starter Plan', 'new_plan' => 'Pro Plan', 'prorated_charge' => '150.00'],
             'subscription.downgraded' => ['old_plan' => 'Pro Plan', 'new_plan' => 'Starter Plan', 'prorated_credit' => '150.00'],
             'usage.monthly_summary_ready' => ['month' => '8', 'year' => '2026', 'bills_processed' => '1,250', 'mrus_active' => '4', 'data_coverage' => '98.5'],
+            'referral.reward_pending' => ['referee_name' => 'Rahul', 'payment_amount' => '500.00', 'reward_amount' => '50.00', 'hold_days' => '7'],
+            'referral.reward_paid' => ['referee_name' => 'Rahul', 'reward_amount' => '50.00'],
+            'referral.reward_cancelled' => ['referee_name' => 'Rahul', 'reward_amount' => '50.00', 'reason' => 'Payment refunded'],
+            'referral.reward_clawed_back' => ['referee_name' => 'Rahul', 'reward_amount' => '50.00', 'reason' => 'Payment refunded'],
             'auth.welcome' => ['agent_name' => 'Md Tariq', 'email' => 'tariq@example.com'],
             'auth.password_reset' => ['agent_name' => 'Md Tariq', 'reset_url' => 'https://app.nexgenhub.site/reset-password/token123'],
         ];

@@ -105,6 +105,19 @@ class PaymentVerificationService
                 'created_at' => now(),
             ]);
 
+            // Refer & Earn: Clawback any pending or paid referral reward tied to this payment
+            try {
+                $refType = $payment->purpose === \App\Enums\PaymentPurpose::WALLET_TOPUP ? 'topup' : 'subscription_payment';
+                $refId = $payment->purpose === \App\Enums\PaymentPurpose::WALLET_TOPUP ? (string) $payment->id : 'payment_' . $payment->id;
+                app(\App\Services\Referral\ReferralService::class)->handleClawback(
+                    paymentReferenceType: $refType,
+                    paymentReferenceId: $refId,
+                    reason: "Payment #{$payment->id} refunded: {$cleanReason}"
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error("[PaymentRefund] Referral clawback error for payment #{$payment->id}: " . $e->getMessage());
+            }
+
             return $payment->fresh();
         });
     }

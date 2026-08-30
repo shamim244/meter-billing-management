@@ -325,6 +325,17 @@ class PlanChangeService
 
             event(new PlanDowngradedEvent($newSubscription, $oldPlan, $targetPlan, $log));
 
+            // Refer & Earn: Clawback any pending or paid referral reward tied to the downgraded subscription
+            try {
+                app(\App\Services\Referral\ReferralService::class)->handleClawback(
+                    paymentReferenceType: 'subscription_payment',
+                    paymentReferenceId: 'sub_' . $sub->id,
+                    reason: "Mid-cycle plan downgrade from {$oldPlan?->name} to {$targetPlan->name}"
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error("[PlanDowngrade] Referral clawback error for sub #{$sub->id}: " . $e->getMessage());
+            }
+
             return [
                 'success' => true,
                 'amount_credited' => $creditAmount,

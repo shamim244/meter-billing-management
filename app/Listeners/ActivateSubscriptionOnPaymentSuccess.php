@@ -121,6 +121,18 @@ class ActivateSubscriptionOnPaymentSuccess
                 'created_at' => now(),
             ]);
 
+            // Refer & Earn: check if referee's first subscription payment qualifies for a referral reward
+            try {
+                app(\App\Services\Referral\ReferralService::class)->checkAndCreatePendingPayout(
+                    user: $user,
+                    paymentReferenceType: 'subscription_payment',
+                    paymentReferenceId: 'payment_' . $payment->id,
+                    paymentAmount: (float) $payment->amount
+                );
+            } catch (\Throwable $e) {
+                Log::error("[SubscriptionActivationListener] Referral payout check error for payment #{$payment->id}: " . $e->getMessage());
+            }
+
             Log::info("[SubscriptionActivationListener] Activated {$actionText} for User #{$user->id} via Payment #{$payment->id}.");
         } catch (\Throwable $e) {
             Log::error("[SubscriptionActivationListener] Failed to activate subscription for Payment #{$payment->id}: " . $e->getMessage(), [

@@ -253,10 +253,25 @@ Route::middleware(['auth', 'admin.restore_impersonation', 'role:admin', 'active'
         // Failed Critical Queue
         Route::get('/failed-queue', [\App\Http\Controllers\Admin\AdminFailedNotificationController::class, 'index'])->name('failed_queue');
     });
+
+    // Admin Refer & Earn System
+    Route::prefix('referrals')->name('referrals.')->group(function () {
+        Route::get('/settings', [\App\Http\Controllers\Admin\AdminReferralController::class, 'settings'])->name('settings');
+        Route::post('/settings', [\App\Http\Controllers\Admin\AdminReferralController::class, 'updateSettings'])->name('settings.update');
+        Route::get('/activity', [\App\Http\Controllers\Admin\AdminReferralController::class, 'activity'])->name('activity');
+        Route::get('/top-referrers', [\App\Http\Controllers\Admin\AdminReferralController::class, 'topReferrers'])->name('top_referrers');
+        Route::patch('/coupon/{coupon}/toggle', [\App\Http\Controllers\Admin\AdminReferralController::class, 'toggleCoupon'])->name('coupon.toggle');
+        Route::post('/users/{user}/override', [\App\Http\Controllers\Admin\AdminReferralController::class, 'updateAgentOverride'])->name('users.override');
+    });
 });
 
-// Agent Notifications & Preferences Routes (Protected by auth and active)
+// Agent Referrals, Notifications & Preferences Routes (Protected by auth and active)
 Route::middleware(['auth', 'active'])->group(function () {
+    // Agent Refer & Earn Dashboard
+    Route::get('/referrals', [\App\Http\Controllers\AgentReferralController::class, 'index'])->name('referrals.index');
+    Route::post('/referrals/regenerate', [\App\Http\Controllers\AgentReferralController::class, 'regenerate'])->name('referrals.regenerate');
+
+    // Notifications
     Route::get('/notifications', [\App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.index');
     Route::get('/notifications/recent', [\App\Http\Controllers\NotificationController::class, 'recent'])->name('notifications.recent');
     Route::post('/notifications/mark-all-read', [\App\Http\Controllers\NotificationController::class, 'markAllRead'])->name('notifications.mark_all_read');

@@ -27,8 +27,9 @@ class CouponService
             $coupon = CouponCode::create([
                 'code' => $code,
                 'type' => $type,
-                'discount_kind' => $type === 'subscription_discount' ? ($data['discount_kind'] ?? 'percentage') : null,
-                'discount_value' => $type === 'subscription_discount' ? (float)($data['discount_value'] ?? 0) : null,
+                'owner_user_id' => $data['owner_user_id'] ?? null,
+                'discount_kind' => in_array($type, ['subscription_discount', 'referral'], true) ? ($data['discount_kind'] ?? 'percentage') : null,
+                'discount_value' => in_array($type, ['subscription_discount', 'referral'], true) ? (float)($data['discount_value'] ?? 0) : null,
                 'plan_restriction_id' => $type === 'subscription_discount' ? ($data['plan_restriction_id'] ?? null) : null,
                 'minimum_amount' => !empty($data['minimum_amount']) ? (float)$data['minimum_amount'] : null,
                 'usage_limit_per_user' => (int)($data['usage_limit_per_user'] ?? 1),
@@ -36,7 +37,7 @@ class CouponService
                 'starts_at' => !empty($data['starts_at']) ? $data['starts_at'] : null,
                 'expires_at' => !empty($data['expires_at']) ? $data['expires_at'] : null,
                 'is_active' => (bool)($data['is_active'] ?? true),
-                'created_by_admin_id' => $data['created_by_admin_id'] ?? auth()->id(),
+                'created_by_admin_id' => $data['created_by_admin_id'] ?? (auth()->check() ? auth()->id() : null),
             ]);
 
             // If topup_bonus, insert slabs

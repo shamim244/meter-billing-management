@@ -512,7 +512,14 @@ class AdminUserController extends Controller
                 Storage::disk('private')->deleteDirectory($userStoragePath);
             }
 
-            // 2. Cascade delete records
+            // 2. Refer & Earn: Cancel any pending referral payouts for this deleted referrer
+            try {
+                app(\App\Services\Referral\ReferralService::class)->handleReferrerAccountDeleted($user->id);
+            } catch (\Throwable $e) {
+                Log::error("[UserPurge] Error cancelling referral payouts for user #{$user->id}: " . $e->getMessage());
+            }
+
+            // 3. Cascade delete records
             $user->delete();
         });
 

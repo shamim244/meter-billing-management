@@ -478,6 +478,18 @@ class SubscriptionCheckoutController extends Controller
                 );
             }
 
+            // Refer & Earn: check if referee's first subscription payment qualifies for a referral reward
+            try {
+                app(\App\Services\Referral\ReferralService::class)->checkAndCreatePendingPayout(
+                    user: $user,
+                    paymentReferenceType: 'subscription_payment',
+                    paymentReferenceId: 'sub_' . $subscription->id,
+                    paymentAmount: (float) $amountDue
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error("[SubscriptionCheckout] Referral payout check error for sub #{$subscription->id}: " . $e->getMessage());
+            }
+
             $msg = $isExtend
                 ? "🎉 Extended {$plan->name} (+{$duration->formatted_duration}) successfully! New validity until " . $subscription->billing_end->format('M d, Y') . "."
                 : "🎉 Subscribed to {$plan->name} ({$duration->formatted_duration}) successfully! Valid until " . $subscription->billing_end->format('M d, Y') . ".";

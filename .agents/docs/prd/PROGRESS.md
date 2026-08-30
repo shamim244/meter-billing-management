@@ -301,5 +301,85 @@
   - Legacy `purpose=direct_subscription` links hitting `/payments/create` are automatically redirected to `route('user-panel.subscription')`.
   - Added new test suite `tests/Feature/PlanVisibilityAndPaymentSeparationTest.php` with 4 comprehensive tests (100% PASS).
 
+---
+
+## 8. Refer & Earn System
+
+**Date:** 2026-08-30  
+**Status:** Completed & Tested (100% PASS)  
+**PRD Reference:** `09-Refer_Earn_System_PRD.md`
+
+### 8.1 Architecture & Extension of Base Coupon Engine
+- **Zero Duplication**: Reuses the `coupon_codes` table with `type = 'referral'` and a new `owner_user_id` column.
+- **Settings Pattern**: Followed the exact `SystemSetting` key-value pattern (same as `PaymentSettingsService`) with `ReferralSettingsService` and fallback defaults in `config/referral.php`.
+- **Database Schema**:
+  - Migration `2026_08_30_000001_create_refer_and_earn_tables.php`.
+  - `coupon_codes.owner_user_id`: Nullable foreign key to `users`.
+  - `referral_signups` table: Tracks `[referrer_user_id, referee_user_id, referral_coupon_code_id, signed_up_at]`.
+  - `referral_payouts` table: Tracks `[referral_coupon_code_id, referrer_user_id, referee_user_id, qualifying_payment_reference_type, qualifying_payment_reference_id, reward_amount, status, hold_expires_at, paid_at, clawed_back_at, clawback_reason, wallet_transaction_id]`.
+
+### 8.2 What Was Built
+- **Models**:
+  - `CouponCode`: Added `owner_user_id` to `$fillable`, `owner()` and `referralPayouts()` relationships.
+  - `ReferralPayout`: Full lifecycle ledger with scopes (`pending`, `paid`, `cancelled`, `clawed_back`) and relationships (`referrer`, `referee`, `couponCode`, `walletTransaction`).
+  - `ReferralSignup`: Tracks referee-to-referrer links created at registration time.
+- **Services**:
+  - **`ReferralService`**:
+    - `generateCodeForNewAgent($userId)`: Auto-generates unique readable codes (`REF-A7X9K2`) at signup.
+    - `regenerateCode($userId)`: Deactivates old code for new signups while leaving existing pending payouts untouched.
+    - `validateReferralCode($code, $newUserId)`: Enforces platform-wide one-time referral rule, active code validity, and blocks self-referrals (`owner_user_id === new_user_id`).
+    - `recordReferralSignup($code, $newUserId)`: Links referee to referrer.
+    - `checkAndCreatePendingPayout($user, $refType, $refId, $amount)`: Evaluates dynamic trigger (`'subscription'` vs `'topup'`), minimum qualifying amount (₹100), calculates reward (with per-agent override fallback to platform default), creates `ReferralPayout` in `'pending'` status with `hold_expires_at = now() + hold_period_days`, and dispatches `referral.reward_pending`.
+    - `processExpiredHoldPeriods()`: Daily scheduled job releasing matured hold payouts to referrer wallets via `WalletService::credit(..., 'referral_bonus_paid')` and dispatching `referral.reward_paid`.
+    - `handleClawback($refType, $refId, $reason)`:
+      - Pending payouts -> Cancelled with zero wallet action and `referral.reward_cancelled` notification.
+      - Paid payouts -> Reversed from wallet (falling back to forced negative adjustment if insufficient) and `referral.reward_clawed_back` notification.
+    - `handleReferrerAccountDeleted($referrerId)`: Cancels pending payouts with reason `'referrer_account_deleted'`.
+    - `getAdminOverride($user)` / `setAdminOverride($user, $kind, $value, $isActive)`.
+    - `getAgentReferralStats($user)`: 360° analytics for agent dashboard.
+- **Scheduled Commands**:
+  - Registered `referrals:process-payouts` in `routes/console.php` running daily at 00:15.
+- **Hooks & Listeners**:
+  - `RegisteredUserController::store()`: Auto-generates referral code and links referee.
+  - `ActivateSubscriptionOnPaymentSuccess` & `SubscriptionCheckoutController`: Checks qualifying subscription payments.
+  - `CreditWalletOnPaymentSuccess`: Checks qualifying top-up payments.
+  - `PaymentVerificationService::refund()`: Triggers clawback on refunded payments.
+  - `PlanChangeService::downgradePlan()`: Triggers clawback on mid-cycle downgrades.
+  - `AdminUserController::purgeUser()`: Cleans up pending payouts on referrer account deletion.
+- **Admin & Agent UI**:
+  - Admin Referral Settings (`/admin/referrals/settings`): Form for platform defaults (trigger, reward kind/value, min amount, hold period).
+  - Admin Activity Log (`/admin/referrals/activity`): Filterable audit ledger by status, referrer, referee, and date.
+  - Admin Top Referrers (`/admin/referrals/top-referrers`): Performance leaderboard with conversion metrics.
+  - Admin Per-Agent Override: Integrated into `/admin/wallets/{user}` view.
+  - Agent Dashboard (`/referrals`): Code and invite link copy box, 1-click WhatsApp share button, stats cards, and regenerate modal.
+  - Registration Page (`/register`): Optional referral code input, auto-populated from `?ref=...` query string.
+- **Notifications**:
+  - Added 4 routine notification templates to `NotificationTemplateService`: `referral.reward_pending`, `referral.reward_paid`, `referral.reward_cancelled`, `referral.reward_clawed_back`.
+
+### 8.3 What Was Skipped (Out of Scope per PRD Section 12)
+- True recurring payouts (rejected in favor of one-time payout with hold period).
+- Complex gamification tiers / multi-level referral trees.
+- IP / device fingerprinting fraud engines.
+
+### 8.4 Open Items & Assumptions Made (PRD Section 13)
+- `hold_period_days`: Used placeholder default of **7 days** (configurable from `/admin/referrals/settings`).
+- `reward_trigger`: Used default of **`subscription`** (first subscription payment).
+- `reward_kind`: Used default of **`percentage`** with value **10%**.
+- `minimum_qualifying_amount`: Used default of **₹100.00**.
+- Referrer Suspension Rule: Pending rewards mature normally during suspension; only account deletion cancels pending rewards with reason `'referrer_account_deleted'`.
+
+### 8.5 Automated Test Verification
+- Created `tests/Feature/ReferralSystemTest.php` with 9 comprehensive tests covering all 8 required edge cases:
+  1. Self-referral rejection.
+  2. Sub-minimum qualifying amount rejection.
+  3. Dynamic reward trigger matching.
+  4. Refund during hold period (cancellation with ₹0 wallet action).
+  5. Refund after hold period (clawback wallet reversal).
+  6. Code regeneration isolation.
+  7. Referrer account deletion cancellation.
+  8. Admin per-agent custom reward override precedence.
+  9. Registration auto-generation and signup link.
+- **Full Platform Test Suite**: **71/71 core tests passed (463 assertions), 100% PASS rate**.
+
 
 

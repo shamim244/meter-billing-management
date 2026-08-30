@@ -52,6 +52,11 @@
                         <span>Reports</span>
                     </x-nav-link>
 
+                    <x-nav-link :href="route('referrals.index')" :active="request()->routeIs('referrals.*')">
+                        <span>🎁</span>
+                        <span>Refer & Earn</span>
+                    </x-nav-link>
+
                     <x-nav-link :href="route('user-panel.index')" :active="request()->routeIs('user-panel.*')">
                         <span>👤</span>
                         <span>User Panel</span>

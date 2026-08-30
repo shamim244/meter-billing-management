@@ -163,6 +163,12 @@
                     Coupon Codes
                 </a>
 
+                <!-- Refer & Earn System -->
+                <a href="{{ route('admin.referrals.settings') }}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {{ request()->routeIs('admin.referrals.*') ? 'bg-purple-600 text-white font-bold shadow-lg shadow-purple-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                    <span class="text-base">🎁</span>
+                    Refer & Earn
+                </a>
+
                 <!-- Shortcut Defaults -->
                 <a href="{{ route('admin.shortcuts.index') }}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {{ request()->routeIs('admin.shortcuts.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
                     <span class="text-base">⌨️</span>

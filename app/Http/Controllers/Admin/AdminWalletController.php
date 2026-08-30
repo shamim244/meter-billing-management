@@ -88,13 +88,16 @@ class AdminWalletController extends Controller
             'adjustment_count' => $user->transactions()->where('meta->source', 'admin_adjustment')->count(),
         ];
 
+        $referralOverride = app(\App\Services\Referral\ReferralService::class)->getAdminOverride($user);
+
         return view('admin.wallets.show', compact(
             'user',
             'balance',
             'transactions',
             'adjustments',
             'filters',
-            'stats'
+            'stats',
+            'referralOverride'
         ));
     }
 

@@ -79,3 +79,20 @@
 ### 5.4 3-Attempt Exponential Backoff & Failed Critical Alert (RESOLVED)
 - **Status**: `SendEmailNotificationJob` retries 3 times with exponential backoff (`[60s, 300s, 900s]`). If a CRITICAL event fails all 3 attempts, `AdminNotificationFailedEvent` is dispatched and surfaced on the Admin Failed Critical Queue at `/admin/notifications/failed-queue`.
 
+---
+
+## 6. Refer & Earn System — Open Items (Section 13)
+
+### 6.1 Default Hold Period Days (RESOLVED WITH PLACEHOLDER)
+- **Item**: The hold period before pending referral rewards are credited to the referrer's wallet.
+- **Applied Default**: `7 days` (fully configurable by Admin via `/admin/referrals/settings`).
+- **Open for Decision**: User can adjust to 14, 30, or any duration between 0 and 90 days from the admin console at any time.
+
+### 6.2 Platform Default Reward Trigger & Value (RESOLVED WITH PLACEHOLDER)
+- **Item**: Which payment event generates the one-time referral reward and its calculation.
+- **Applied Default**: Trigger is `subscription` (first subscription payment), calculated as `10%` percentage of qualifying payment, subject to a `₹100` minimum qualifying amount.
+- **Open for Decision**: Admin can toggle to `topup` (first wallet top-up deposit) or flat ₹ amount via `/admin/referrals/settings`, or set bespoke overrides per specific agent.
+
+### 6.3 Referrer Suspension vs Deletion Lifecycle Rule (RESOLVED)
+- **Decision Applied**: If a referrer account is suspended due to subscription grace expiry, pending referral rewards in hold period continue to mature normally. If a referrer account is permanently deleted/purged via the admin console, all pending payouts are automatically cancelled with reason `'referrer_account_deleted'` and ₹0 wallet action attempted.
+

@@ -310,6 +310,32 @@ class NotificationTemplateService
                 'category' => 'usage_reports',
             ],
 
+            // Referral & Earn
+            'referral.reward_pending' => [
+                'subject' => 'New Referral Reward Pending',
+                'body_template' => 'Your referral {referee_name} made their first qualifying payment of ₹{payment_amount}. Your reward of ₹{reward_amount} is pending and will be credited to your wallet in {hold_days} days.',
+                'priority' => 'routine',
+                'category' => 'billing',
+            ],
+            'referral.reward_paid' => [
+                'subject' => 'Referral Reward Credited! 🎉',
+                'body_template' => 'Your referral reward of ₹{reward_amount} for referring {referee_name} has cleared its hold period and was credited to your wallet.',
+                'priority' => 'routine',
+                'category' => 'billing',
+            ],
+            'referral.reward_cancelled' => [
+                'subject' => 'Referral Reward Cancelled',
+                'body_template' => 'Your pending referral reward of ₹{reward_amount} for {referee_name} was cancelled due to: {reason}.',
+                'priority' => 'routine',
+                'category' => 'billing',
+            ],
+            'referral.reward_clawed_back' => [
+                'subject' => 'Referral Reward Reversed',
+                'body_template' => 'A previously paid referral reward of ₹{reward_amount} for {referee_name} was reversed from your wallet due to: {reason}.',
+                'priority' => 'routine',
+                'category' => 'billing',
+            ],
+
             // System / Auth
             'auth.welcome' => [
                 'subject' => 'Welcome to NBPDCL SaaS Billing Platform',
