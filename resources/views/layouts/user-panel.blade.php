@@ -116,42 +116,81 @@
                 </div>
             </div>
 
-            <!-- User Panel Navigation Links -->
-            <nav class="p-4 space-y-1.5 text-xs font-semibold">
-                <a href="{{ route('user-panel.index') }}" 
-                   class="flex items-center gap-3 px-3.5 py-3 rounded-xl transition {{ request()->routeIs('user-panel.index') ? 'bg-brand-600 text-white font-bold shadow-md shadow-brand-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60' }}">
-                    <span class="text-base">📊</span>
-                    <span>Overview & Stats</span>
-                </a>
-
-                <a href="{{ route('user-panel.subscription') }}" 
-                   class="flex items-center gap-3 px-3.5 py-3 rounded-xl transition {{ request()->routeIs('user-panel.subscription') ? 'bg-brand-600 text-white font-bold shadow-md shadow-brand-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60' }}">
-                    <span class="text-base">💳</span>
-                    <div class="flex-1 flex items-center justify-between">
-                        <span>Subscription & Quotas</span>
-                        <span class="px-1.5 py-0.2 rounded text-[9px] font-mono font-black {{ request()->routeIs('user-panel.subscription') ? 'bg-white/20 text-white' : 'bg-brand-100 dark:bg-brand-950 text-brand-700 dark:text-cyan-300' }}">
-                            {{ strtoupper(Auth::user()->plan_tier ?? 'Free') }}
-                        </span>
+            <!-- User Panel Navigation Links (Categorized & Calibrated) -->
+            <nav class="p-4 space-y-4 text-xs font-semibold">
+                
+                <!-- Section 1: Account & Billing -->
+                <div class="space-y-1">
+                    <div class="px-3 py-1 text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider">
+                        Operator Account & Billing
                     </div>
-                </a>
 
-                <a href="{{ route('user-panel.shortcuts') }}" 
-                   class="flex items-center gap-3 px-3.5 py-3 rounded-xl transition {{ request()->routeIs('user-panel.shortcuts') ? 'bg-brand-600 text-white font-bold shadow-md shadow-brand-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60' }}">
-                    <span class="text-base">⌨️</span>
-                    <span>Keyboard Shortcuts</span>
-                </a>
+                    <a href="{{ route('user-panel.index') }}" 
+                       class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('user-panel.index') ? 'bg-brand-600 text-white font-bold shadow-md shadow-brand-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60' }}">
+                        <span class="text-base">📊</span>
+                        <span>Overview & Stats</span>
+                    </a>
 
-                <a href="{{ route('user-panel.preferences') }}" 
-                   class="flex items-center gap-3 px-3.5 py-3 rounded-xl transition {{ request()->routeIs('user-panel.preferences') ? 'bg-brand-600 text-white font-bold shadow-md shadow-brand-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60' }}">
-                    <span class="text-base">⚙️</span>
-                    <span>General Preferences</span>
-                </a>
+                    <a href="{{ route('user-panel.subscription') }}" 
+                       class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('user-panel.subscription') ? 'bg-brand-600 text-white font-bold shadow-md shadow-brand-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60' }}">
+                        <span class="text-base">💳</span>
+                        <div class="flex-1 flex items-center justify-between">
+                            <span>Subscription & Quotas</span>
+                            <span class="px-1.5 py-0.2 rounded text-[9px] font-mono font-black {{ request()->routeIs('user-panel.subscription') ? 'bg-white/20 text-white' : 'bg-brand-100 dark:bg-brand-950 text-brand-700 dark:text-cyan-300' }}">
+                                {{ strtoupper(Auth::user()->plan_tier ?? 'Free') }}
+                            </span>
+                        </div>
+                    </a>
 
-                <a href="{{ route('user-panel.profile') }}" 
-                   class="flex items-center gap-3 px-3.5 py-3 rounded-xl transition {{ request()->routeIs('user-panel.profile') ? 'bg-brand-600 text-white font-bold shadow-md shadow-brand-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60' }}">
-                    <span class="text-base">👤</span>
-                    <span>Profile & Security</span>
-                </a>
+                    <a href="{{ route('wallet.index') }}" 
+                       class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('wallet.*') ? 'bg-brand-600 text-white font-bold shadow-md shadow-brand-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60' }}">
+                        <span class="text-base">👛</span>
+                        <div class="flex-1 flex items-center justify-between">
+                            <span>Wallet & Ledger</span>
+                            <span class="text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                ₹{{ number_format(Auth::user()->balanceFloat, 2) }}
+                            </span>
+                        </div>
+                    </a>
+                </div>
+
+                <!-- Section 2: Growth & Rewards -->
+                <div class="space-y-1">
+                    <div class="px-3 py-1 text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider">
+                        Growth & Rewards
+                    </div>
+
+                    <a href="{{ route('referrals.index') }}" 
+                       class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('referrals.*') ? 'bg-brand-600 text-white font-bold shadow-md shadow-brand-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60' }}">
+                        <span class="text-base">🎁</span>
+                        <span>Refer & Earn Hub</span>
+                    </a>
+                </div>
+
+                <!-- Section 3: Customization & Security -->
+                <div class="space-y-1">
+                    <div class="px-3 py-1 text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider">
+                        Preferences & Security
+                    </div>
+
+                    <a href="{{ route('user-panel.shortcuts') }}" 
+                       class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('user-panel.shortcuts') ? 'bg-brand-600 text-white font-bold shadow-md shadow-brand-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60' }}">
+                        <span class="text-base">⌨️</span>
+                        <span>Keyboard Shortcuts</span>
+                    </a>
+
+                    <a href="{{ route('user-panel.preferences') }}" 
+                       class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('user-panel.preferences') ? 'bg-brand-600 text-white font-bold shadow-md shadow-brand-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60' }}">
+                        <span class="text-base">⚙️</span>
+                        <span>General Preferences</span>
+                    </a>
+
+                    <a href="{{ route('user-panel.profile') }}" 
+                       class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('user-panel.profile') ? 'bg-brand-600 text-white font-bold shadow-md shadow-brand-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60' }}">
+                        <span class="text-base">👤</span>
+                        <span>Profile & Security</span>
+                    </a>
+                </div>
             </nav>
         </div>
 
@@ -159,14 +198,14 @@
         <div class="p-4 border-t border-slate-200 dark:border-slate-800 space-y-2 bg-slate-50/50 dark:bg-slate-950/40">
             <!-- Switch to Working Mode -->
             <a href="{{ route('dashboard') }}" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-brand-600 to-cyan-600 hover:from-brand-500 hover:to-cyan-500 shadow-md shadow-brand-500/20 transition group">
-                <span>⚡ Switch to Working Mode</span>
+                <span>⚡ Enter Working Mode</span>
                 <span class="group-hover:translate-x-0.5 transition">→</span>
             </a>
 
             @if(Auth::user()->hasRole('admin'))
                 <!-- Switch to Admin Panel -->
                 <a href="{{ route('admin.dashboard') }}" class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200/60 dark:border-indigo-800/60 transition">
-                    <span>👑 Admin Panel</span>
+                    <span>👑 SaaS Admin Panel</span>
                 </a>
             @endif
 

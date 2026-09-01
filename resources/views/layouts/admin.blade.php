@@ -60,169 +60,197 @@
                 </button>
             </div>
 
-            <!-- Navigation Links -->
-            <nav class="p-4 space-y-1.5 text-sm font-medium">
-                <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {{ request()->routeIs('admin.dashboard') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
-                    Dashboard
-                </a>
+            <!-- Navigation Links (Categorized & Calibrated) -->
+            <nav class="p-4 space-y-5 text-xs font-semibold">
+                
+                <!-- Section 1: Operations & Agents -->
+                <div class="space-y-1">
+                    <div class="px-3 py-1 text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                        Operations & Agents
+                    </div>
 
-                <a href="{{ route('admin.users.index') }}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {{ request()->routeIs('admin.users.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-                    Users & Billing Agents
-                </a>
+                    <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.dashboard') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">📊</span>
+                        <span>Dashboard</span>
+                    </a>
 
-                <a href="{{ route('admin.bills.index') }}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {{ request()->routeIs('admin.bills.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    All Bills Inspector
-                </a>
+                    <a href="{{ route('admin.users.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.users.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">👥</span>
+                        <span>Users & Billing Agents</span>
+                    </a>
 
-                <!-- MRU Master List -->
-                <a href="{{ route('admin.mrus.index') }}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {{ request()->routeIs('admin.mrus.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                    MRU Master List
-                </a>
+                    <a href="{{ route('admin.mrus.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.mrus.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">🗂️</span>
+                        <span>MRU Master List</span>
+                    </a>
 
-                <!-- Agent Wallets Master -->
-                <a href="{{ route('admin.wallets.index') }}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {{ request()->routeIs('admin.wallets.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
-                    <span class="text-base">👛</span>
-                    Agent Wallets
-                </a>
+                    <a href="{{ route('admin.bills.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.bills.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">📑</span>
+                        <span>All Bills Inspector</span>
+                    </a>
+                </div>
 
-                <!-- Payments & Finance Section -->
-                @php
-                    $navPendingPayments = \App\Models\Payment::withoutUserScope()->where('status', \App\Enums\PaymentStatus::PENDING_VERIFICATION->value)->count();
-                    $isPaymentRoute = request()->routeIs('admin.payments.*');
-                @endphp
-                <div x-data="{ open: {{ $isPaymentRoute ? 'true' : 'false' }} }" class="space-y-1">
-                    <button type="button" @click="open = !open" class="w-full flex items-center justify-between px-4 py-3 rounded-xl transition {{ $isPaymentRoute ? 'bg-slate-900 text-white font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
-                        <div class="flex items-center gap-3">
-                            <span class="text-base">💳</span>
-                            <span>Payments & Finance</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            @if($navPendingPayments > 0)
-                                <span class="px-2 py-0.5 text-[10px] font-black rounded-full bg-amber-500 text-slate-950 animate-pulse">
-                                    {{ $navPendingPayments }}
-                                </span>
-                            @endif
-                            <svg class="w-4 h-4 transition-transform duration-200" :class="open ? 'rotate-180 text-indigo-400' : 'text-slate-500'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                        </div>
-                    </button>
+                <!-- Section 2: Finance & Payments -->
+                <div class="space-y-1">
+                    <div class="px-3 py-1 text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                        Finance & Ledger
+                    </div>
 
-                    <!-- Sub-Menu Links -->
-                    <div x-show="open" x-cloak class="pl-4 pr-1 py-1 space-y-1 border-l-2 border-slate-800 ml-5 my-1">
-                        <a href="{{ route('admin.payments.index') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.payments.index') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
-                            <span>📋</span> All Transactions
-                        </a>
+                    <a href="{{ route('admin.wallets.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.wallets.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">👛</span>
+                        <span>Agent Wallets</span>
+                    </a>
 
-                        <a href="{{ route('admin.payments.manual') }}" class="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.payments.manual') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
-                            <div class="flex items-center gap-2.5">
-                                <span>⏳</span> Manual Verification
+                    @php
+                        $navPendingPayments = \App\Models\Payment::withoutUserScope()->where('status', \App\Enums\PaymentStatus::PENDING_VERIFICATION->value)->count();
+                        $isPaymentRoute = request()->routeIs('admin.payments.*');
+                    @endphp
+                    <div x-data="{ open: {{ $isPaymentRoute ? 'true' : 'false' }} }" class="space-y-1">
+                        <button type="button" @click="open = !open" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition {{ $isPaymentRoute ? 'bg-slate-900 text-white font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                            <div class="flex items-center gap-3">
+                                <span class="text-base">💳</span>
+                                <span>Payments & Gateway</span>
                             </div>
-                            @if($navPendingPayments > 0)
-                                <span class="px-1.5 py-0.2 text-[9px] font-bold rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                                    {{ $navPendingPayments }}
-                                </span>
-                            @endif
-                        </a>
+                            <div class="flex items-center gap-2">
+                                @if($navPendingPayments > 0)
+                                    <span class="px-2 py-0.5 text-[10px] font-black rounded-full bg-amber-500 text-slate-950 animate-pulse">
+                                        {{ $navPendingPayments }}
+                                    </span>
+                                @endif
+                                <svg class="w-4 h-4 transition-transform duration-200" :class="open ? 'rotate-180 text-indigo-400' : 'text-slate-500'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                            </div>
+                        </button>
 
-                        <a href="{{ route('admin.payments.analytics') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.payments.analytics') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
-                            <span>📊</span> Analytics & Reports
-                        </a>
+                        <!-- Sub-Menu Links -->
+                        <div x-show="open" x-cloak class="pl-4 pr-1 py-1 space-y-1 border-l-2 border-slate-800 ml-5 my-1">
+                            <a href="{{ route('admin.payments.index') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.payments.index') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
+                                <span>📋</span> All Transactions
+                            </a>
 
-                        <a href="{{ route('admin.payments.audit') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.payments.audit') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
-                            <span>📜</span> Audit Trail
-                        </a>
+                            <a href="{{ route('admin.payments.manual') }}" class="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.payments.manual') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
+                                <div class="flex items-center gap-2.5">
+                                    <span>⏳</span> Manual Approvals
+                                </div>
+                                @if($navPendingPayments > 0)
+                                    <span class="px-1.5 py-0.2 text-[9px] font-bold rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                        {{ $navPendingPayments }}
+                                    </span>
+                                @endif
+                            </a>
 
-                        <a href="{{ route('admin.payments.simulator') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.payments.simulator*') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
-                            <span>🧪</span> Test Simulator
-                        </a>
+                            <a href="{{ route('admin.payments.analytics') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.payments.analytics') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
+                                <span>📊</span> Revenue Analytics
+                            </a>
 
-                        <a href="{{ route('admin.payments.settings') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.payments.settings') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
-                            <span>⚙️</span> Gateway Settings
-                        </a>
+                            <a href="{{ route('admin.payments.audit') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.payments.audit') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
+                                <span>📜</span> Audit Trail
+                            </a>
+
+                            <a href="{{ route('admin.payments.settings') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.payments.settings') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
+                                <span>⚙️</span> Gateway Settings
+                            </a>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Subscription Plans Management -->
-                <a href="{{ route('admin.plans.index') }}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {{ request()->routeIs('admin.plans.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
-                    <span class="text-base">📋</span>
-                    Subscription Plans
-                </a>
+                <!-- Section 3: Plans & Subscriptions -->
+                <div class="space-y-1">
+                    <div class="px-3 py-1 text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                        Plans & Subscriptions
+                    </div>
 
-                <!-- Agent Subscriptions & Lifecycle -->
-                <a href="{{ route('admin.subscriptions.index') }}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {{ request()->routeIs('admin.subscriptions.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
-                    <span class="text-base">🔄</span>
-                    Agent Subscriptions
-                </a>
+                    <a href="{{ route('admin.plans.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.plans.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">📋</span>
+                        <span>Subscription Plans</span>
+                    </a>
 
-                <!-- Coupon Codes Management Hub -->
-                <a href="{{ route('admin.coupons.index') }}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {{ request()->routeIs('admin.coupons.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
-                    <span class="text-base">🎟️</span>
-                    Coupon Codes
-                </a>
+                    <a href="{{ route('admin.subscriptions.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.subscriptions.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">🔄</span>
+                        <span>Agent Subscriptions</span>
+                    </a>
+                </div>
 
-                <!-- Refer & Earn System -->
-                <a href="{{ route('admin.referrals.settings') }}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {{ request()->routeIs('admin.referrals.*') ? 'bg-purple-600 text-white font-bold shadow-lg shadow-purple-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
-                    <span class="text-base">🎁</span>
-                    Refer & Earn
-                </a>
+                <!-- Section 4: Marketing & Growth -->
+                <div class="space-y-1">
+                    <div class="px-3 py-1 text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                        Marketing & Growth
+                    </div>
 
-                <!-- Shortcut Defaults -->
-                <a href="{{ route('admin.shortcuts.index') }}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {{ request()->routeIs('admin.shortcuts.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
-                    <span class="text-base">⌨️</span>
-                    Shortcut Defaults
-                </a>
+                    <a href="{{ route('admin.coupons.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.coupons.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">🎟️</span>
+                        <span>Coupon Campaigns</span>
+                    </a>
 
-                <!-- Bill Review Tags -->
-                <a href="{{ route('admin.tags.index') }}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {{ request()->routeIs('admin.tags.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
-                    <span class="text-base">🏷️</span>
-                    Review Tags
-                </a>
+                    <a href="{{ route('admin.referrals.settings') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.referrals.*') ? 'bg-purple-600 text-white font-bold shadow-lg shadow-purple-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">🎁</span>
+                        <span>Refer & Earn Program</span>
+                    </a>
+                </div>
 
-                <!-- Platform Usage Reports -->
-                <a href="{{ route('admin.reports.index') }}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition {{ request()->routeIs('admin.reports.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
-                    <span class="text-base">📊</span>
-                    Usage & Health Reports
-                </a>
+                <!-- Section 5: System Config & Reports -->
+                <div class="space-y-1">
+                    <div class="px-3 py-1 text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                        System Config & Logs
+                    </div>
 
-                <!-- Notification Engine -->
-                <div x-data="{ notifNav: {{ request()->routeIs('admin.notifications.*') ? 'true' : 'false' }} }" class="space-y-1">
-                    <button type="button" @click="notifNav = !notifNav" class="w-full flex items-center justify-between px-4 py-3 rounded-xl transition {{ request()->routeIs('admin.notifications.*') ? 'bg-slate-900 text-white font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
-                        <div class="flex items-center gap-3">
-                            <span class="text-base">🔔</span>
-                            <span>Notifications</span>
+                    <a href="{{ route('admin.shortcuts.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.shortcuts.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">⌨️</span>
+                        <span>Shortcut Defaults</span>
+                    </a>
+
+                    <a href="{{ route('admin.tags.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.tags.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">🏷️</span>
+                        <span>Review Tags</span>
+                    </a>
+
+                    <a href="{{ route('admin.reports.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.reports.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">📊</span>
+                        <span>Usage & Health Reports</span>
+                    </a>
+
+                    <!-- Notification Engine Dropdown -->
+                    <div x-data="{ notifNav: {{ request()->routeIs('admin.notifications.*') ? 'true' : 'false' }} }" class="space-y-1">
+                        <button type="button" @click="notifNav = !notifNav" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.notifications.*') ? 'bg-slate-900 text-white font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                            <div class="flex items-center gap-3">
+                                <span class="text-base">🔔</span>
+                                <span>Notifications Hub</span>
+                            </div>
+                            <svg class="w-4 h-4 transition-transform text-slate-500" :class="notifNav ? 'rotate-180 text-indigo-400' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+
+                        <div x-show="notifNav" x-cloak class="pl-6 pr-1 py-1 space-y-1 border-l-2 border-slate-800 ml-5">
+                            <a href="{{ route('admin.notifications.email_providers.index') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.notifications.email_providers.*') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
+                                <span>⚡</span> Email Providers
+                            </a>
+                            <a href="{{ route('admin.notifications.templates.index') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.notifications.templates.*') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
+                                <span>📑</span> Templates
+                            </a>
+                            <a href="{{ route('admin.notifications.failed_queue') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.notifications.failed_queue') ? 'text-rose-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
+                                <span>🚨</span> Failed Queue
+                            </a>
                         </div>
-                        <svg class="w-4 h-4 transition-transform text-slate-500" :class="notifNav ? 'rotate-180 text-indigo-400' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                    </button>
-
-                    <div x-show="notifNav" x-cloak class="pl-7 pr-2 py-1 space-y-1 border-l-2 border-slate-800 ml-4">
-                        <a href="{{ route('admin.notifications.email_providers.index') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.notifications.email_providers.*') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
-                            <span>⚡</span> Email Providers
-                        </a>
-                        <a href="{{ route('admin.notifications.templates.index') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.notifications.templates.*') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
-                            <span>📑</span> Message Templates
-                        </a>
-                        <a href="{{ route('admin.notifications.failed_queue') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.notifications.failed_queue') ? 'text-rose-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
-                            <span>🚨</span> Failed Critical Queue
-                        </a>
                     </div>
                 </div>
             </nav>
         </div>
 
-        <!-- Bottom Actions -->
-        <div class="p-4 border-t border-slate-800/80 space-y-2">
-            <a href="{{ route('dashboard') }}" class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-cyan-400 bg-slate-900 hover:bg-slate-800 border border-cyan-500/20 transition">
-                <span>⚡</span> Switch to Client View
+        <!-- Mode Switcher Bottom Actions -->
+        <div class="p-4 border-t border-slate-800/80 space-y-2 bg-slate-950/60">
+            <!-- Switch to Working Mode -->
+            <a href="{{ route('dashboard') }}" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-950 bg-gradient-to-r from-emerald-400 to-cyan-400 hover:from-emerald-300 hover:to-cyan-300 shadow-md shadow-cyan-500/20 transition group">
+                <span>⚡ Enter Working Mode</span>
+                <span class="group-hover:translate-x-0.5 transition">→</span>
+            </a>
+
+            <!-- Switch to User Control Panel -->
+            <a href="{{ route('user-panel.index') }}" class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 transition">
+                <span>👤 User Control Panel</span>
             </a>
 
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
-                <button type="submit" class="w-full flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013 3v1"/></svg>
-                    Log Out
+                <button type="submit" class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 transition">
+                    <span>🚪 Log Out</span>
                 </button>
             </form>
         </div>
@@ -231,8 +259,8 @@
     <!-- Main Content Area -->
     <div class="flex-1 flex flex-col min-h-screen overflow-x-hidden">
         <x-impersonation-banner />
-        <!-- Top Nav -->
-        <header class="h-16 bg-slate-950/70 backdrop-blur-md border-b border-slate-800 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-20">
+        <!-- Top Nav Header with Mode Switchers -->
+        <header class="h-16 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-20">
             <div class="flex items-center gap-3">
                 <button @click="sidebarOpen = !sidebarOpen" class="p-2 -ml-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-900 md:hidden transition">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
@@ -242,11 +270,23 @@
                 </h2>
             </div>
 
-            <div class="flex items-center gap-2 sm:gap-4">
-                <span class="text-[10px] sm:text-xs font-semibold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                    Administrator
-                </span>
-                <span class="text-xs sm:text-sm font-semibold text-slate-300 hidden sm:inline">{{ Auth::user()->name }}</span>
+            <div class="flex items-center gap-2 sm:gap-3">
+                <!-- Fast Switch to Working Mode -->
+                <a href="{{ route('dashboard') }}" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-cyan-300 bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/30 transition shadow-xs">
+                    <span>⚡ Enter Working Mode</span>
+                </a>
+
+                <!-- Fast Switch to User Panel -->
+                <a href="{{ route('user-panel.index') }}" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-800 transition shadow-xs">
+                    <span>👤 User Panel</span>
+                </a>
+
+                <div class="flex items-center gap-2 pl-2 border-l border-slate-800">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+                        👑 Admin
+                    </span>
+                    <span class="text-xs font-bold text-slate-200 hidden md:inline">{{ Auth::user()->name }}</span>
+                </div>
             </div>
         </header>
 

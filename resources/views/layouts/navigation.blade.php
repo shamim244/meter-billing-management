@@ -20,7 +20,7 @@
                     </div>
                 </a>
 
-                <!-- Desktop Navigation Links -->
+                <!-- Desktop Navigation Links (Working Mode Operational Focus) -->
                 <div class="hidden sm:flex items-center gap-1.5">
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                         <span>📊</span>
@@ -42,43 +42,35 @@
                         <span>PDF Manager</span>
                     </x-nav-link>
 
-                    <x-nav-link :href="route('wallet.index')" :active="request()->routeIs('wallet.*')">
-                        <span>👛</span>
-                        <span>Wallet</span>
-                    </x-nav-link>
-
                     <x-nav-link :href="route('reports.usage')" :active="request()->routeIs('reports.*')">
                         <span>📈</span>
                         <span>Reports</span>
                     </x-nav-link>
-
-                    <x-nav-link :href="route('referrals.index')" :active="request()->routeIs('referrals.*')">
-                        <span>🎁</span>
-                        <span>Refer & Earn</span>
-                    </x-nav-link>
-
-                    <x-nav-link :href="route('user-panel.index')" :active="request()->routeIs('user-panel.*')">
-                        <span>👤</span>
-                        <span>User Panel</span>
-                    </x-nav-link>
-
-                    @if(Auth::user()->hasRole('admin'))
-                        <x-nav-link :href="route('admin.dashboard')" :active="request()->routeIs('admin.*')">
-                            <span>👑</span>
-                            <span>Admin</span>
-                        </x-nav-link>
-                    @endif
                 </div>
             </div>
 
-            <!-- Right Side Controls: Status, Theme Toggle & User Menu -->
+            <!-- Right Side Controls: Status, Mode Indicator, Theme Toggle & User Menu -->
             <div class="hidden sm:flex sm:items-center gap-3">
                 
-                <!-- System Status Indicator -->
-                <div class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/20 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span>Online</span>
+                <!-- Working Mode Active Badge -->
+                <div class="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-500/10 dark:bg-brand-500/15 border border-brand-500/20 text-[11px] font-bold text-brand-600 dark:text-cyan-400 shadow-xs">
+                    <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                    <span>⚡ Working Mode</span>
                 </div>
+
+                <!-- User Control Panel Fast Switch Button -->
+                <a href="{{ route('user-panel.index') }}" class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 transition">
+                    <span>👤</span>
+                    <span>User Panel</span>
+                </a>
+
+                @if(Auth::user()->hasRole('admin'))
+                    <!-- Admin Panel Fast Switch Button -->
+                    <a href="{{ route('admin.dashboard') }}" class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800/80 transition">
+                        <span>👑</span>
+                        <span>Admin</span>
+                    </a>
+                @endif
 
                 <!-- Notification Bell Dropdown -->
                 <div x-data="{
@@ -184,9 +176,9 @@
                 </div>
 
                 <!-- User Dropdown Menu -->
-                <x-dropdown align="right" width="56">
+                <x-dropdown align="right" width="64">
                     <x-slot name="trigger">
-                        <button class="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/80 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold text-xs transition shadow-sm">
+                        <button class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/80 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold text-xs transition shadow-sm">
                             <div class="w-6 h-6 rounded-lg bg-gradient-to-tr from-brand-600 to-cyan-400 text-white font-black text-[10px] flex items-center justify-center font-mono shadow-sm">
                                 {{ strtoupper(substr(Auth::user()->name, 0, 2)) }}
                             </div>
@@ -200,25 +192,49 @@
 
                     <x-slot name="content">
                         <!-- User Card Info -->
-                        <div class="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-800">
+                        <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
                             <div class="text-xs font-bold text-slate-900 dark:text-white truncate">{{ Auth::user()->name }}</div>
                             <div class="text-[11px] font-mono text-slate-400 truncate">{{ Auth::user()->email }}</div>
-                            <div class="mt-1 flex items-center gap-1.5">
-                                <span class="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded {{ Auth::user()->hasRole('admin') ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300' : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' }}">
-                                    {{ Auth::user()->hasRole('admin') ? 'Administrator' : 'Operator' }}
+                            <div class="mt-2 flex items-center justify-between">
+                                <span class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full {{ Auth::user()->hasRole('admin') ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30' : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' }}">
+                                    {{ Auth::user()->hasRole('admin') ? '👑 Administrator' : '⚡ Operator' }}
+                                </span>
+                                <span class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-600 dark:text-cyan-400 border border-brand-500/20">
+                                    {{ strtoupper(Auth::user()->plan_tier ?? 'Free') }}
                                 </span>
                             </div>
                         </div>
 
+                        <!-- Quick Wallet Balance Pill -->
+                        <div class="p-2.5 bg-slate-50/80 dark:bg-slate-950/60 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                            <div>
+                                <span class="text-[10px] text-slate-400 font-bold block">WALLET BALANCE</span>
+                                <span class="text-xs font-black text-emerald-600 dark:text-emerald-400 font-mono">₹{{ number_format(Auth::user()->balanceFloat, 2) }}</span>
+                            </div>
+                            <a href="{{ route('payments.create') }}" class="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition">
+                                + Top Up
+                            </a>
+                        </div>
+
                         <div class="py-1">
-                            <x-dropdown-link :href="route('user-panel.index')">
+                            <x-dropdown-link :href="route('user-panel.index')" class="font-semibold">
                                 <span>👤</span>
                                 <span>User Control Panel</span>
+                            </x-dropdown-link>
+
+                            <x-dropdown-link :href="route('referrals.index')">
+                                <span>🎁</span>
+                                <span>Refer & Earn Program</span>
                             </x-dropdown-link>
 
                             <x-dropdown-link :href="route('user-panel.subscription')">
                                 <span>💳</span>
                                 <span>Subscription & Quotas</span>
+                            </x-dropdown-link>
+
+                            <x-dropdown-link :href="route('wallet.index')">
+                                <span>👛</span>
+                                <span>Wallet & Ledger</span>
                             </x-dropdown-link>
 
                             <x-dropdown-link :href="route('user-panel.shortcuts')">
@@ -228,13 +244,14 @@
 
                             <x-dropdown-link :href="route('user-panel.preferences')">
                                 <span>⚙️</span>
-                                <span>Preferences</span>
+                                <span>General Preferences</span>
                             </x-dropdown-link>
 
                             @if(Auth::user()->hasRole('admin'))
-                                <x-dropdown-link :href="route('admin.dashboard')">
+                                <div class="my-1 border-t border-slate-100 dark:border-slate-800"></div>
+                                <x-dropdown-link :href="route('admin.dashboard')" class="text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50/50 dark:bg-indigo-950/30">
                                     <span>👑</span>
-                                    <span>Admin Panel</span>
+                                    <span>SaaS Admin Panel →</span>
                                 </x-dropdown-link>
                             @endif
                         </div>
@@ -295,7 +312,12 @@
 
     <!-- Responsive Mobile Drawer -->
     <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 pt-3 pb-5 space-y-3">
+        <!-- Working Mode Operational Links -->
         <div class="space-y-1">
+            <div class="px-3 py-1 text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider">
+                ⚡ Working Operations
+            </div>
+
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 <span>📊</span>
                 <span class="font-bold">Dashboard</span>
@@ -316,25 +338,37 @@
                 <span class="font-bold">PDF Manager</span>
             </x-responsive-nav-link>
 
-            <x-responsive-nav-link :href="route('wallet.index')" :active="request()->routeIs('wallet.*')">
-                <span>👛</span>
-                <span class="font-bold">Wallet & Ledger</span>
-            </x-responsive-nav-link>
-
             <x-responsive-nav-link :href="route('reports.usage')" :active="request()->routeIs('reports.*')">
                 <span>📈</span>
                 <span class="font-bold">Usage & Reports</span>
             </x-responsive-nav-link>
+        </div>
 
-            <x-responsive-nav-link :href="route('user-panel.index')" :active="request()->routeIs('user-panel.*')">
+        <!-- Mode Switchers & Account Links -->
+        <div class="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-1">
+            <div class="px-3 py-1 text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider">
+                👤 Control & Account Hub
+            </div>
+
+            <x-responsive-nav-link :href="route('user-panel.index')" :active="request()->routeIs('user-panel.index')">
                 <span>👤</span>
-                <span class="font-bold">User Panel</span>
+                <span class="font-bold">User Control Panel</span>
+            </x-responsive-nav-link>
+
+            <x-responsive-nav-link :href="route('referrals.index')" :active="request()->routeIs('referrals.*')">
+                <span>🎁</span>
+                <span class="font-bold">Refer & Earn Program</span>
+            </x-responsive-nav-link>
+
+            <x-responsive-nav-link :href="route('wallet.index')" :active="request()->routeIs('wallet.*')">
+                <span>👛</span>
+                <span class="font-bold">Wallet Ledger</span>
             </x-responsive-nav-link>
 
             @if(Auth::user()->hasRole('admin'))
-                <x-responsive-nav-link :href="route('admin.dashboard')" :active="request()->routeIs('admin.*')">
+                <x-responsive-nav-link :href="route('admin.dashboard')" :active="request()->routeIs('admin.*')" class="text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50/50 dark:bg-indigo-950/30">
                     <span>👑</span>
-                    <span class="font-bold">Admin Panel</span>
+                    <span class="font-bold">SaaS Admin Panel</span>
                 </x-responsive-nav-link>
             @endif
         </div>
