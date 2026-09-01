@@ -95,8 +95,6 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
     Route::post('/payments', [\App\Http\Controllers\PaymentController::class, 'store'])->name('payments.store');
     Route::post('/payments/validate-coupon', [\App\Http\Controllers\PaymentController::class, 'validateCoupon'])->middleware('throttle:30,1')->name('payments.validate-coupon');
     Route::get('/payments/verify', [\App\Http\Controllers\PaymentController::class, 'verify'])->name('payments.verify');
-    Route::get('/payments/sandbox', [\App\Http\Controllers\PaymentController::class, 'sandbox'])->name('payments.sandbox');
-    Route::post('/payments/sandbox/checkout', [\App\Http\Controllers\PaymentController::class, 'sandboxCheckout'])->name('payments.sandbox.checkout');
 
     // Agent Wallet Ledger & Dashboard
     Route::get('/wallet', [\App\Http\Controllers\WalletController::class, 'index'])->name('wallet.index');

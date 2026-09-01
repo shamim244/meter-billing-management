@@ -14,9 +14,6 @@
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <a href="{{ route('payments.sandbox') }}" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
-                        <span>🧪</span> Test Sandbox Mode
-                    </a>
                     <a href="{{ route('payments.create') }}" class="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition flex items-center gap-2">
                         <span>⚡</span> Make a Payment / Top-Up
                     </a>

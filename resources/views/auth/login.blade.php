@@ -3,11 +3,7 @@
         email: '{{ old('email', '') }}',
         password: '',
         showPassword: false,
-        isSubmitting: false,
-        fillDemo(demoEmail, demoPass) {
-            this.email = demoEmail;
-            this.password = demoPass;
-        }
+        isSubmitting: false
     }" class="w-full max-w-md mx-auto">
 
         <!-- Glassmorphism Main Card -->
@@ -34,30 +30,6 @@
                     <span>{{ session('status') }}</span>
                 </div>
             @endif
-
-            <!-- Quick Demo Credentials Box -->
-            <div class="mb-6 p-3 rounded-2xl bg-slate-950/60 border border-slate-800/80">
-                <div class="flex items-center justify-between text-[11px] font-bold text-slate-400 mb-2">
-                    <span class="flex items-center gap-1 text-cyan-400">
-                        ⚡ Quick Demo Access:
-                    </span>
-                    <span class="text-[10px] text-slate-500">1-Click Fill</span>
-                </div>
-                <div class="grid grid-cols-2 gap-2">
-                    <button type="button" 
-                            @click="fillDemo('admin@nbpdcl-saas.com', 'password')"
-                            class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-brand-950/60 text-slate-300 hover:text-brand-300 border border-slate-800 hover:border-brand-500/40 text-[11px] font-semibold transition text-left flex items-center justify-between group">
-                        <span>🛡️ Admin</span>
-                        <span class="text-[9px] text-slate-500 group-hover:text-brand-400 font-mono">Fill →</span>
-                    </button>
-                    <button type="button" 
-                            @click="fillDemo('test@example.com', 'password')"
-                            class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-cyan-950/60 text-slate-300 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/40 text-[11px] font-semibold transition text-left flex items-center justify-between group">
-                        <span>👤 Operator</span>
-                        <span class="text-[9px] text-slate-500 group-hover:text-cyan-400 font-mono">Fill →</span>
-                    </button>
-                </div>
-            </div>
 
             <!-- Login Form -->
             <form method="POST" action="{{ route('login') }}" @submit="isSubmitting = true" class="space-y-4">
