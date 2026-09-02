@@ -196,7 +196,8 @@
                     <div>
                         <label class="block text-slate-400 font-bold uppercase text-[10px] mb-1">Driver Type</label>
                         <select name="driver_type" x-model="driverType" class="w-full bg-slate-950 border-slate-800 rounded-xl text-white py-2 px-3 focus:ring-indigo-500">
-                            <option value="smtp">SMTP Server (Primary / Default)</option>
+                            <option value="hostinger">Hostinger Mail REST API (Official)</option>
+                            <option value="smtp">SMTP Server (Primary / Failover)</option>
                             <option value="resend">Resend API</option>
                             <option value="brevo">Brevo (Sendinblue) API</option>
                         </select>
@@ -204,7 +205,7 @@
 
                     <div>
                         <label class="block text-slate-400 font-bold uppercase text-[10px] mb-1">Provider Label</label>
-                        <input type="text" name="label" required placeholder="e.g. Primary Resend API or Backup SMTP" class="w-full bg-slate-950 border-slate-800 rounded-xl text-white py-2 px-3 focus:ring-indigo-500" />
+                        <input type="text" name="label" required placeholder="e.g. Hostinger Mail API or Backup SMTP" class="w-full bg-slate-950 border-slate-800 rounded-xl text-white py-2 px-3 focus:ring-indigo-500" />
                     </div>
 
                     <div>
@@ -218,7 +219,7 @@
                             <div class="grid grid-cols-2 gap-3">
                                 <div>
                                     <label class="block text-slate-400 font-bold uppercase text-[10px] mb-1">SMTP Host</label>
-                                    <input type="text" name="smtp_host" placeholder="smtp.gmail.com / mail.host.com" class="w-full bg-slate-900 border-slate-700 rounded-xl text-white py-2 px-3" />
+                                    <input type="text" name="smtp_host" placeholder="smtp.hostinger.com" class="w-full bg-slate-900 border-slate-700 rounded-xl text-white py-2 px-3" />
                                 </div>
                                 <div>
                                     <label class="block text-slate-400 font-bold uppercase text-[10px] mb-1">SMTP Port</label>
@@ -228,7 +229,7 @@
                             <div class="grid grid-cols-2 gap-3">
                                 <div>
                                     <label class="block text-slate-400 font-bold uppercase text-[10px] mb-1">Username</label>
-                                    <input type="text" name="smtp_username" class="w-full bg-slate-900 border-slate-700 rounded-xl text-white py-2 px-3" />
+                                    <input type="text" name="smtp_username" placeholder="agent@nexgenhub.site" class="w-full bg-slate-900 border-slate-700 rounded-xl text-white py-2 px-3" />
                                 </div>
                                 <div>
                                     <label class="block text-slate-400 font-bold uppercase text-[10px] mb-1">Password</label>
@@ -247,11 +248,11 @@
                     </template>
 
                     <!-- API Key Fields -->
-                    <template x-if="driverType === 'resend' || driverType === 'brevo'">
+                    <template x-if="driverType === 'resend' || driverType === 'brevo' || driverType === 'hostinger'">
                         <div class="space-y-3 p-3 bg-slate-950/60 rounded-xl border border-slate-800">
                             <div>
-                                <label class="block text-slate-400 font-bold uppercase text-[10px] mb-1" x-text="driverType === 'resend' ? 'Resend API Key (re_...)' : 'Brevo API Key (xkeysib-...)'"></label>
-                                <input type="password" name="api_key" placeholder="Enter secret API key" class="w-full bg-slate-900 border-slate-700 rounded-xl text-white py-2 px-3" />
+                                <label class="block text-slate-400 font-bold uppercase text-[10px] mb-1" x-text="driverType === 'hostinger' ? 'Hostinger Mail API Token' : (driverType === 'resend' ? 'Resend API Key (re_...)' : 'Brevo API Key (xkeysib-...)')"></label>
+                                <input type="password" name="api_key" placeholder="Enter API Token" class="w-full bg-slate-900 border-slate-700 rounded-xl text-white py-2 px-3 font-mono" />
                             </div>
                         </div>
                     </template>
@@ -341,11 +342,11 @@
                     </template>
 
                     <!-- API Key Fields -->
-                    <template x-if="editData.driver_type === 'resend' || editData.driver_type === 'brevo'">
+                    <template x-if="editData.driver_type === 'resend' || editData.driver_type === 'brevo' || editData.driver_type === 'hostinger'">
                         <div class="space-y-3 p-3 bg-slate-950/60 rounded-xl border border-slate-800">
                             <div>
-                                <label class="block text-slate-400 font-bold uppercase text-[10px] mb-1" x-text="editData.driver_type === 'resend' ? 'Resend API Key' : 'Brevo API Key'"></label>
-                                <input type="password" name="api_key" placeholder="Leave blank to keep existing key" class="w-full bg-slate-900 border-slate-700 rounded-xl text-white py-2 px-3" />
+                                <label class="block text-slate-400 font-bold uppercase text-[10px] mb-1" x-text="editData.driver_type === 'hostinger' ? 'Hostinger Mail API Token' : (editData.driver_type === 'resend' ? 'Resend API Key' : 'Brevo API Key')"></label>
+                                <input type="password" name="api_key" placeholder="Leave blank to keep existing token" class="w-full bg-slate-900 border-slate-700 rounded-xl text-white py-2 px-3 font-mono" />
                             </div>
                         </div>
                     </template>

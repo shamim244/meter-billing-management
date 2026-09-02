@@ -222,6 +222,9 @@
                             <a href="{{ route('admin.notifications.email_providers.index') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.notifications.email_providers.*') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
                                 <span>⚡</span> Email Providers
                             </a>
+                            <a href="{{ route('admin.notifications.mailbox.index') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.notifications.mailbox.*') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
+                                <span>📫</span> Live Mailbox
+                            </a>
                             <a href="{{ route('admin.notifications.templates.index') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition {{ request()->routeIs('admin.notifications.templates.*') ? 'text-indigo-400 bg-slate-900 font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
                                 <span>📑</span> Templates
                             </a>
