@@ -45,7 +45,7 @@ return [
             ],
         ],
 
-        'database_dump_compressor' => \Spatie\DbDumper\Compressors\GzipCompressor::class,
+        'database_dump_compressor' => null,
         'database_dump_file_extension' => '',
 
         'destination' => [
