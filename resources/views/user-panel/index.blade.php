@@ -37,7 +37,7 @@
 
                 <div class="flex items-center gap-3">
                     <a href="{{ route('dashboard') }}" class="px-5 py-2.5 bg-gradient-to-r from-brand-600 to-cyan-600 hover:from-brand-500 hover:to-cyan-500 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/20 transition flex items-center gap-2">
-                        <span>⚡ Launch Working Mode</span>
+                        <span>📊 Open Dashboard</span>
                         <span>→</span>
                     </a>
                 </div>

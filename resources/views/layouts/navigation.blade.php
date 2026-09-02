@@ -49,14 +49,8 @@
                 </div>
             </div>
 
-            <!-- Right Side Controls: Status, Mode Indicator, Theme Toggle & User Menu -->
+            <!-- Right Side Controls: Status, Theme Toggle & User Menu -->
             <div class="hidden sm:flex sm:items-center gap-3">
-                
-                <!-- Working Mode Active Badge -->
-                <div class="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-500/10 dark:bg-brand-500/15 border border-brand-500/20 text-[11px] font-bold text-brand-600 dark:text-cyan-400 shadow-xs">
-                    <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                    <span>⚡ Working Mode</span>
-                </div>
 
                 <!-- User Control Panel Fast Switch Button -->
                 <a href="{{ route('user-panel.index') }}" class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 transition">

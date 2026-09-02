@@ -151,7 +151,7 @@
                     @if (Route::has('login'))
                         @auth
                             <a href="{{ url('/dashboard') }}" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-cyan-500 hover:from-brand-500 hover:to-cyan-400 text-white text-xs font-bold shadow-lg shadow-brand-500/20 transition-all duration-300 transform active:scale-95">
-                                <span>⚡ Enter Working Mode</span>
+                                <span>📊 Go to Dashboard</span>
                                 <span>→</span>
                             </a>
                         @else

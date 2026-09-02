@@ -244,9 +244,9 @@
 
         <!-- Mode Switcher Bottom Actions -->
         <div class="p-4 border-t border-slate-800/80 space-y-2 bg-slate-950/60">
-            <!-- Switch to Working Mode -->
+            <!-- Switch to Dashboard -->
             <a href="{{ route('dashboard') }}" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-950 bg-gradient-to-r from-emerald-400 to-cyan-400 hover:from-emerald-300 hover:to-cyan-300 shadow-md shadow-cyan-500/20 transition group">
-                <span>⚡ Enter Working Mode</span>
+                <span>📊 App Dashboard</span>
                 <span class="group-hover:translate-x-0.5 transition">→</span>
             </a>
 
@@ -279,9 +279,9 @@
             </div>
 
             <div class="flex items-center gap-2 sm:gap-3">
-                <!-- Fast Switch to Working Mode -->
+                <!-- Fast Switch to Dashboard -->
                 <a href="{{ route('dashboard') }}" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-cyan-300 bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/30 transition shadow-xs">
-                    <span>⚡ Enter Working Mode</span>
+                    <span>📊 Dashboard</span>
                 </a>
 
                 <!-- Fast Switch to User Panel -->

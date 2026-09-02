@@ -202,9 +202,9 @@
 
         <!-- Mode Switcher Bottom Actions -->
         <div class="p-4 border-t border-slate-200 dark:border-slate-800 space-y-2 bg-slate-50/50 dark:bg-slate-950/40">
-            <!-- Switch to Working Mode -->
+            <!-- Switch to Dashboard -->
             <a href="{{ route('dashboard') }}" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-brand-600 to-cyan-600 hover:from-brand-500 hover:to-cyan-500 shadow-md shadow-brand-500/20 transition group">
-                <span>⚡ Enter Working Mode</span>
+                <span>📊 App Dashboard</span>
                 <span class="group-hover:translate-x-0.5 transition">→</span>
             </a>
 
@@ -250,9 +250,9 @@
                     <span x-show="darkMode" x-cloak>☀️</span>
                 </button>
 
-                <!-- Top Bar Quick Switch to Working Mode -->
+                <!-- Top Bar Quick Switch to Dashboard -->
                 <a href="{{ route('dashboard') }}" class="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/70 dark:hover:bg-brand-900/70 text-brand-700 dark:text-cyan-300 font-bold text-xs border border-brand-200/60 dark:border-brand-800/60 transition shadow-xs">
-                    <span>⚡ Back to Working Mode</span>
+                    <span>📊 Dashboard</span>
                 </a>
             </div>
         </header>
