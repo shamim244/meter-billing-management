@@ -114,12 +114,6 @@ class DomainNotificationSubscriber
     // --- Wallet System Handlers ---
     public function handleWalletCredited(WalletCreditedEvent $event): void
     {
-        $source = $event->transaction->meta['source'] ?? '';
-        // If it was a top-up payment, the user already received the payment confirmation receipt.
-        if ($source === 'payment_topup') {
-            return;
-        }
-
         $amount = abs((float) ($event->transaction->amountFloat ?? ($event->transaction->amount ?? 0)));
         $description = $event->transaction->meta['description'] ?? 'Wallet Top-Up';
         $this->dispatcher->dispatch('wallet.credited', $event->user, [
