@@ -171,8 +171,10 @@ class PlanChangeService
                 foreach ($lockedMrus as $mru) {
                     $mru->update([
                         'status' => 'active',
+                        'is_over_quota' => false,
                         'locked_at' => null,
                         'lock_reason' => null,
+                        'locked_reason' => null,
                     ]);
                     $unlockedMrus->push($mru);
                     event(new MruUnlockedEvent($mru));
