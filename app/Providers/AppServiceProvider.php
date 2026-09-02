@@ -17,20 +17,11 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
+    /**
+     * Bootstrap any application services.
+     */
     public function boot(): void
     {
-        \Illuminate\Support\Facades\Event::listen(
-            \App\Events\PaymentSuccessEvent::class,
-            \App\Listeners\CreditWalletOnPaymentSuccess::class
-        );
-
-        \Illuminate\Support\Facades\Event::listen(
-            \App\Events\PaymentSuccessEvent::class,
-            \App\Listeners\ActivateSubscriptionOnPaymentSuccess::class
-        );
-
-        \Illuminate\Support\Facades\Event::subscribe(
-            \App\Listeners\DomainNotificationSubscriber::class
-        );
+        // Event auto-discovery in Laravel 11/12/13 automatically handles listeners in app/Listeners.
     }
 }
