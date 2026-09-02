@@ -14,6 +14,7 @@
         "laravel/tinker": "^3.0",
         "razorpay/razorpay": "^2.9",
         "resend/resend-laravel": "*",
+        "spatie/laravel-backup": "*",
         "spatie/laravel-permission": "*"
     },
     "require-dev": {
