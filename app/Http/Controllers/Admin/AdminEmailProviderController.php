@@ -42,7 +42,7 @@ class AdminEmailProviderController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'driver_type' => ['required', 'in:smtp,resend,brevo'],
+            'driver_type' => ['required', 'in:smtp,resend,brevo,hostinger'],
             'label' => ['required', 'string', 'max:128'],
             'priority' => ['required', 'integer', 'min:1', 'max:100'],
             'is_enabled' => ['nullable', 'boolean'],
@@ -56,8 +56,9 @@ class AdminEmailProviderController extends Controller
             'from_address' => ['nullable', 'email'],
             'from_name' => ['nullable', 'string'],
 
-            // API Fields (Resend / Brevo)
+            // API Fields (Hostinger / Resend / Brevo)
             'api_key' => ['nullable', 'string'],
+            'mailbox_resource_id' => ['nullable', 'string'],
         ]);
 
         $config = $this->extractConfig($validated['driver_type'], $request->all());
@@ -196,10 +197,11 @@ class AdminEmailProviderController extends Controller
             ];
         }
 
-        // Resend or Brevo
+        // Hostinger, Resend or Brevo
         return [
             'api_key' => !empty($input['api_key']) ? $input['api_key'] : ($existing['api_key'] ?? ''),
-            'from_address' => !empty($input['from_address']) ? $input['from_address'] : ($existing['from_address'] ?? 'notifications@nexgenhub.site'),
+            'mailbox_resource_id' => !empty($input['mailbox_resource_id']) ? $input['mailbox_resource_id'] : ($existing['mailbox_resource_id'] ?? null),
+            'from_address' => !empty($input['from_address']) ? $input['from_address'] : ($existing['from_address'] ?? 'agent@nexgenhub.site'),
             'from_name' => !empty($input['from_name']) ? $input['from_name'] : ($existing['from_name'] ?? 'NBPDCL Billing Platform'),
         ];
     }

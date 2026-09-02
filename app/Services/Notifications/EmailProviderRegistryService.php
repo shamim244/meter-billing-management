@@ -8,6 +8,7 @@ use App\Models\NotificationDelivery;
 use App\Services\Notifications\Contracts\DeliveryResult;
 use App\Services\Notifications\Contracts\EmailProviderDriverInterface;
 use App\Services\Notifications\Drivers\Email\BrevoDriver;
+use App\Services\Notifications\Drivers\Email\HostingerDriver;
 use App\Services\Notifications\Drivers\Email\ResendDriver;
 use App\Services\Notifications\Drivers\Email\SmtpDriver;
 use Illuminate\Database\Eloquent\Collection;
@@ -29,6 +30,7 @@ class EmailProviderRegistryService
         $this->registerDriver('smtp', new SmtpDriver());
         $this->registerDriver('resend', new ResendDriver());
         $this->registerDriver('brevo', new BrevoDriver());
+        $this->registerDriver('hostinger', new HostingerDriver());
     }
 
     /**

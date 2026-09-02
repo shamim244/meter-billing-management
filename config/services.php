@@ -49,4 +49,10 @@ return [
         'webhook_secret' => env('RAZORPAY_WEBHOOK_SECRET', 'test_razorpay_webhook_secret'),
     ],
 
+    'hostinger_mail' => [
+        'api_key' => env('HOSTINGER_MAIL_API_TOKEN', '9c16a97538050456cbe2aa3549cd9861949867070bfdd7872f125044e712e322'),
+        'from_address' => env('HOSTINGER_MAIL_FROM_ADDRESS', 'agent@nexgenhub.site'),
+        'from_name' => env('HOSTINGER_MAIL_FROM_NAME', 'NBPDCL SaaS Billing'),
+    ],
+
 ];

@@ -255,6 +255,11 @@ Route::middleware(['auth', 'admin.restore_impersonation', 'role:admin', 'active'
 
         // Failed Critical Queue
         Route::get('/failed-queue', [\App\Http\Controllers\Admin\AdminFailedNotificationController::class, 'index'])->name('failed_queue');
+
+        // Live Hostinger Mailbox Inspector
+        Route::get('/mailbox', [\App\Http\Controllers\Admin\AdminMailboxController::class, 'index'])->name('mailbox.index');
+        Route::get('/mailbox/{uid}/content', [\App\Http\Controllers\Admin\AdminMailboxController::class, 'showMessage'])->name('mailbox.show');
+        Route::post('/mailbox/send', [\App\Http\Controllers\Admin\AdminMailboxController::class, 'send'])->name('mailbox.send');
     });
 
     // Admin Refer & Earn System
