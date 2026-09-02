@@ -45,6 +45,13 @@ class DomainNotificationSubscriber
     public function handlePaymentSuccess(PaymentSuccessEvent $event): void
     {
         $p = $event->payment;
+        $modeStr = $p->mode instanceof \BackedEnum ? $p->mode->value : (string) $p->mode;
+        
+        // If it was a manual payment (manual_upi / bank_transfer), handleManualPaymentApproved handles sending the dedicated approval notification.
+        if (in_array($modeStr, ['manual_upi', 'bank_transfer', 'upi_manual'], true)) {
+            return;
+        }
+
         $gatewayName = $p->gateway_payment_id ? 'Razorpay' : 'Payment Gateway';
         $methodName = $p->mode ? $p->mode->label() : 'Online';
         $txnId = $p->gateway_payment_id ?: ($p->utr_number ?: ($p->bank_reference ?: (string) $p->id));
@@ -107,6 +114,12 @@ class DomainNotificationSubscriber
     // --- Wallet System Handlers ---
     public function handleWalletCredited(WalletCreditedEvent $event): void
     {
+        $source = $event->transaction->meta['source'] ?? '';
+        // If it was a top-up payment, the user already received the payment confirmation receipt.
+        if ($source === 'payment_topup') {
+            return;
+        }
+
         $amount = abs((float) ($event->transaction->amountFloat ?? ($event->transaction->amount ?? 0)));
         $description = $event->transaction->meta['description'] ?? 'Wallet Top-Up';
         $this->dispatcher->dispatch('wallet.credited', $event->user, [
