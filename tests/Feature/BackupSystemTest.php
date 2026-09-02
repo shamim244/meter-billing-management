@@ -193,7 +193,8 @@ class BackupSystemTest extends TestCase
     {
         $response = $this->actingAs($this->adminUser)->get(route('admin.backups.index'));
         $response->assertStatus(200);
-        $response->assertSee('Disaster Recovery & Backups Cockpit');
+        $response->assertSee('Disaster Recovery');
+        $response->assertSee('On-Demand Backup Generators');
 
         // Trigger backup via web
         $postResponse = $this->actingAs($this->adminUser)->post(route('admin.backups.store'), [

@@ -33,6 +33,8 @@ class StorageBackupService
      */
     public function archive(string $outputPath, array $extraIncludePaths = []): array
     {
+        \Illuminate\Support\Facades\File::ensureDirectoryExists(dirname($outputPath));
+
         $zip = new ZipArchive();
         if ($zip->open($outputPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             throw new \RuntimeException("Failed to open or create ZIP archive at: {$outputPath}");
@@ -79,6 +81,10 @@ class StorageBackupService
                     $totalBytes += $item->getSize();
                 }
             }
+        }
+
+        if ($totalFiles === 0) {
+            $zip->addFromString('.empty_snapshot', "Storage had no files at time of backup.\n");
         }
 
         $zip->close();
