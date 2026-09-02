@@ -32,7 +32,7 @@ class UserPanelTest extends TestCase
         $response->assertStatus(200);
         $response->assertSee('Account Overview');
         $response->assertSee($user->name);
-        $response->assertSee('Switch to Working Mode');
+        $response->assertSee('Dashboard');
     }
 
     public function test_user_can_view_subscription_page(): void
