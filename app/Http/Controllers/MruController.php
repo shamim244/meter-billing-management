@@ -101,6 +101,8 @@ class MruController extends Controller
                     'message' => "This exceeds your plan's included MRU limit ({$activeSubscription->included_mrus_locked}). Pay ₹" . number_format($extraRate, 2) . " to create this MRU.",
                 ], 402);
             }
+
+            return redirect()->route('mrus.index')->with('error', "This exceeds your plan's included MRU limit ({$activeSubscription->included_mrus_locked}). Additional MRU creation requires overage confirmation (₹" . number_format($extraRate, 2) . ").");
         }
 
         $mru = Mru::create([

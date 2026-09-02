@@ -433,6 +433,15 @@ class AdminPaymentController extends Controller
             $rawJson = json_encode($payload);
             $signature = hash_hmac('sha256', $rawJson, $webhookSecret);
 
+            // Explicitly verify signature via OnlinePaymentGatewayService to test the verification path
+            $isSigValid = $this->onlinePgService->verifyRazorpayWebhookSignature($rawJson, $signature);
+            if (!$isSigValid) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Signature verification failed during simulation.',
+                ], 400);
+            }
+
             $result = $this->onlinePgService->processWebhook($payload);
 
             return response()->json([
@@ -440,6 +449,7 @@ class AdminPaymentController extends Controller
                 'gateway' => 'razorpay',
                 'event' => $eventType,
                 'signature_tested' => $signature,
+                'signature_verified' => true,
                 'result' => $result,
                 'payment_id' => $payment->id,
                 'final_payment_status' => $payment->fresh()->status->value,
@@ -468,6 +478,15 @@ class AdminPaymentController extends Controller
             $rawJson = json_encode($payload);
             $signature = base64_encode(hash_hmac('sha256', $timestamp . $rawJson, $webhookSecret, true));
 
+            // Explicitly verify signature via OnlinePaymentGatewayService to test the verification path
+            $isSigValid = $this->onlinePgService->verifyCashfreeWebhookSignature($timestamp, $rawJson, $signature);
+            if (!$isSigValid) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Signature verification failed during simulation.',
+                ], 400);
+            }
+
             $result = $this->onlinePgService->processWebhook($payload);
 
             return response()->json([
@@ -475,6 +494,7 @@ class AdminPaymentController extends Controller
                 'gateway' => 'cashfree',
                 'event' => $eventType,
                 'signature_tested' => $signature,
+                'signature_verified' => true,
                 'result' => $result,
                 'payment_id' => $payment->id,
                 'final_payment_status' => $payment->fresh()->status->value,

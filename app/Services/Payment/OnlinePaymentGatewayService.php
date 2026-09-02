@@ -88,6 +88,9 @@ class OnlinePaymentGatewayService
                 }
             }
         } catch (\Throwable $e) {
+            if (app()->isProduction() && config('services.razorpay.key_id') && !str_starts_with(config('services.razorpay.key_id'), 'rzp_test_')) {
+                throw new \RuntimeException("Razorpay order creation failed in production: " . $e->getMessage(), 0, $e);
+            }
             Log::warning('Razorpay API create order error (falling back to mock ID for test/sandbox)', [
                 'message' => $e->getMessage(),
             ]);
@@ -198,8 +201,14 @@ class OnlinePaymentGatewayService
                     'status' => $response->status(),
                     'body' => $response->json() ?? $response->body(),
                 ]);
+                if (app()->isProduction() || $environment === 'production') {
+                    throw new \RuntimeException("Cashfree order creation failed in production with status: {$response->status()}");
+                }
             }
         } catch (\Throwable $e) {
+            if (app()->isProduction() || $environment === 'production') {
+                throw new \RuntimeException("Cashfree API connection error in production: " . $e->getMessage(), 0, $e);
+            }
             Log::warning('Cashfree API connection error (falling back to mock session for test/sandbox)', [
                 'message' => $e->getMessage(),
             ]);
@@ -441,13 +450,42 @@ class OnlinePaymentGatewayService
                 $orderStatus = strtoupper($data['order_status'] ?? '');
 
                 if ($orderStatus === 'PAID') {
+                    $cfPaymentId = null;
+                    try {
+                        $paymentsRes = Http::timeout(5)->withHeaders([
+                            'x-client-id' => $appId,
+                            'x-client-secret' => $secretKey,
+                            'x-api-version' => $apiVersion,
+                            'Accept' => 'application/json',
+                        ])->get("{$baseUrl}/orders/{$orderId}/payments");
+
+                        if ($paymentsRes->successful()) {
+                            $paymentsList = $paymentsRes->json();
+                            if (is_array($paymentsList) && !empty($paymentsList)) {
+                                foreach ($paymentsList as $pItem) {
+                                    if (strtoupper($pItem['payment_status'] ?? '') === 'SUCCESS') {
+                                        $cfPaymentId = (string) ($pItem['cf_payment_id'] ?? $pItem['payment_id'] ?? null);
+                                        break;
+                                    }
+                                }
+                                if (!$cfPaymentId && isset($paymentsList[0]['cf_payment_id'])) {
+                                    $cfPaymentId = (string) $paymentsList[0]['cf_payment_id'];
+                                }
+                            }
+                        }
+                    } catch (\Throwable) {
+                        // ignore secondary query failure
+                    }
+
+                    $resolvedPaymentId = $cfPaymentId ?: (string) ($data['cf_payment_id'] ?? $data['payment_id'] ?? $payment->gateway_payment_id ?: $data['cf_order_id'] ?? $orderId);
+
                     $payment->update([
                         'status' => PaymentStatus::SUCCESS,
-                        'gateway_payment_id' => (string) ($data['cf_order_id'] ?? $payment->gateway_payment_id),
+                        'gateway_payment_id' => $resolvedPaymentId,
                         'verified_at' => now(),
                     ]);
 
-                    event(new PaymentSuccessEvent($payment, (string) ($data['cf_order_id'] ?? null)));
+                    event(new PaymentSuccessEvent($payment, $resolvedPaymentId));
                 } elseif (in_array($orderStatus, ['EXPIRED', 'FAILED', 'TERMINATED'], true)) {
                     $payment->update([
                         'status' => PaymentStatus::FAILED,

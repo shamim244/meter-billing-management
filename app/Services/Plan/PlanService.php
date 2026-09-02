@@ -207,15 +207,15 @@ class PlanService
                 ->first();
 
             if (!$duration) {
-                // Fallback search by duration_months
+                // Fallback search by duration_months or persist a valid default duration
                 $duration = $targetPlan->durations()
                     ->where('duration_months', $durationValue)
-                    ->first() ?? $targetPlan->durations()->first() ?? new PlanDuration([
-                        'duration_unit' => $durationUnit,
-                        'duration_value' => $durationValue,
-                        'duration_months' => $durationUnit === 'month' ? $durationValue : 1,
+                    ->first() ?? $targetPlan->durations()->first() ?? $targetPlan->durations()->create([
+                        'duration_unit' => $durationUnit ?: 'month',
+                        'duration_value' => $durationValue ?: 1,
+                        'duration_months' => ($durationUnit === 'month') ? ($durationValue ?: 1) : max(1, (int) ceil(($durationValue ?: 1) / 30)),
                         'discount_percent' => 0.00,
-                        'final_price' => 0.00,
+                        'final_price' => $targetPlan->base_price,
                         'extra_mru_rate' => $targetPlan->extra_mru_rate,
                         'extra_consumer_rate' => $targetPlan->extra_consumer_rate,
                     ]);

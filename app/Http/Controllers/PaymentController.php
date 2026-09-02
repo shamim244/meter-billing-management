@@ -210,19 +210,25 @@ class PaymentController extends Controller
         $payment = Payment::where('gateway_order_id', $orderId)->first();
 
         // 1. Handle Razorpay client callback verification with signature
-        if ($payment && !empty($paymentId) && !empty($signature)) {
-            $isValid = $this->onlinePgService->verifyRazorpayPaymentSignature($orderId, $paymentId, $signature);
-            if ($isValid) {
-                if ($payment->status !== PaymentStatus::SUCCESS) {
-                    $payment->update([
-                        'status' => PaymentStatus::SUCCESS,
-                        'gateway_payment_id' => $paymentId,
-                        'verified_at' => now(),
-                    ]);
-                    event(new PaymentSuccessEvent($payment, $paymentId));
-                }
-                return redirect()->route('payments.index')->with('success', "Payment #{$payment->id} for ₹" . number_format((float)$payment->amount, 2) . " completed and verified successfully via Razorpay!");
+        if ($payment && (!empty($paymentId) || !empty($signature))) {
+            if (empty($paymentId) || empty($signature)) {
+                return redirect()->route('payments.index')->with('error', 'Incomplete Razorpay callback verification parameters.');
             }
+
+            $isValid = $this->onlinePgService->verifyRazorpayPaymentSignature($orderId, $paymentId, $signature);
+            if (!$isValid) {
+                return redirect()->route('payments.index')->with('error', 'Razorpay payment signature verification failed. The transaction response could not be authenticated.');
+            }
+
+            if ($payment->status !== PaymentStatus::SUCCESS) {
+                $payment->update([
+                    'status' => PaymentStatus::SUCCESS,
+                    'gateway_payment_id' => $paymentId,
+                    'verified_at' => now(),
+                ]);
+                event(new PaymentSuccessEvent($payment, $paymentId));
+            }
+            return redirect()->route('payments.index')->with('success', "Payment #{$payment->id} for ₹" . number_format((float)$payment->amount, 2) . " completed and verified successfully via Razorpay!");
         }
 
         // 2. Handle Cashfree direct order verification

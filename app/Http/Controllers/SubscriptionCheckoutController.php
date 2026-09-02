@@ -391,23 +391,25 @@ class SubscriptionCheckoutController extends Controller
 
         // Case 1: Shift Mode - Upgrade (Prorated difference debited, new cycle starts today)
         if ($pricingDetails['action_mode'] === 'shift' && $pricingDetails['is_upgrade'] && $activeSubscription) {
-            $res = $this->planChangeService->upgradePlan($activeSubscription, $plan, $duration);
-            if (!$res['success']) {
-                $msg = $res['message'] ?? 'Upgrade failed.';
-                return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
-            }
+            return DB::transaction(function () use ($activeSubscription, $plan, $duration, $couponToRedeem, $user, $originalAmountDue, $amountDue, $request) {
+                $res = $this->planChangeService->upgradePlan($activeSubscription, $plan, $duration);
+                if (!$res['success']) {
+                    $msg = $res['message'] ?? 'Upgrade failed.';
+                    return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
+                }
 
-            if ($couponToRedeem) {
-                $this->couponRedemptionService->redeemForSubscription(
-                    coupon: $couponToRedeem,
-                    user: $user,
-                    originalAmount: $originalAmountDue,
-                    referenceId: 'sub_' . $res['subscription']->id
-                );
-            }
+                if ($couponToRedeem) {
+                    $this->couponRedemptionService->redeemForSubscription(
+                        coupon: $couponToRedeem,
+                        user: $user,
+                        originalAmount: $originalAmountDue,
+                        referenceId: 'sub_' . $res['subscription']->id
+                    );
+                }
 
-            $msg = "🎉 Switched to {$plan->name} ({$duration->formatted_duration}) successfully! Prorated fee of ₹" . number_format($amountDue, 2) . " was debited from your wallet. Valid from today until " . $res['subscription']->billing_end->format('M d, Y') . ".";
-            return $request->wantsJson() ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $res['subscription']->id]) : back()->with('success', $msg);
+                $msg = "🎉 Switched to {$plan->name} ({$duration->formatted_duration}) successfully! Prorated fee of ₹" . number_format($amountDue, 2) . " was debited from your wallet. Valid from today until " . $res['subscription']->billing_end->format('M d, Y') . ".";
+                return $request->wantsJson() ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $res['subscription']->id]) : back()->with('success', $msg);
+            });
         }
 
         // Case 2: Shift Mode - Downgrade (Prorated credit added to wallet, new cycle starts today)
@@ -435,13 +437,15 @@ class SubscriptionCheckoutController extends Controller
                 return back()->with('error', $msg);
             }
 
-            $res = $this->planChangeService->downgradePlan($activeSubscription, $plan, $duration);
-            if (!$res['success']) {
-                $msg = $res['message'] ?? 'Downgrade failed.';
-                return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
-            }
-            $msg = "🎉 Switched to {$plan->name} ({$duration->formatted_duration}) successfully! Prorated credit of ₹" . number_format($res['amount_credited'], 2) . " was credited to your wallet. Valid from today until " . $res['subscription']->billing_end->format('M d, Y') . ".";
-            return $request->wantsJson() ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $res['subscription']->id]) : back()->with('success', $msg);
+            return DB::transaction(function () use ($activeSubscription, $plan, $duration, $request) {
+                $res = $this->planChangeService->downgradePlan($activeSubscription, $plan, $duration);
+                if (!$res['success']) {
+                    $msg = $res['message'] ?? 'Downgrade failed.';
+                    return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
+                }
+                $msg = "🎉 Switched to {$plan->name} ({$duration->formatted_duration}) successfully! Prorated credit of ₹" . number_format($res['amount_credited'], 2) . " was credited to your wallet. Valid from today until " . $res['subscription']->billing_end->format('M d, Y') . ".";
+                return $request->wantsJson() ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $res['subscription']->id]) : back()->with('success', $msg);
+            });
         }
 
         // Case 3: Extend Mode OR Brand New Subscription

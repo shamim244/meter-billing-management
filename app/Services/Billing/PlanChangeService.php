@@ -90,38 +90,38 @@ class PlanChangeService
         $amountDue = max(0.00, $proration['amount_due']);
         $user = $sub->user;
 
-        $txId = null;
-        if ($amountDue > 0) {
-            $debitResult = $this->walletService->debit(
-                user: $user,
-                amount: $amountDue,
-                source: 'plan_upgrade_proration',
-                referenceType: 'plan',
-                referenceId: (string) $targetPlan->id,
-                description: "Mid-cycle Upgrade to {$targetPlan->name} (Prorated difference)"
-            );
+        return DB::transaction(function () use ($sub, $targetPlan, $oldPlan, $proration, $amountDue, $user) {
+            $txId = null;
+            if ($amountDue > 0) {
+                $debitResult = $this->walletService->debit(
+                    user: $user,
+                    amount: $amountDue,
+                    source: 'plan_upgrade_proration',
+                    referenceType: 'plan',
+                    referenceId: (string) $targetPlan->id,
+                    description: "Mid-cycle Upgrade to {$targetPlan->name} (Prorated difference)"
+                );
 
-            if ($debitResult === DebitResult::INSUFFICIENT_BALANCE) {
-                return [
-                    'success' => false,
-                    'requires_topup' => true,
-                    'amount_due' => $amountDue,
-                    'message' => "Insufficient wallet balance. You need ₹{$amountDue} to upgrade.",
-                ];
+                if ($debitResult === DebitResult::INSUFFICIENT_BALANCE) {
+                    return [
+                        'success' => false,
+                        'requires_topup' => true,
+                        'amount_due' => $amountDue,
+                        'message' => "Insufficient wallet balance. You need ₹{$amountDue} to upgrade.",
+                    ];
+                }
+
+                if ($debitResult === DebitResult::WALLET_FROZEN) {
+                    return [
+                        'success' => false,
+                        'wallet_frozen' => true,
+                        'message' => 'Wallet is currently frozen. Please contact support.',
+                    ];
+                }
+
+                $txId = $user->wallet?->transactions()->latest('id')->value('id');
             }
 
-            if ($debitResult === DebitResult::WALLET_FROZEN) {
-                return [
-                    'success' => false,
-                    'wallet_frozen' => true,
-                    'message' => 'Wallet is currently frozen. Please contact support.',
-                ];
-            }
-
-            $txId = $user->wallet?->transactions()->latest('id')->value('id');
-        }
-
-        return DB::transaction(function () use ($sub, $targetPlan, $oldPlan, $proration, $amountDue, $txId, $user) {
             $targetDuration = $proration['target_duration'];
 
             // 1. Mark previous subscription as upgraded
@@ -158,20 +158,23 @@ class PlanChangeService
             // 3. Auto-unlock evaluation (PRD Section 5.3)
             $activeMrusCount = Mru::where('user_id', $user->id)->where('status', 'active')->count();
             $availableNewSlots = max(0, $targetPlan->included_mrus - $activeMrusCount);
-            $autoUnlockedMrus = [];
+            $unlockedMrus = collect();
 
             if ($availableNewSlots > 0) {
                 $lockedMrus = Mru::where('user_id', $user->id)
                     ->where('status', 'locked')
-                    ->orderBy('id')
+                    ->orderBy('locked_at', 'asc')
                     ->take($availableNewSlots)
                     ->get();
 
-                foreach ($lockedMrus as $lockedMru) {
-                    $unlockRes = $this->mruQuotaService->unlockMru($lockedMru, payOverage: false);
-                    if ($unlockRes['success']) {
-                        $autoUnlockedMrus[] = $lockedMru->fresh();
-                    }
+                foreach ($lockedMrus as $mru) {
+                    $mru->update([
+                        'status' => 'active',
+                        'locked_at' => null,
+                        'lock_reason' => null,
+                    ]);
+                    $unlockedMrus->push($mru);
+                    event(new MruUnlockedEvent($mru, $user, 'Auto-unlocked upon Plan Upgrade'));
                 }
             }
 
@@ -197,7 +200,7 @@ class PlanChangeService
                 'success' => true,
                 'amount_charged' => $amountDue,
                 'subscription' => $newSubscription,
-                'auto_unlocked_mrus' => $autoUnlockedMrus,
+                'auto_unlocked_mrus' => $unlockedMrus->pluck('id')->toArray(),
                 'log' => $log,
             ];
         });
@@ -258,22 +261,22 @@ class PlanChangeService
         $creditAmount = max(0.00, round($proration['old_plan_credit'] - $proration['new_plan_cost'], 2));
         $user = $sub->user;
 
-        $txId = null;
-        if ($creditAmount > 0) {
-            // Credit wallet (PRD Invariant: Downgrade CREDITS wallet)
-            $this->walletService->credit(
-                user: $user,
-                amount: $creditAmount,
-                source: 'plan_downgrade_credit',
-                referenceType: 'plan',
-                referenceId: (string) $targetPlan->id,
-                description: "Mid-cycle Downgrade to {$targetPlan->name} (Prorated credit)"
-            );
+        return DB::transaction(function () use ($sub, $targetPlan, $oldPlan, $proration, $creditAmount, $user) {
+            $txId = null;
+            if ($creditAmount > 0) {
+                // Credit wallet (PRD Invariant: Downgrade CREDITS wallet)
+                $this->walletService->credit(
+                    user: $user,
+                    amount: $creditAmount,
+                    source: 'plan_downgrade_credit',
+                    referenceType: 'plan',
+                    referenceId: (string) $targetPlan->id,
+                    description: "Mid-cycle Downgrade to {$targetPlan->name} (Prorated credit)"
+                );
 
-            $txId = $user->wallet?->transactions()->latest('id')->value('id');
-        }
+                $txId = $user->wallet?->transactions()->latest('id')->value('id');
+            }
 
-        return DB::transaction(function () use ($sub, $targetPlan, $oldPlan, $proration, $creditAmount, $txId, $user) {
             $targetDuration = $proration['target_duration'];
 
             // 1. Mark previous subscription as downgraded

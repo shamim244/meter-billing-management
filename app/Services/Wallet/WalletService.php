@@ -80,6 +80,10 @@ class WalletService
         // Use Bavix depositFloat method (auto-handles transactions and concurrency)
         $transaction = $userModel->depositFloat($amount, $meta);
 
+        // Reset balance alert throttle cache keys on credit
+        \Illuminate\Support\Facades\Cache::forget("wallet_alert_critical_{$userModel->id}");
+        \Illuminate\Support\Facades\Cache::forget("wallet_alert_low_{$userModel->id}");
+
         // Dispatch domain events
         event(new WalletCreditedEvent($userModel, $transaction));
 
@@ -280,13 +284,21 @@ class WalletService
 
         // 1. Critical Balance Event (< 1 month base subscription)
         if ($balance < $baseSubscriptionAmount) {
-            event(new WalletCriticalBalanceEvent($user, $balance, $baseSubscriptionAmount));
+            $critCacheKey = "wallet_alert_critical_{$user->id}";
+            if (!\Illuminate\Support\Facades\Cache::has($critCacheKey)) {
+                \Illuminate\Support\Facades\Cache::put($critCacheKey, true, now()->addHours(24));
+                event(new WalletCriticalBalanceEvent($user, $balance, $baseSubscriptionAmount));
+            }
         }
 
         // 2. Low Balance Event (< configured threshold e.g. from Admin settings or config, default ₹200)
         $lowThreshold = (float) \App\Models\SystemSetting::get('wallet_low_balance_threshold', config('wallet.low_balance_threshold', 200.00));
         if ($balance < $lowThreshold) {
-            event(new WalletLowBalanceEvent($user, $balance, $lowThreshold));
+            $lowCacheKey = "wallet_alert_low_{$user->id}";
+            if (!\Illuminate\Support\Facades\Cache::has($lowCacheKey)) {
+                \Illuminate\Support\Facades\Cache::put($lowCacheKey, true, now()->addHours(24));
+                event(new WalletLowBalanceEvent($user, $balance, $lowThreshold));
+            }
         }
 
         // 3. Insufficient for upcoming renewal
