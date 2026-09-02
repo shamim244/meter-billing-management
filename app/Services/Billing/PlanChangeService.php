@@ -3,6 +3,7 @@
 namespace App\Services\Billing;
 
 use App\Enums\DebitResult;
+use App\Events\MruUnlockedEvent;
 use App\Events\PlanDowngradedEvent;
 use App\Events\PlanUpgradedEvent;
 use App\Models\AgentSubscription;
@@ -174,7 +175,7 @@ class PlanChangeService
                         'lock_reason' => null,
                     ]);
                     $unlockedMrus->push($mru);
-                    event(new MruUnlockedEvent($mru, $user, 'Auto-unlocked upon Plan Upgrade'));
+                    event(new MruUnlockedEvent($mru));
                 }
             }
 

@@ -434,7 +434,7 @@ class AdminPaymentController extends Controller
             $signature = hash_hmac('sha256', $rawJson, $webhookSecret);
 
             // Explicitly verify signature via OnlinePaymentGatewayService to test the verification path
-            $isSigValid = $this->onlinePgService->verifyRazorpayWebhookSignature($rawJson, $signature);
+            $isSigValid = $this->onlinePgService->verifyWebhookSignature($rawJson, $signature);
             if (!$isSigValid) {
                 return response()->json([
                     'status' => 'error',
@@ -479,7 +479,7 @@ class AdminPaymentController extends Controller
             $signature = base64_encode(hash_hmac('sha256', $timestamp . $rawJson, $webhookSecret, true));
 
             // Explicitly verify signature via OnlinePaymentGatewayService to test the verification path
-            $isSigValid = $this->onlinePgService->verifyCashfreeWebhookSignature($timestamp, $rawJson, $signature);
+            $isSigValid = $this->onlinePgService->verifyWebhookSignature($rawJson, $signature, $timestamp);
             if (!$isSigValid) {
                 return response()->json([
                     'status' => 'error',
