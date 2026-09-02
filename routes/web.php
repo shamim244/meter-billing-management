@@ -113,6 +113,8 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
         Route::get('/shortcuts', [\App\Http\Controllers\UserPanelController::class, 'shortcuts'])->name('shortcuts');
         Route::get('/preferences', [\App\Http\Controllers\UserPanelController::class, 'preferences'])->name('preferences');
         Route::post('/preferences', [\App\Http\Controllers\UserPanelController::class, 'updatePreferences'])->name('preferences.update');
+        Route::get('/backup', [\App\Http\Controllers\UserPanel\AgentBackupController::class, 'index'])->name('backup');
+        Route::post('/backup/download', [\App\Http\Controllers\UserPanel\AgentBackupController::class, 'download'])->name('backup.download');
         Route::get('/profile', [\App\Http\Controllers\UserPanelController::class, 'profile'])->name('profile');
         Route::patch('/profile', [\App\Http\Controllers\UserPanelController::class, 'updateProfile'])->name('profile.update');
         Route::put('/password', [\App\Http\Controllers\UserPanelController::class, 'updatePassword'])->name('password.update');
@@ -263,6 +265,16 @@ Route::middleware(['auth', 'admin.restore_impersonation', 'role:admin', 'active'
         Route::get('/top-referrers', [\App\Http\Controllers\Admin\AdminReferralController::class, 'topReferrers'])->name('top_referrers');
         Route::patch('/coupon/{coupon}/toggle', [\App\Http\Controllers\Admin\AdminReferralController::class, 'toggleCoupon'])->name('coupon.toggle');
         Route::post('/users/{user}/override', [\App\Http\Controllers\Admin\AdminReferralController::class, 'updateAgentOverride'])->name('users.override');
+    });
+
+    // Admin System Backups & Disaster Recovery Cockpit
+    Route::prefix('backups')->name('backups.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Admin\AdminBackupController::class, 'index'])->name('index');
+        Route::post('/', [\App\Http\Controllers\Admin\AdminBackupController::class, 'store'])->name('store');
+        Route::get('/{backup}/download', [\App\Http\Controllers\Admin\AdminBackupController::class, 'download'])->name('download');
+        Route::get('/{backup}/manifest', [\App\Http\Controllers\Admin\AdminBackupController::class, 'manifest'])->name('manifest');
+        Route::delete('/{backup}', [\App\Http\Controllers\Admin\AdminBackupController::class, 'destroy'])->name('destroy');
+        Route::post('/clean', [\App\Http\Controllers\Admin\AdminBackupController::class, 'clean'])->name('clean');
     });
 });
 

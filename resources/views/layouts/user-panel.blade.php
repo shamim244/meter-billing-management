@@ -185,6 +185,12 @@
                         <span>General Preferences</span>
                     </a>
 
+                    <a href="{{ route('user-panel.backup') }}" 
+                       class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('user-panel.backup*') ? 'bg-brand-600 text-white font-bold shadow-md shadow-brand-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60' }}">
+                        <span class="text-base">💾</span>
+                        <span>Data Export & Backup</span>
+                    </a>
+
                     <a href="{{ route('user-panel.profile') }}" 
                        class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('user-panel.profile') ? 'bg-brand-600 text-white font-bold shadow-md shadow-brand-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60' }}">
                         <span class="text-base">👤</span>
@@ -268,7 +274,11 @@
 
         <!-- Page Body -->
         <main class="flex-1 p-4 sm:p-8 max-w-7xl w-full mx-auto">
-            {{ $slot }}
+            @if(isset($slot))
+                {{ $slot }}
+            @else
+                @yield('content')
+            @endif
         </main>
     </div>
 

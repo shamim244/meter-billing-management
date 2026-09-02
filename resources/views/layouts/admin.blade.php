@@ -230,6 +230,11 @@
                             </a>
                         </div>
                     </div>
+
+                    <a href="{{ route('admin.backups.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.backups.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">💾</span>
+                        <span>Disaster Recovery & Backups</span>
+                    </a>
                 </div>
             </nav>
         </div>
@@ -307,7 +312,11 @@
 
         <!-- Page Body -->
         <main class="flex-1 p-4 sm:p-8">
-            {{ $slot }}
+            @if(isset($slot))
+                {{ $slot }}
+            @else
+                @yield('content')
+            @endif
         </main>
     </div>
 
