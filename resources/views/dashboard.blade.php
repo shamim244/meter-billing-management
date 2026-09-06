@@ -515,8 +515,8 @@
             <!-- TRUE SLIDING CARD CAROUSEL VIEW -->
             <div x-show="!loading && items.length > 0 && viewMode === 'card'" class="space-y-6">
                 <!-- Slider Window / Track Container with Swipe Gestures -->
-                <div class="overflow-hidden w-full max-w-lg mx-auto rounded-3xl touch-pan-y"
-                     @touchstart="touchStartX = $event.changedTouches[0].screenX; touchStartY = $event.changedTouches[0].screenY"
+                <div class="overflow-hidden w-full max-w-lg mx-auto rounded-3xl touch-pan-y touch-pinch-zoom"
+                     @touchstart="if ($event.touches && $event.touches.length > 1) { isPinching = true; } else { isPinching = false; touchStartX = $event.changedTouches[0].screenX; touchStartY = $event.changedTouches[0].screenY; }"
                      @touchend="handleTouchEnd($event)">
                     
                     <!-- Dynamic Sliding Track -->
@@ -1275,6 +1275,7 @@
                 currentCardIndex: 0,
                 touchStartX: 0,
                 touchStartY: 0,
+                isPinching: false,
                 copiedCaId: null,
                 copiedCaTimeout: null,
 
@@ -2217,6 +2218,17 @@
                 },
 
                 handleTouchEnd(e) {
+                    // Do not slide cards if user was pinch-zooming
+                    if (this.isPinching) {
+                        if (!e.touches || e.touches.length === 0) {
+                            this.isPinching = false;
+                        }
+                        return;
+                    }
+                    if (e.touches && e.touches.length > 0) {
+                        return;
+                    }
+
                     // Do not slide cards if user is highlighting/selecting text on screen
                     const selection = window.getSelection ? window.getSelection().toString() : '';
                     if (selection && selection.trim().length > 0) {
