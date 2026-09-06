@@ -350,9 +350,14 @@
                                             <div class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-[11px] font-mono shrink-0" x-text="bill.ca_number.slice(-2)"></div>
                                             <div>
                                                 <div class="flex items-center gap-1 flex-wrap">
-                                                    <a :href="'/bills/history/' + bill.ca_number" class="font-bold text-blue-600 dark:text-cyan-400 hover:underline font-mono text-xs" x-text="bill.ca_number"></a>
-                                                    <button @click="copyText(bill.ca_number)" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5" title="Copy CA">
-                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                                                    <a :href="'/bills/history/' + bill.ca_number" class="font-bold text-blue-600 dark:text-cyan-400 hover:underline font-mono text-xs select-text select-all" x-text="bill.ca_number"></a>
+                                                    <button type="button" @click="copyText(bill.ca_number, bill.id)" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 transition" title="Copy CA">
+                                                        <template x-if="copiedCaId !== bill.id">
+                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                                                        </template>
+                                                        <template x-if="copiedCaId === bill.id">
+                                                            <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                                        </template>
                                                     </button>
                                                     <span x-show="bill.tariff_category" class="px-1 py-0.2 rounded text-[9px] font-bold font-mono bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50 dark:border-indigo-800/50" x-text="bill.tariff_category"></span>
                                                     <span x-show="bill.billing_basis" class="px-1 py-0.2 rounded text-[9px] font-black font-mono" :class="bill.billing_basis === 'OK' ? 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-800/50' : (bill.billing_basis === 'MD' ? 'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200/50 dark:border-amber-800/50' : 'bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200/50 dark:border-rose-800/50')" :title="'Billing Basis: ' + bill.billing_basis" x-text="bill.billing_basis"></span>
@@ -510,8 +515,8 @@
             <!-- TRUE SLIDING CARD CAROUSEL VIEW -->
             <div x-show="!loading && items.length > 0 && viewMode === 'card'" class="space-y-6">
                 <!-- Slider Window / Track Container with Swipe Gestures -->
-                <div class="overflow-hidden w-full max-w-lg mx-auto select-none rounded-3xl touch-pan-y"
-                     @touchstart="touchStartX = $event.changedTouches[0].screenX"
+                <div class="overflow-hidden w-full max-w-lg mx-auto rounded-3xl touch-pan-y"
+                     @touchstart="touchStartX = $event.changedTouches[0].screenX; touchStartY = $event.changedTouches[0].screenY"
                      @touchend="handleTouchEnd($event)">
                     
                     <!-- Dynamic Sliding Track -->
@@ -531,15 +536,27 @@
                                         <div class="flex items-start justify-between gap-2.5">
                                             <!-- Left: 2-Digit Avatar + Name + CA + Copy -->
                                             <div class="flex items-center gap-2.5 min-w-0 flex-1">
-                                                <div class="w-9 h-9 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-cyan-300 font-black text-sm flex items-center justify-center font-mono shrink-0" x-text="bill.ca_number.slice(-2)"></div>
+                                                <div class="w-9 h-9 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-cyan-300 font-black text-sm flex items-center justify-center font-mono shrink-0 select-none" x-text="bill.ca_number.slice(-2)"></div>
                                                 <div class="min-w-0 flex-1">
-                                                    <h2 class="text-sm sm:text-base font-bold text-white tracking-tight truncate" x-text="bill.consumer_name || 'CONSUMER ACCOUNT'"></h2>
+                                                    <h2 class="text-sm sm:text-base font-bold text-white tracking-tight truncate select-text" x-text="bill.consumer_name || 'CONSUMER ACCOUNT'"></h2>
                                                     <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                                        <span class="font-mono text-cyan-200 text-xs font-semibold" x-text="bill.ca_number"></span>
-                                                        <button @click="copyText(bill.ca_number)" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/10 hover:bg-white/20 text-cyan-200 text-[10px] font-bold transition border border-white/20" title="Copy CA to clipboard">
-                                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                                                            <span>Copy</span>
-                                                            <span class="hidden sm:inline-block text-[8px] opacity-75 font-mono" x-text="'[' + (shortcuts.copy_ca?.toUpperCase() || 'C') + ']'"></span>
+                                                        <span class="font-mono text-cyan-200 text-xs sm:text-sm font-semibold select-text select-all cursor-pointer hover:text-white transition py-0.5" 
+                                                              @click="copyText(bill.ca_number, bill.id)"
+                                                              title="Tap to copy or long-press to select CA"
+                                                              x-text="bill.ca_number"></span>
+                                                        <button type="button" 
+                                                                @click.stop="copyText(bill.ca_number, bill.id)" 
+                                                                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition border select-none active:scale-95 touch-manipulation"
+                                                                :class="copiedCaId === bill.id ? 'bg-emerald-500/40 border-emerald-400 text-emerald-100' : 'bg-white/10 hover:bg-white/20 text-cyan-200 border-white/20'"
+                                                                title="Copy CA to clipboard">
+                                                            <template x-if="copiedCaId !== bill.id">
+                                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                                                            </template>
+                                                            <template x-if="copiedCaId === bill.id">
+                                                                <svg class="w-3 h-3 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                                            </template>
+                                                            <span x-text="copiedCaId === bill.id ? 'Copied!' : 'Copy'"></span>
+                                                            <span x-show="copiedCaId !== bill.id" class="hidden sm:inline-block text-[8px] opacity-75 font-mono" x-text="'[' + (shortcuts.copy_ca?.toUpperCase() || 'C') + ']'"></span>
                                                         </button>
                                                     </div>
                                                 </div>
@@ -763,7 +780,7 @@
                                     <!-- Card Footer -->
                                     <div class="px-4 sm:px-5 py-2.5 bg-slate-900 dark:bg-slate-950 text-white flex items-center justify-between text-xs font-medium border-t border-slate-800">
                                         <span class="flex items-center gap-1.5 text-cyan-300 font-bold font-mono text-[11px]">
-                                            ⚡ Meter: <span class="text-white" x-text="bill.meter_no || '—'"></span>
+                                            ⚡ Meter: <span class="text-white select-text select-all cursor-pointer hover:underline" @click="if (bill.meter_no) copyText(bill.meter_no)" title="Tap to copy or select meter number" x-text="bill.meter_no || '—'"></span>
                                         </span>
                                         <div class="flex items-center gap-2">
                                             <template x-if="bill.has_pdf">
@@ -1257,6 +1274,9 @@
                 viewMode: localStorage.getItem('dashboard_view_mode') || 'table',
                 currentCardIndex: 0,
                 touchStartX: 0,
+                touchStartY: 0,
+                copiedCaId: null,
+                copiedCaTimeout: null,
 
                 // Modals
                 showCreateMruModal: false,
@@ -2197,10 +2217,20 @@
                 },
 
                 handleTouchEnd(e) {
+                    // Do not slide cards if user is highlighting/selecting text on screen
+                    const selection = window.getSelection ? window.getSelection().toString() : '';
+                    if (selection && selection.trim().length > 0) {
+                        return;
+                    }
+
                     const touchEndX = e.changedTouches[0].screenX;
-                    const diff = this.touchStartX - touchEndX;
-                    if (Math.abs(diff) > 40) {
-                        if (diff > 0) {
+                    const touchEndY = e.changedTouches[0].screenY;
+                    const diffX = this.touchStartX - touchEndX;
+                    const diffY = (this.touchStartY || touchEndY) - touchEndY;
+
+                    // Only swipe if horizontal drag is deliberate and dominates vertical scroll
+                    if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY) * 1.4) {
+                        if (diffX > 0) {
                             this.nextCard(); // Swiped Left -> Next Card
                         } else {
                             this.prevCard(); // Swiped Right -> Prev Card
@@ -2352,7 +2382,7 @@
                     // 1. Copy CA Number
                     if (ks ? ks.matches(e, this.shortcuts.copy_ca) : (e.key === this.shortcuts.copy_ca)) {
                         e.preventDefault();
-                        this.copyText(currentBill.ca_number);
+                        this.copyText(currentBill.ca_number, currentBill.id);
                         return;
                     }
 
@@ -2507,10 +2537,56 @@
                     window.location.href = url.toString();
                 },
 
-                copyText(text) {
-                    navigator.clipboard.writeText(text).then(() => {
-                        this.showToastNotification('📋', `Copied CA: ${text}`, null);
-                    });
+                copyText(text, billId = null) {
+                    if (!text) return;
+                    const self = this;
+                    const onCopied = () => {
+                        if (billId) {
+                            self.copiedCaId = billId;
+                            if (self.copiedCaTimeout) clearTimeout(self.copiedCaTimeout);
+                            self.copiedCaTimeout = setTimeout(() => {
+                                self.copiedCaId = null;
+                            }, 2000);
+                        }
+                        self.showToastNotification('📋', `Copied CA: ${text}`, null);
+                    };
+
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(text)
+                            .then(onCopied)
+                            .catch(err => {
+                                console.warn('Clipboard API failed, using fallback:', err);
+                                self.fallbackCopyText(text, onCopied);
+                            });
+                    } else {
+                        self.fallbackCopyText(text, onCopied);
+                    }
+                },
+
+                fallbackCopyText(text, callback) {
+                    try {
+                        const textArea = document.createElement("textarea");
+                        textArea.value = text;
+                        textArea.style.position = "fixed";
+                        textArea.style.top = "-9999px";
+                        textArea.style.left = "-9999px";
+                        textArea.style.opacity = "0";
+                        textArea.setAttribute("readonly", "");
+                        document.body.appendChild(textArea);
+                        textArea.focus();
+                        textArea.select();
+                        textArea.setSelectionRange(0, 99999);
+                        const successful = document.execCommand('copy');
+                        document.body.removeChild(textArea);
+                        if (successful) {
+                            if (callback) callback();
+                        } else {
+                            window.prompt("Copy CA number (Ctrl+C or tap-and-hold):", text);
+                        }
+                    } catch (err) {
+                        console.error('Fallback copy exception:', err);
+                        window.prompt("Copy CA number (Ctrl+C or tap-and-hold):", text);
+                    }
                 },
 
                 formatNumber(val) {
