@@ -217,6 +217,87 @@ class UserDashboardTest extends TestCase
         $this->assertEquals('10230022222', $data[1]['ca_number']); // Bob (critical)
     }
 
+    public function test_basis_filtering_and_sorting(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+
+        // Create 3 bills with different basis
+        BillRecord::create([
+            'user_id' => $user->id,
+            'ca_number' => '10230011111',
+            'billing_month' => 4,
+            'billing_year' => 2026,
+            'consumer_name' => 'Alice Normal',
+            'billing_basis' => 'OK',
+            'working_reading' => 1200,
+            'total_amount' => 100.00,
+            'units_consumed' => 10,
+        ]);
+
+        BillRecord::create([
+            'user_id' => $user->id,
+            'ca_number' => '10230022222',
+            'billing_month' => 4,
+            'billing_year' => 2026,
+            'consumer_name' => 'Bob Locked',
+            'billing_basis' => 'LK',
+            'working_reading' => 1500,
+            'total_amount' => 200.00,
+            'units_consumed' => 20,
+        ]);
+
+        BillRecord::create([
+            'user_id' => $user->id,
+            'ca_number' => '10230033333',
+            'billing_month' => 4,
+            'billing_year' => 2026,
+            'consumer_name' => 'Charlie Defective',
+            'billing_basis' => 'MD',
+            'working_reading' => 800,
+            'total_amount' => 300.00,
+            'units_consumed' => 30,
+        ]);
+
+        // Filter by LK
+        $response = $this->actingAs($user)->getJson('/dashboard/data?month=4&year=2026&basis_filter=LK');
+        $response->assertStatus(200);
+        $this->assertCount(1, $response->json('data'));
+        $this->assertEquals('10230022222', $response->json('data.0.ca_number'));
+        $this->assertEquals(1, $response->json('counts.basis_lk'));
+        $this->assertEquals(1, $response->json('counts.basis_ok'));
+        $this->assertEquals(1, $response->json('counts.basis_md'));
+
+        // Filter by MD
+        $response = $this->actingAs($user)->getJson('/dashboard/data?month=4&year=2026&basis_filter=MD');
+        $response->assertStatus(200);
+        $this->assertCount(1, $response->json('data'));
+        $this->assertEquals('10230033333', $response->json('data.0.ca_number'));
+
+        // Sort by basis_priority asc (OK -> LK -> MD)
+        $response = $this->actingAs($user)->getJson('/dashboard/data?month=4&year=2026&sort_col=basis_priority&sort_asc=true');
+        $response->assertStatus(200);
+        $data = $response->json('data');
+        $this->assertEquals('10230011111', $data[0]['ca_number']); // OK
+        $this->assertEquals('10230022222', $data[1]['ca_number']); // LK
+        $this->assertEquals('10230033333', $data[2]['ca_number']); // MD
+
+        // Sort by working_reading asc (800 -> 1200 -> 1500)
+        $response = $this->actingAs($user)->getJson('/dashboard/data?month=4&year=2026&sort_col=working_reading&sort_asc=true');
+        $response->assertStatus(200);
+        $data = $response->json('data');
+        $this->assertEquals('10230033333', $data[0]['ca_number']); // 800
+        $this->assertEquals('10230011111', $data[1]['ca_number']); // 1200
+        $this->assertEquals('10230022222', $data[2]['ca_number']); // 1500
+
+        // Sort by consumer_name desc (Charlie -> Bob -> Alice)
+        $response = $this->actingAs($user)->getJson('/dashboard/data?month=4&year=2026&sort_col=consumer_name&sort_asc=false');
+        $response->assertStatus(200);
+        $data = $response->json('data');
+        $this->assertEquals('10230033333', $data[0]['ca_number']); // Charlie
+        $this->assertEquals('10230022222', $data[1]['ca_number']); // Bob
+        $this->assertEquals('10230011111', $data[2]['ca_number']); // Alice
+    }
+
     public function test_bulk_process_validates_empty_input(): void
     {
         $user = User::factory()->create(['status' => 'active']);
@@ -228,3 +309,4 @@ class UserDashboardTest extends TestCase
         $response->assertStatus(422);
     }
 }
+

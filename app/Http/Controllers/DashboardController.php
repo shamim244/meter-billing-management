@@ -128,6 +128,14 @@ class DashboardController extends Controller
         ];
         $statusCounts['pending'] = max(0, $totalPeriodBills - ($statusCounts['submitted'] + $statusCounts['critical'] + $statusCounts['doubt']));
 
+        $statusCounts['basis_ok'] = (clone $periodBillsQuery)->where(function($q) {
+            $q->where('billing_basis', 'OK')->orWhereNull('billing_basis');
+        })->count();
+        $statusCounts['basis_lk'] = (clone $periodBillsQuery)->where('billing_basis', 'LK')->count();
+        $statusCounts['basis_md'] = (clone $periodBillsQuery)->where('billing_basis', 'MD')->count();
+        $statusCounts['basis_pl'] = (clone $periodBillsQuery)->where('billing_basis', 'PL')->count();
+        $statusCounts['basis_rn'] = (clone $periodBillsQuery)->where('billing_basis', 'RN')->count();
+
         $activeTags = $this->billTagService->getActiveTags();
         $defaultTag = $this->billTagService->getDefaultTag();
         $activeSubscription = Auth::user()?->activeSubscription;
@@ -394,6 +402,11 @@ class DashboardController extends Controller
             'doubt' => $mapped->where('review_status', 'doubt')->count(),
             'missing_pdf' => $mapped->filter(fn($item) => empty($item->pdf_path) || $item->download_status !== 'downloaded')->count(),
             'total_consumers' => $totalConsumers,
+            'basis_ok' => $mapped->filter(fn($item) => strtoupper(trim((string)($item->billing_basis ?: 'OK'))) === 'OK')->count(),
+            'basis_lk' => $mapped->filter(fn($item) => strtoupper(trim((string)($item->billing_basis ?: ''))) === 'LK')->count(),
+            'basis_md' => $mapped->filter(fn($item) => strtoupper(trim((string)($item->billing_basis ?: ''))) === 'MD')->count(),
+            'basis_pl' => $mapped->filter(fn($item) => strtoupper(trim((string)($item->billing_basis ?: ''))) === 'PL')->count(),
+            'basis_rn' => $mapped->filter(fn($item) => strtoupper(trim((string)($item->billing_basis ?: ''))) === 'RN')->count(),
         ];
 
         // Dynamic sum of units and amount for matching search
@@ -409,6 +422,15 @@ class DashboardController extends Controller
         $tagFilter = $request->get('tag_filter', $request->get('tag', 'all'));
         if (!empty($tagFilter) && $tagFilter !== 'all') {
             $mapped = $mapped->filter(fn($item) => strtoupper($item->tag ?? '') === strtoupper($tagFilter));
+        }
+
+        // Apply Basis filter (all, OK, LK, MD, PL, RN)
+        $basisFilter = strtoupper(trim((string) $request->get('basis_filter', $request->get('basis', 'all'))));
+        if (!empty($basisFilter) && $basisFilter !== 'ALL') {
+            $mapped = $mapped->filter(function ($item) use ($basisFilter) {
+                $b = strtoupper(trim((string) ($item->billing_basis ?: 'OK')));
+                return $b === $basisFilter;
+            });
         }
 
         // Status Priority Sort Weights
@@ -433,37 +455,86 @@ class DashboardController extends Controller
                 }
             }
 
+            $numericCols = ['working_reading', 'current_reading', 'previous_reading', 'units_consumed', 'units', 'total_amount', 'amount', 'basis_priority', 'review_status', 'status'];
+
+            if (in_array($sortCol, $numericCols, true)) {
+                $numA = match ($sortCol) {
+                    'working_reading' => (float) ($a->working_reading ?? 0),
+                    'current_reading' => (float) ($a->current_reading ?? 0),
+                    'previous_reading' => (float) ($a->previous_reading ?? 0),
+                    'units_consumed', 'units' => (float) ($a->units_consumed ?? 0),
+                    'total_amount', 'amount' => (float) ($a->total_amount ?? 0),
+                    'basis_priority' => match (strtoupper(trim((string) ($a->billing_basis ?: 'OK')))) {
+                        'OK' => 1,
+                        'LK' => 2,
+                        'MD' => 3,
+                        'PL' => 4,
+                        'RN' => 5,
+                        default => 6,
+                    },
+                    'review_status', 'status' => match ($a->review_status ?? 'pending') {
+                        'pending' => 1,
+                        'doubt' => 2,
+                        'critical' => 3,
+                        'submitted' => 4,
+                        default => 5,
+                    },
+                    default => 0.0,
+                };
+
+                $numB = match ($sortCol) {
+                    'working_reading' => (float) ($b->working_reading ?? 0),
+                    'current_reading' => (float) ($b->current_reading ?? 0),
+                    'previous_reading' => (float) ($b->previous_reading ?? 0),
+                    'units_consumed', 'units' => (float) ($b->units_consumed ?? 0),
+                    'total_amount', 'amount' => (float) ($b->total_amount ?? 0),
+                    'basis_priority' => match (strtoupper(trim((string) ($b->billing_basis ?: 'OK')))) {
+                        'OK' => 1,
+                        'LK' => 2,
+                        'MD' => 3,
+                        'PL' => 4,
+                        'RN' => 5,
+                        default => 6,
+                    },
+                    'review_status', 'status' => match ($b->review_status ?? 'pending') {
+                        'pending' => 1,
+                        'doubt' => 2,
+                        'critical' => 3,
+                        'submitted' => 4,
+                        default => 5,
+                    },
+                    default => 0.0,
+                };
+
+                if ($numA == $numB) {
+                    return strcmp((string)$a->ca_number, (string)$b->ca_number);
+                }
+
+                return $sortAsc ? ($numA <=> $numB) : ($numB <=> $numA);
+            }
+
+            // String and natural alphanumeric sorting
             $valA = match ($sortCol) {
-                'current_reading' => (float) ($a->current_reading ?? 0),
-                'previous_reading' => (float) ($a->previous_reading ?? 0),
-                'units_consumed', 'units' => (float) ($a->units_consumed ?? 0),
-                'total_amount', 'amount' => (float) ($a->total_amount ?? 0),
-                'meter_no' => (string) ($a->meter_no ?? ''),
-                'bill_month' => (string) ($a->bill_month_label ?? ''),
-                default => (string) ($a->ca_number ?? ''),
+                'consumer_name', 'name' => trim((string) ($a->consumer_name ?? '')),
+                'meter_no' => trim((string) ($a->meter_no ?? '')),
+                'bill_month' => trim((string) ($a->bill_month_label ?? '')),
+                'billing_basis', 'basis' => strtoupper(trim((string) ($a->billing_basis ?: 'OK'))),
+                default => trim((string) ($a->ca_number ?? '')),
             };
 
             $valB = match ($sortCol) {
-                'current_reading' => (float) ($b->current_reading ?? 0),
-                'previous_reading' => (float) ($b->previous_reading ?? 0),
-                'units_consumed', 'units' => (float) ($b->units_consumed ?? 0),
-                'total_amount', 'amount' => (float) ($b->total_amount ?? 0),
-                'meter_no' => (string) ($b->meter_no ?? ''),
-                'bill_month' => (string) ($b->bill_month_label ?? ''),
-                default => (string) ($b->ca_number ?? ''),
+                'consumer_name', 'name' => trim((string) ($b->consumer_name ?? '')),
+                'meter_no' => trim((string) ($b->meter_no ?? '')),
+                'bill_month' => trim((string) ($b->bill_month_label ?? '')),
+                'billing_basis', 'basis' => strtoupper(trim((string) ($b->billing_basis ?: 'OK'))),
+                default => trim((string) ($b->ca_number ?? '')),
             };
 
-            if (is_numeric($valA) && is_numeric($valB)) {
-                if ($valA == $valB) {
-                    return strcmp($a->ca_number, $b->ca_number);
-                }
-                return ($valA < $valB) ? ($sortAsc ? -1 : 1) : ($sortAsc ? 1 : -1);
+            $cmp = strnatcasecmp((string)$valA, (string)$valB);
+            if ($cmp === 0) {
+                return strcmp((string)$a->ca_number, (string)$b->ca_number);
             }
 
-            $cmp = strcasecmp((string)$valA, (string)$valB);
-            if ($cmp === 0) {
-                return strcmp($a->ca_number, $b->ca_number);
-            }
             return $sortAsc ? $cmp : -$cmp;
         })->values();
 

@@ -229,22 +229,51 @@
             <!-- Clean & Separated Controls Section -->
             <div class="space-y-4">
                 <!-- 1. Status Filter Pills Container -->
-                <div class="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+                <div class="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-3">
                     <div class="flex flex-wrap items-center gap-2">
-                        <button @click="filterStatus = 'all'; fetchData(1)" :class="filterStatus === 'all' ? 'bg-slate-900 dark:bg-blue-600 text-white shadow-sm font-bold' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'" class="px-4 py-2 rounded-2xl text-xs font-semibold transition">
+                        <span class="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-1">Review:</span>
+                        <button @click="filterStatus = 'all'; fetchData(1)" :class="filterStatus === 'all' ? 'bg-slate-900 dark:bg-blue-600 text-white shadow-sm font-bold' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'" class="px-3.5 py-1.5 rounded-2xl text-xs font-semibold transition">
                             📋 All (<span x-text="counts.all ?? 0"></span>)
                         </button>
-                        <button @click="filterStatus = 'pending'; fetchData(1)" :class="filterStatus === 'pending' ? 'bg-slate-700 dark:bg-slate-600 text-white shadow-sm font-bold' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'" class="px-4 py-2 rounded-2xl text-xs font-semibold transition">
+                        <button @click="filterStatus = 'pending'; fetchData(1)" :class="filterStatus === 'pending' ? 'bg-slate-700 dark:bg-slate-600 text-white shadow-sm font-bold' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'" class="px-3.5 py-1.5 rounded-2xl text-xs font-semibold transition">
                             ⏳ Pending (<span x-text="counts.pending ?? 0"></span>)
                         </button>
-                        <button @click="filterStatus = 'submitted'; fetchData(1)" :class="filterStatus === 'submitted' ? 'bg-emerald-600 text-white shadow-sm font-bold' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'" class="px-4 py-2 rounded-2xl text-xs font-semibold transition">
+                        <button @click="filterStatus = 'submitted'; fetchData(1)" :class="filterStatus === 'submitted' ? 'bg-emerald-600 text-white shadow-sm font-bold' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'" class="px-3.5 py-1.5 rounded-2xl text-xs font-semibold transition">
                             ✅ Submitted (<span x-text="counts.submitted ?? 0"></span>)
                         </button>
-                        <button @click="filterStatus = 'critical'; fetchData(1)" :class="filterStatus === 'critical' ? 'bg-rose-600 text-white shadow-sm font-bold' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50'" class="px-4 py-2 rounded-2xl text-xs font-semibold transition">
+                        <button @click="filterStatus = 'critical'; fetchData(1)" :class="filterStatus === 'critical' ? 'bg-rose-600 text-white shadow-sm font-bold' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50'" class="px-3.5 py-1.5 rounded-2xl text-xs font-semibold transition">
                             ❌ Critical (<span x-text="counts.critical ?? 0"></span>)
                         </button>
-                        <button @click="filterStatus = 'doubt'; fetchData(1)" :class="filterStatus === 'doubt' ? 'bg-amber-600 text-white shadow-sm font-bold' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50'" class="px-4 py-2 rounded-2xl text-xs font-semibold transition">
+                        <button @click="filterStatus = 'doubt'; fetchData(1)" :class="filterStatus === 'doubt' ? 'bg-amber-600 text-white shadow-sm font-bold' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50'" class="px-3.5 py-1.5 rounded-2xl text-xs font-semibold transition">
                             ⚠️ Doubt (<span x-text="counts.doubt ?? 0"></span>)
+                        </button>
+                    </div>
+
+                    <!-- 1b. Basis Filter Pills (OK, LK, MD, PL, RN) -->
+                    <div class="flex flex-wrap items-center gap-2 pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+                        <span class="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-1">⚡ Basis:</span>
+                        <button @click="setBasisFilter('all')" :class="basisFilter === 'all' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition">
+                            All Basis
+                        </button>
+                        <button @click="setBasisFilter('OK')" :class="basisFilter === 'OK' ? 'bg-emerald-600 text-white shadow-xs font-bold' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1">
+                            <span>🟢 OK (Normal)</span>
+                            <span class="text-[10px] opacity-75 font-mono" x-show="counts.basis_ok !== undefined" x-text="'(' + (counts.basis_ok ?? 0) + ')'"></span>
+                        </button>
+                        <button @click="setBasisFilter('LK')" :class="basisFilter === 'LK' ? 'bg-amber-600 text-white shadow-xs font-bold' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50'" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1">
+                            <span>🟡 LK (Locked)</span>
+                            <span class="text-[10px] opacity-75 font-mono" x-show="counts.basis_lk !== undefined" x-text="'(' + (counts.basis_lk ?? 0) + ')'"></span>
+                        </button>
+                        <button @click="setBasisFilter('MD')" :class="basisFilter === 'MD' ? 'bg-rose-600 text-white shadow-xs font-bold' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50'" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1">
+                            <span>🟠 MD (Defective)</span>
+                            <span class="text-[10px] opacity-75 font-mono" x-show="counts.basis_md !== undefined" x-text="'(' + (counts.basis_md ?? 0) + ')'"></span>
+                        </button>
+                        <button @click="setBasisFilter('PL')" :class="basisFilter === 'PL' ? 'bg-indigo-600 text-white shadow-xs font-bold' : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50'" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1">
+                            <span>🔵 PL</span>
+                            <span class="text-[10px] opacity-75 font-mono" x-show="counts.basis_pl !== undefined" x-text="'(' + (counts.basis_pl ?? 0) + ')'"></span>
+                        </button>
+                        <button @click="setBasisFilter('RN')" :class="basisFilter === 'RN' ? 'bg-purple-600 text-white shadow-xs font-bold' : 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50'" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1">
+                            <span>⚪ RN</span>
+                            <span class="text-[10px] opacity-75 font-mono" x-show="counts.basis_rn !== undefined" x-text="'(' + (counts.basis_rn ?? 0) + ')'"></span>
                         </button>
                     </div>
                 </div>
@@ -262,38 +291,66 @@
                     <!-- Left: Sorting Dropdowns -->
                     <div class="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full md:w-auto">
                         <!-- Status Priority -->
-                        <div class="w-full sm:w-64">
+                        <div class="w-full sm:w-56">
                             <select x-model="statusSort" @change="onStatusSortChange()" class="w-full text-xs font-medium border-slate-300 dark:border-slate-700 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white py-2.5 px-3.5 focus:ring-blue-500 focus:border-blue-500 shadow-sm">
-                                <option value="default">Status: Normal (Default)</option>
-                                <option value="pdcs">Status Priority: P-D-C-S</option>
-                                <option value="dcps">Status Priority: D-C-P-S</option>
-                                <option value="cdps">Status Priority: C-D-P-S</option>
-                                <option value="spdc">Status Priority: S-P-D-C</option>
+                                <option value="default">Priority: Normal (No Grouping)</option>
+                                <option value="pdcs">Priority: P-D-C-S</option>
+                                <option value="dcps">Priority: D-C-P-S</option>
+                                <option value="cdps">Priority: C-D-P-S</option>
+                                <option value="spdc">Priority: S-P-D-C</option>
                             </select>
                         </div>
 
                         <!-- Sort By Field -->
-                        <div class="w-full sm:w-60">
+                        <div class="w-full sm:w-64">
                             <select x-model="sortOption" @change="onSortOptionChange()" class="w-full text-xs font-medium border-slate-300 dark:border-slate-700 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white py-2.5 px-3.5 focus:ring-blue-500 focus:border-blue-500 shadow-sm">
-                                <option value="ca_number_asc">Sort: Consumer No (A-Z)</option>
-                                <option value="ca_number_desc">Sort: Consumer No (Z-A)</option>
-                                <option value="current_reading_asc">Sort: Current Reading (Low-High)</option>
-                                <option value="current_reading_desc">Sort: Current Reading (High-Low)</option>
-                                <option value="previous_reading_asc">Sort: Previous Reading (Low-High)</option>
-                                <option value="previous_reading_desc">Sort: Previous Reading (High-Low)</option>
-                                <option value="units_asc">Sort: Units (Low to High)</option>
-                                <option value="units_desc">Sort: Units (High to Low)</option>
-                                <option value="amount_asc">Sort: Amount (Low to High)</option>
-                                <option value="amount_desc">Sort: Amount (High to Low)</option>
-                                <option value="meter_no_asc">Sort: Meter No (A-Z)</option>
-                                <option value="meter_no_desc">Sort: Meter No (Z-A)</option>
-                                <option value="bill_month_asc">Sort: Bill Month (A-Z)</option>
-                                <option value="bill_month_desc">Sort: Bill Month (Z-A)</option>
+                                <optgroup label="Account & Consumer">
+                                    <option value="ca_number_asc">Sort: CA Number (0-9 Low-High)</option>
+                                    <option value="ca_number_desc">Sort: CA Number (9-0 High-Low)</option>
+                                    <option value="consumer_name_asc">Sort: Consumer Name (A-Z)</option>
+                                    <option value="consumer_name_desc">Sort: Consumer Name (Z-A)</option>
+                                    <option value="meter_no_asc">Sort: Meter No (A-Z)</option>
+                                    <option value="meter_no_desc">Sort: Meter No (Z-A)</option>
+                                </optgroup>
+                                <optgroup label="Readings & Units">
+                                    <option value="working_reading_asc">Sort: Working Reading (Low-High)</option>
+                                    <option value="working_reading_desc">Sort: Working Reading (High-Low)</option>
+                                    <option value="previous_reading_asc">Sort: Previous Reading (Low-High)</option>
+                                    <option value="previous_reading_desc">Sort: Previous Reading (High-Low)</option>
+                                    <option value="current_reading_asc">Sort: PDF Reading (Low-High)</option>
+                                    <option value="current_reading_desc">Sort: PDF Reading (High-Low)</option>
+                                    <option value="units_asc">Sort: Units (Low to High)</option>
+                                    <option value="units_desc">Sort: Units (High to Low)</option>
+                                    <option value="amount_asc">Sort: Amount (Low to High)</option>
+                                    <option value="amount_desc">Sort: Amount (High to Low)</option>
+                                </optgroup>
+                                <optgroup label="Billing Basis & Status">
+                                    <option value="billing_basis_asc">Sort: Basis (A-Z: LK, MD, OK, PL)</option>
+                                    <option value="billing_basis_desc">Sort: Basis (Z-A: PL, OK, MD, LK)</option>
+                                    <option value="basis_priority_asc">Sort: Basis Priority (OK → LK → MD → PL)</option>
+                                    <option value="basis_priority_desc">Sort: Basis Priority (MD → LK → PL → OK)</option>
+                                    <option value="review_status_asc">Sort: Status (Pending → Doubt → Critical → Submitted)</option>
+                                    <option value="review_status_desc">Sort: Status (Submitted → Critical → Doubt → Pending)</option>
+                                    <option value="bill_month_asc">Sort: Bill Month (A-Z)</option>
+                                    <option value="bill_month_desc">Sort: Bill Month (Z-A)</option>
+                                </optgroup>
+                            </select>
+                        </div>
+
+                        <!-- Basis Filter Dropdown -->
+                        <div class="w-full sm:w-48">
+                            <select x-model="basisFilter" @change="onBasisFilterChange()" class="w-full text-xs font-medium border-slate-300 dark:border-slate-700 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white py-2.5 px-3.5 focus:ring-blue-500 focus:border-blue-500 shadow-sm">
+                                <option value="all">⚡ All Basis</option>
+                                <option value="OK">🟢 Basis: OK (Normal)</option>
+                                <option value="LK">🟡 Basis: LK (Locked)</option>
+                                <option value="MD">🟠 Basis: MD (Defective)</option>
+                                <option value="PL">🔵 Basis: PL (Power Line)</option>
+                                <option value="RN">⚪ Basis: RN (Reading N/A)</option>
                             </select>
                         </div>
 
                         <!-- Tag Filter -->
-                        <div class="w-full sm:w-56">
+                        <div class="w-full sm:w-48">
                             <select x-model="tagFilter" @change="fetchData(1)" class="w-full text-xs font-medium border-slate-300 dark:border-slate-700 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white py-2.5 px-3.5 focus:ring-blue-500 focus:border-blue-500 shadow-sm">
                                 <option value="all">🏷️ All Tags</option>
                                 <template x-for="t in availableTags" :key="t.code">
@@ -333,7 +390,7 @@
                 <h3 class="text-lg font-bold text-slate-800 dark:text-slate-200">No bills found for this filter</h3>
                 <p class="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1 mb-6">There are no records matching your current filter. You can switch filter pills or create a new cycle.</p>
                 <div class="flex items-center justify-center gap-3">
-                    <button @click="filterStatus = 'all'; fetchData(1)" class="inline-flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition">
+                    <button @click="filterStatus = 'all'; basisFilter = 'all'; localStorage.setItem('dashboard_basis_filter', 'all'); fetchData(1)" class="inline-flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition">
                         📋 View All Bills (<span x-text="counts.all ?? 0"></span>)
                     </button>
                     <button @click="showNewCycleModal = true" class="inline-flex items-center gap-1.5 px-5 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition">
@@ -348,14 +405,55 @@
                     <table class="w-full text-left text-xs text-slate-600 dark:text-slate-300">
                         <thead class="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">
                             <tr>
-                                <th class="py-3.5 px-3">Consumer</th>
-                                <th class="py-3.5 px-3 text-center">✍️ Working Reading</th>
-                                <th class="py-3.5 px-3 text-center">📅 Prev (DB)</th>
+                                <th class="py-3.5 px-3 cursor-pointer select-none hover:text-blue-600 dark:hover:text-cyan-400" @click="toggleSort('ca_number')">
+                                    <div class="inline-flex items-center gap-1">
+                                        <span>Consumer</span>
+                                        <span class="text-[10px]" x-show="sortCol === 'ca_number'" x-text="sortAsc ? '▲' : '▼'"></span>
+                                    </div>
+                                </th>
+                                <th class="py-3.5 px-3 text-center cursor-pointer select-none hover:text-blue-600 dark:hover:text-cyan-400" @click="toggleSort('billing_basis')">
+                                    <div class="inline-flex items-center justify-center gap-1">
+                                        <span>Basis</span>
+                                        <span class="text-[10px]" x-show="sortCol === 'billing_basis' || sortCol === 'basis_priority'" x-text="sortAsc ? '▲' : '▼'"></span>
+                                    </div>
+                                </th>
+                                <th class="py-3.5 px-3 text-center cursor-pointer select-none hover:text-blue-600 dark:hover:text-cyan-400" @click="toggleSort('working_reading')">
+                                    <div class="inline-flex items-center justify-center gap-1">
+                                        <span>✍️ Working Reading</span>
+                                        <span class="text-[10px]" x-show="sortCol === 'working_reading'" x-text="sortAsc ? '▲' : '▼'"></span>
+                                    </div>
+                                </th>
+                                <th class="py-3.5 px-3 text-center cursor-pointer select-none hover:text-blue-600 dark:hover:text-cyan-400" @click="toggleSort('previous_reading')">
+                                    <div class="inline-flex items-center justify-center gap-1">
+                                        <span>📅 Prev (DB)</span>
+                                        <span class="text-[10px]" x-show="sortCol === 'previous_reading'" x-text="sortAsc ? '▲' : '▼'"></span>
+                                    </div>
+                                </th>
                                 <th class="py-3.5 px-3 text-center">📊 Avg (kWh)</th>
-                                <th class="py-3.5 px-3 text-center">📄 PDF Read</th>
-                                <th class="py-3.5 px-3 text-right">Amount</th>
-                                <th class="py-3.5 px-3 text-center">Month</th>
-                                <th class="py-3.5 px-3 text-center">Status</th>
+                                <th class="py-3.5 px-3 text-center cursor-pointer select-none hover:text-blue-600 dark:hover:text-cyan-400" @click="toggleSort('current_reading')">
+                                    <div class="inline-flex items-center justify-center gap-1">
+                                        <span>📄 PDF Read</span>
+                                        <span class="text-[10px]" x-show="sortCol === 'current_reading'" x-text="sortAsc ? '▲' : '▼'"></span>
+                                    </div>
+                                </th>
+                                <th class="py-3.5 px-3 text-right cursor-pointer select-none hover:text-blue-600 dark:hover:text-cyan-400" @click="toggleSort('amount')">
+                                    <div class="inline-flex items-center justify-end gap-1">
+                                        <span>Amount</span>
+                                        <span class="text-[10px]" x-show="sortCol === 'amount' || sortCol === 'total_amount'" x-text="sortAsc ? '▲' : '▼'"></span>
+                                    </div>
+                                </th>
+                                <th class="py-3.5 px-3 text-center cursor-pointer select-none hover:text-blue-600 dark:hover:text-cyan-400" @click="toggleSort('bill_month')">
+                                    <div class="inline-flex items-center justify-center gap-1">
+                                        <span>Month</span>
+                                        <span class="text-[10px]" x-show="sortCol === 'bill_month'" x-text="sortAsc ? '▲' : '▼'"></span>
+                                    </div>
+                                </th>
+                                <th class="py-3.5 px-3 text-center cursor-pointer select-none hover:text-blue-600 dark:hover:text-cyan-400" @click="toggleSort('review_status')">
+                                    <div class="inline-flex items-center justify-center gap-1">
+                                        <span>Status</span>
+                                        <span class="text-[10px]" x-show="sortCol === 'review_status' || sortCol === 'status'" x-text="sortAsc ? '▲' : '▼'"></span>
+                                    </div>
+                                </th>
                                 <th class="py-3.5 px-3 text-center">Tag</th>
                                 <th class="py-3.5 px-3">Remark</th>
                                 <th class="py-3.5 px-3 text-center">PDF</th>
@@ -395,6 +493,21 @@
                                                 <div class="text-slate-900 dark:text-white font-semibold truncate max-w-[150px] text-xs" x-text="bill.consumer_name || '—'"></div>
                                             </div>
                                         </div>
+                                    </td>
+
+                                    <!-- Basis Badge Column -->
+                                    <td class="py-3 px-2 text-center">
+                                        <span class="px-2 py-0.5 rounded text-[10px] font-black font-mono inline-block shadow-2xs"
+                                              :class="{
+                                                  'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80': (bill.billing_basis || 'OK') === 'OK',
+                                                  'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/80': bill.billing_basis === 'LK',
+                                                  'bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/80': bill.billing_basis === 'MD',
+                                                  'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80': bill.billing_basis === 'PL',
+                                                  'bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/80': bill.billing_basis === 'RN'
+                                              }"
+                                              :title="'Basis: ' + (bill.billing_basis || 'OK')"
+                                              x-text="bill.billing_basis || 'OK'">
+                                        </span>
                                     </td>
 
                                     <!-- ✍️ Working Reading (Current Month) -->
@@ -1414,6 +1527,7 @@
                 selectedMonth: {{ $selectedMonth }},
                 selectedYear: {{ $selectedYear }},
                 filterStatus: 'all',
+                basisFilter: localStorage.getItem('dashboard_basis_filter') || 'all',
                 tagFilter: 'all',
                 availableTags: @json($activeTags ?? []),
                 defaultTag: '{{ $defaultTag ?? "OK" }}',
@@ -1434,6 +1548,11 @@
                     filtered_units: {{ $totalPeriodUnits ?? 0 }},
                     filtered_amount: {{ $totalPeriodAmount ?? 0 }},
                     total_consumers: {{ $totalConsumers ?? 0 }},
+                    basis_ok: {{ $statusCounts['basis_ok'] ?? 0 }},
+                    basis_lk: {{ $statusCounts['basis_lk'] ?? 0 }},
+                    basis_md: {{ $statusCounts['basis_md'] ?? 0 }},
+                    basis_pl: {{ $statusCounts['basis_pl'] ?? 0 }},
+                    basis_rn: {{ $statusCounts['basis_rn'] ?? 0 }},
                 },
 
                 init() {
@@ -1521,12 +1640,40 @@
 
                 onStatusSortChange() {
                     localStorage.setItem('dashboard_status_sort', this.statusSort);
+                    this.currentCardIndex = 0;
                     this.fetchData(1);
                 },
 
                 onSortOptionChange() {
                     localStorage.setItem('dashboard_sort_option', this.sortOption);
                     this.parseSortOption();
+                    this.currentCardIndex = 0;
+                    this.fetchData(1);
+                },
+
+                toggleSort(col) {
+                    if (this.sortCol === col) {
+                        this.sortAsc = !this.sortAsc;
+                    } else {
+                        this.sortCol = col;
+                        this.sortAsc = true;
+                    }
+                    this.sortOption = `${this.sortCol}_${this.sortAsc ? 'asc' : 'desc'}`;
+                    localStorage.setItem('dashboard_sort_option', this.sortOption);
+                    this.currentCardIndex = 0;
+                    this.fetchData(1);
+                },
+
+                setBasisFilter(b) {
+                    this.basisFilter = b;
+                    localStorage.setItem('dashboard_basis_filter', b);
+                    this.currentCardIndex = 0;
+                    this.fetchData(1);
+                },
+
+                onBasisFilterChange() {
+                    localStorage.setItem('dashboard_basis_filter', this.basisFilter);
+                    this.currentCardIndex = 0;
                     this.fetchData(1);
                 },
 
@@ -1538,6 +1685,9 @@
                 },
 
                 fetchData(page = 1) {
+                    if (page === 1) {
+                        this.currentCardIndex = 0;
+                    }
                     this.loading = true;
                     const url = new URL('/dashboard/data', window.location.origin);
                     url.searchParams.append('page', page);
@@ -1545,6 +1695,7 @@
                     url.searchParams.append('year', this.selectedYear);
                     if (this.filterMru) url.searchParams.append('mru_id', this.filterMru);
                     if (this.filterStatus && this.filterStatus !== 'all') url.searchParams.append('filter', this.filterStatus);
+                    if (this.basisFilter && this.basisFilter !== 'all') url.searchParams.append('basis_filter', this.basisFilter);
                     if (this.tagFilter && this.tagFilter !== 'all') url.searchParams.append('tag_filter', this.tagFilter);
                     if (this.searchQuery) url.searchParams.append('search', this.searchQuery);
                     url.searchParams.append('status_sort', this.statusSort);
