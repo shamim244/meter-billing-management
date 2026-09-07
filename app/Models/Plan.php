@@ -20,6 +20,7 @@ class Plan extends Model
         'extra_consumer_rate',
         'grace_period_days',
         'is_active',
+        'is_free',
     ];
 
     protected function casts(): array
@@ -31,6 +32,7 @@ class Plan extends Model
             'extra_consumer_rate' => 'decimal:2',
             'grace_period_days' => 'integer',
             'is_active' => 'boolean',
+            'is_free' => 'boolean',
         ];
     }
 
@@ -89,5 +91,17 @@ class Plan extends Model
         }
 
         return 0.0;
+    }
+
+    /**
+     * Check if this plan is completely free.
+     */
+    public function getIsFreeAttribute(): bool
+    {
+        if (isset($this->attributes['is_free']) && $this->attributes['is_free']) {
+            return true;
+        }
+
+        return $this->base_price <= 0.0;
     }
 }

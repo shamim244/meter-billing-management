@@ -16,6 +16,42 @@ class PlanSeeder extends Seeder
     {
         $planService = app(PlanService::class);
 
+        // 0. Free Starter Plan
+        $free = Plan::firstOrCreate(
+            ['name' => 'Free Starter'],
+            [
+                'description' => 'Free plan to get started immediately. Includes 1 MRU and up to 500 consumers.',
+                'included_mrus' => 1,
+                'included_consumers' => 500,
+                'extra_mru_rate' => 20.00,
+                'extra_consumer_rate' => 0.20,
+                'grace_period_days' => 7,
+                'is_active' => true,
+                'is_free' => true,
+            ]
+        );
+
+        $freeDurations = [
+            [
+                'duration_unit' => 'month',
+                'duration_value' => 1,
+                'name' => 'Free 1 Month (Renewable)',
+                'discount_percent' => 0.00,
+                'final_price' => 0.00,
+                'is_active' => true,
+            ],
+            [
+                'duration_unit' => 'month',
+                'duration_value' => 12,
+                'name' => 'Free 1 Year',
+                'discount_percent' => 0.00,
+                'final_price' => 0.00,
+                'is_active' => true,
+            ],
+        ];
+
+        $planService->syncDurations($free, $freeDurations, 0.00);
+
         // 1. Starter Plan
         $starter = Plan::firstOrCreate(
             ['name' => 'Starter'],

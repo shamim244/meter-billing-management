@@ -76,6 +76,30 @@
                 </div>
             @endif
 
+            <!-- Subscription Onboarding Banner (When user has no active plan) -->
+            @if(!$activeSubscription)
+                <div class="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-r from-amber-500/10 via-indigo-500/5 to-transparent border border-amber-300 dark:border-amber-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+                    <div class="flex items-start sm:items-center gap-3.5">
+                        <div class="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center text-lg shrink-0 font-black">
+                            ⚡
+                        </div>
+                        <div>
+                            <div class="text-sm font-black text-slate-900 dark:text-white flex flex-wrap items-center gap-2">
+                                <span>Get Started with a Subscription Plan</span>
+                                <span class="px-2 py-0.5 text-[10px] font-black uppercase tracking-wider rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">100% Free Plan Available</span>
+                            </div>
+                            <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                                You do not have an active subscription yet. Activate our <strong>Free Starter Tier</strong> (1 MRU & 500 Consumers) with 1 click to create cycles and download bills immediately.
+                            </p>
+                        </div>
+                    </div>
+                    <a href="{{ route('user-panel.subscription') }}" class="shrink-0 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl text-xs shadow-md shadow-blue-500/20 transition active:scale-95 text-center">
+                        <span>⚡ Activate Free Plan / Choose Tier</span>
+                        <span>→</span>
+                    </a>
+                </div>
+            @endif
+
             <!-- Workspace Selection & Billing Period Bar -->
             <div class="bg-white dark:bg-slate-900 p-4 sm:px-6 sm:py-4 rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3.5">
                 <div class="flex flex-wrap items-center gap-3 sm:gap-5">
@@ -893,6 +917,18 @@
                     </div>
 
                     <form @submit.prevent="submitCreateMru()" class="overflow-y-auto p-4 sm:p-6 space-y-4">
+                        @if(!$activeSubscription)
+                            <div class="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/80 text-amber-800 dark:text-amber-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-sm">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-base">⚠️</span>
+                                    <span class="font-semibold">No active plan subscription.</span>
+                                </div>
+                                <a href="{{ route('user-panel.subscription') }}" class="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs text-center shadow-xs transition active:scale-95">
+                                    ⚡ Free Plan Available →
+                                </a>
+                            </div>
+                        @endif
+
                         <div x-show="createMruError" class="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-semibold rounded-xl" x-text="createMruError"></div>
 
                         <div>
@@ -992,6 +1028,18 @@
                     </div>
 
                     <div class="overflow-y-auto p-4 sm:p-6 space-y-4">
+                        @if(!$activeSubscription)
+                            <div class="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/80 text-amber-800 dark:text-amber-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-sm">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-base">⚠️</span>
+                                    <span class="font-semibold">No active plan subscription found.</span>
+                                </div>
+                                <a href="{{ route('user-panel.subscription') }}" class="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs text-center shadow-xs transition active:scale-95">
+                                    ⚡ Choose Plan →
+                                </a>
+                            </div>
+                        @endif
+
                         <!-- For MRU Select -->
                         <div>
                             <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-1.5">For MRU</label>
@@ -1054,7 +1102,22 @@
                         </div>
 
                         <!-- Result message -->
-                        <div x-show="cycleResult" class="p-3.5 rounded-2xl text-xs font-semibold" :class="cycleResult?.success ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800'" x-text="cycleResult?.message"></div>
+                        <div x-show="cycleResult" class="p-4 rounded-2xl text-xs font-semibold" :class="cycleResult?.success ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800'">
+                            <div class="flex items-start gap-2.5">
+                                <span class="text-base leading-none mt-0.5" x-text="cycleResult?.success ? '✅' : '⚠️'"></span>
+                                <div class="flex-1 space-y-2">
+                                    <div x-text="cycleResult?.message"></div>
+                                    <template x-if="cycleResult?.requires_subscription || cycleResult?.redirect_url">
+                                        <div class="pt-2 border-t border-rose-200 dark:border-rose-800/60 flex flex-wrap items-center gap-2">
+                                            <a :href="cycleResult?.redirect_url || '{{ route('user-panel.subscription') }}'" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl text-xs shadow-md transition active:scale-95">
+                                                <span>⚡ Choose a Plan / Activate Free Tier</span>
+                                                <span>→</span>
+                                            </a>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="p-4 sm:p-6 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2.5">
@@ -2504,6 +2567,10 @@
                     .then(async res => {
                         const data = await res.json();
                         if (!res.ok) {
+                            if (data.requires_subscription && data.redirect_url) {
+                                window.location.href = data.redirect_url;
+                                return;
+                            }
                             throw new Error(data.message || 'Server error occurred');
                         }
                         return data;

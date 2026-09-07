@@ -61,6 +61,30 @@ class RegisteredUserController extends Controller
             \Illuminate\Support\Facades\Log::error("[Registration] Referral processing error for user #{$user->id}: " . $e->getMessage());
         }
 
+        // Auto-subscribe new user to default Free Starter Plan if available
+        try {
+            $freePlan = \App\Models\Plan::where('is_active', true)
+                ->where(function ($q) {
+                    $q->where('is_free', true)
+                      ->orWhere('name', 'like', '%Free%')
+                      ->orWhereHas('durations', fn($dq) => $dq->where('final_price', '<=', 0));
+                })
+                ->first();
+
+            if ($freePlan) {
+                $duration = $freePlan->durations()
+                    ->where('is_active', true)
+                    ->orderBy('duration_value', 'desc')
+                    ->first();
+
+                if ($duration) {
+                    app(\App\Services\Plan\PlanService::class)->subscribeAgent($user, $freePlan, $duration);
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("[Registration] Auto-subscribe to Free Plan failed for user #{$user->id}: " . $e->getMessage());
+        }
+
         event(new Registered($user));
 
         Auth::login($user);

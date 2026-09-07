@@ -89,6 +89,44 @@ class MruController extends Controller
 
         // Quota check & Pay-gate flow
         $activeSubscription = $this->mruQuotaService->getActiveSubscription($userId);
+        if (!$activeSubscription) {
+            // Attempt auto-subscribing to Free Plan if available
+            try {
+                $user = Auth::user();
+                $freePlan = \App\Models\Plan::where('is_active', true)
+                    ->where(function ($q) {
+                        $q->where('is_free', true)
+                          ->orWhere('name', 'like', '%Free%')
+                          ->orWhereHas('durations', fn($dq) => $dq->where('final_price', '<=', 0));
+                    })
+                    ->first();
+
+                if ($user && $freePlan) {
+                    $duration = $freePlan->durations()->where('is_active', true)->orderBy('duration_value', 'desc')->first();
+                    if ($duration) {
+                        app(\App\Services\Plan\PlanService::class)->subscribeAgent($user, $freePlan, $duration);
+                        $activeSubscription = $this->mruQuotaService->getActiveSubscription($userId);
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("[MRU] Auto-subscribe to Free Plan on MRU creation failed: " . $e->getMessage());
+            }
+        }
+
+        if (!$activeSubscription) {
+            $msg = 'An active subscription plan is required to create an MRU. Please choose a plan or activate your Free plan to continue.';
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'requires_subscription' => true,
+                    'redirect_url' => route('user-panel.subscription'),
+                    'message' => $msg,
+                ], 402);
+            }
+
+            return redirect()->route('user-panel.subscription')->with('info', $msg);
+        }
+
         $payOverage = $request->boolean('pay_overage', false);
 
         if ($activeSubscription && $this->mruQuotaService->checkMruQuotaAvailable($userId) <= 0 && !$payOverage) {
@@ -589,13 +627,18 @@ class MruController extends Controller
         );
 
         if (!$quotaResult['allowed']) {
+            $requiresSub = $quotaResult['requires_subscription'] ?? false;
             return response()->json([
                 'success' => false,
+                'requires_subscription' => $requiresSub,
                 'requires_overage' => $quotaResult['requires_payment'] ?? false,
                 'overage_type' => 'consumer_cycle',
                 'amount_due' => $quotaResult['amount_due'] ?? 0,
                 'extra_count' => $quotaResult['extra_count'] ?? 0,
-                'message' => $quotaResult['reason'] ?? $quotaResult['message'] ?? 'Consumer quota exceeded.',
+                'redirect_url' => $requiresSub ? route('user-panel.subscription') : null,
+                'message' => $requiresSub
+                    ? 'An active subscription plan is required to create a billing cycle. Please choose a plan or activate your Free plan to continue.'
+                    : ($quotaResult['reason'] ?? $quotaResult['message'] ?? 'Consumer quota exceeded.'),
             ], 402);
         }
 
@@ -693,13 +736,18 @@ class MruController extends Controller
         );
 
         if (!$quotaResult['allowed']) {
+            $requiresSub = $quotaResult['requires_subscription'] ?? false;
             return response()->json([
                 'success' => false,
+                'requires_subscription' => $requiresSub,
                 'requires_overage' => $quotaResult['requires_payment'] ?? false,
                 'overage_type' => 'consumer_cycle',
                 'amount_due' => $quotaResult['amount_due'] ?? 0,
                 'extra_count' => $quotaResult['extra_count'] ?? 0,
-                'message' => $quotaResult['reason'] ?? $quotaResult['message'] ?? 'Consumer quota exceeded.',
+                'redirect_url' => $requiresSub ? route('user-panel.subscription') : null,
+                'message' => $requiresSub
+                    ? 'An active subscription plan is required to create a billing cycle. Please choose a plan or activate your Free tier to continue.'
+                    : ($quotaResult['reason'] ?? $quotaResult['message'] ?? 'Consumer quota exceeded.'),
             ], 402);
         }
 

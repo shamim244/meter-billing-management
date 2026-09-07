@@ -387,7 +387,22 @@
                         </div>
 
                         <!-- Result notification -->
-                        <div x-show="cycleResult && !cycleOverageRequired" class="p-3.5 rounded-2xl text-xs font-semibold" :class="cycleResult?.success ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800'" x-text="cycleResult?.message"></div>
+                        <div x-show="cycleResult && !cycleOverageRequired" class="p-4 rounded-2xl text-xs font-semibold" :class="cycleResult?.success ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800'">
+                            <div class="flex items-start gap-2.5">
+                                <span class="text-base leading-none mt-0.5" x-text="cycleResult?.success ? '✅' : '⚠️'"></span>
+                                <div class="flex-1 space-y-2">
+                                    <div x-text="cycleResult?.message"></div>
+                                    <template x-if="cycleResult?.requires_subscription || cycleResult?.redirect_url">
+                                        <div class="pt-2 border-t border-rose-200 dark:border-rose-800/60 flex flex-wrap items-center gap-2">
+                                            <a :href="cycleResult?.redirect_url || '{{ route('user-panel.subscription') }}'" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl text-xs shadow-md transition active:scale-95">
+                                                <span>⚡ Choose a Plan / Activate Free Tier</span>
+                                                <span>→</span>
+                                            </a>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="p-4 sm:p-6 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2.5">
@@ -566,6 +581,10 @@
                             throw new Error(data.message);
                         }
                         if (!res.ok) {
+                            if (data.requires_subscription && data.redirect_url) {
+                                window.location.href = data.redirect_url;
+                                return;
+                            }
                             throw new Error(data.message || 'Server error occurred');
                         }
                         return data;
@@ -632,6 +651,10 @@
                             throw new Error(data.message);
                         }
                         if (!res.ok) {
+                            if (data.requires_subscription) {
+                                this.cycleResult = data;
+                                return;
+                            }
                             throw new Error(data.message || 'Server returned an error');
                         }
                         return data;

@@ -130,6 +130,7 @@ class DashboardController extends Controller
 
         $activeTags = $this->billTagService->getActiveTags();
         $defaultTag = $this->billTagService->getDefaultTag();
+        $activeSubscription = Auth::user()?->activeSubscription;
 
         return view('dashboard', compact(
             'periods',
@@ -145,7 +146,8 @@ class DashboardController extends Controller
             'totalPeriodUnits',
             'statusCounts',
             'activeTags',
-            'defaultTag'
+            'defaultTag',
+            'activeSubscription'
         ));
     }
 
