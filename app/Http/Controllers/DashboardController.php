@@ -355,13 +355,20 @@ class DashboardController extends Controller
 
             $bill->projected_reading = (string) $projectedReading;
 
+            $bill->is_projected = false;
+            $bill->is_manual = false;
+            $bill->reading_source = 'auto';
+
             if (empty($bill->working_reading) || $bill->working_reading == '0') {
                 if ($projectedReading > 0) {
                     $bill->working_reading = (string) $projectedReading;
                     $bill->is_projected = true;
                 }
             } else {
-                $bill->is_projected = false;
+                $isDiffFromProjected = ((int)$bill->working_reading !== $projectedReading);
+                $bill->is_manual = $isDiffFromProjected;
+                $bill->is_projected = !$isDiffFromProjected;
+                $bill->reading_source = $isDiffFromProjected ? 'manual' : 'auto';
             }
 
             $workNum = is_numeric($bill->working_reading) ? (int)$bill->working_reading : $projectedReading;
@@ -606,11 +613,33 @@ class DashboardController extends Controller
         $userId = Auth::id();
         $readingVal = trim($request->working_reading);
 
-        $bill = \Illuminate\Support\Facades\DB::transaction(function () use ($userId, $request, $readingVal) {
-            $bill = BillRecord::where('user_id', $userId)
-                ->where('id', $request->id)
-                ->firstOrFail();
+        $bill = BillRecord::where('user_id', $userId)
+            ->where('id', $request->id)
+            ->firstOrFail();
 
+        // Submitted Bill Lockout: Require explicit confirmation/override flag if bill is submitted
+        $isSubmitted = (strtolower(trim($bill->review_status ?? '')) === 'submitted');
+        if (!$isSubmitted) {
+            $isSubmitted = BillStatus::where('user_id', $userId)
+                ->where('ca_number', $bill->ca_number)
+                ->where('billing_month', $bill->billing_month)
+                ->where('billing_year', $bill->billing_year)
+                ->whereRaw('LOWER(status) = ?', ['submitted'])
+                ->exists();
+        }
+
+        $force = $request->boolean('force') || $request->boolean('override_submitted') || $request->boolean('confirm_override');
+
+        if ($isSubmitted && !$force) {
+            return response()->json([
+                'success' => false,
+                'requires_override' => true,
+                'is_submitted' => true,
+                'message' => 'This bill has been submitted and is locked. Confirm unlock or set status to pending to update reading.',
+            ], 422);
+        }
+
+        $bill = \Illuminate\Support\Facades\DB::transaction(function () use ($userId, $bill, $readingVal) {
             $bill->working_reading = $readingVal;
             $bill->save();
 
@@ -649,8 +678,25 @@ class DashboardController extends Controller
                 ->orderBy('billing_month', 'asc')
                 ->get();
 
+            $submittedFutureStatuses = BillStatus::where('user_id', $userId)
+                ->where('ca_number', $bill->ca_number)
+                ->whereRaw('LOWER(status) = ?', ['submitted'])
+                ->get()
+                ->keyBy(fn($s) => "{$s->billing_month}_{$s->billing_year}");
+
             $currentChainReading = is_numeric($readingVal) ? (int)$readingVal : 0;
             foreach ($subsequentBills as $futureBill) {
+                $statusKey = "{$futureBill->billing_month}_{$futureBill->billing_year}";
+                $isFutureSubmitted = (strtolower(trim($futureBill->review_status ?? '')) === 'submitted') || isset($submittedFutureStatuses[$statusKey]);
+
+                // Cascade Protection: Do NOT overwrite future bills whose review_status is 'submitted'
+                if ($isFutureSubmitted) {
+                    if (!empty($futureBill->working_reading) && is_numeric($futureBill->working_reading)) {
+                        $currentChainReading = (int) $futureBill->working_reading;
+                    }
+                    continue;
+                }
+
                 $futureBill->previous_reading = (string) $currentChainReading;
                 $avgUnits = $futureBill->units_consumed ?: 50;
                 $newProjected = $currentChainReading + $avgUnits;
@@ -688,7 +734,27 @@ class DashboardController extends Controller
 
         $query = BillRecord::where('user_id', $userId)
             ->where('billing_month', $month)
-            ->where('billing_year', $year);
+            ->where('billing_year', $year)
+            ->where(function ($q) {
+                $q->whereNull('working_reading')
+                  ->orWhere('working_reading', '')
+                  ->orWhere('working_reading', '0');
+            })
+            ->where(function ($q) {
+                $q->whereNull('review_status')
+                  ->orWhereRaw('LOWER(review_status) != ?', ['submitted']);
+            });
+
+        // Exclude accounts already marked submitted in bill_statuses
+        $submittedCas = BillStatus::where('user_id', $userId)
+            ->where('billing_month', $month)
+            ->where('billing_year', $year)
+            ->whereRaw('LOWER(status) = ?', ['submitted'])
+            ->pluck('ca_number');
+
+        if ($submittedCas->isNotEmpty()) {
+            $query->whereNotIn('ca_number', $submittedCas);
+        }
 
         if (!empty($mruId)) {
             $query->where('mru_id', $mruId);
@@ -712,6 +778,14 @@ class DashboardController extends Controller
                 ->keyBy('ca_number');
 
             foreach ($bills as $bill) {
+                // Safeguard against overwriting existing reading or submitted bill
+                if (!empty($bill->working_reading) && $bill->working_reading !== '0') {
+                    continue;
+                }
+                if (strtolower(trim($bill->review_status ?? '')) === 'submitted') {
+                    continue;
+                }
+
                 $history = $historicalBills->get($bill->ca_number, collect());
                 $consumer = $consumers->get($bill->ca_number);
                 

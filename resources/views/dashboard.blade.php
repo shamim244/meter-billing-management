@@ -592,15 +592,36 @@
 
                                     <!-- ✍️ Working Reading (Current Month) -->
                                     <td class="py-3 px-2 text-center">
-                                        <div class="inline-flex items-center gap-1">
+                                        <div class="inline-flex items-center gap-1 justify-center">
+                                            <template x-if="bill.review_status === 'submitted'">
+                                                <button type="button" @click="toggleUnlockBill(bill)"
+                                                        class="text-[11px] p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                                                        :title="isBillLocked(bill) ? 'Bill submitted (Locked). Click to unlock' : 'Bill unlocked. Click to re-lock'">
+                                                    <span x-text="isBillLocked(bill) ? '🔒' : '🔓'"></span>
+                                                </button>
+                                            </template>
                                             <input type="text" 
+                                                   :id="'working-reading-input-table-' + bill.id"
                                                    x-model="bill.working_reading" 
+                                                   @input="bill.is_manual = true; bill.is_projected = false"
+                                                   :readonly="isBillLocked(bill)"
                                                    @blur="saveWorkingReading(bill)" 
                                                    @keyup.enter="$event.target.blur()"
-                                                   class="w-20 text-center font-mono font-bold text-xs rounded-lg border-blue-200 dark:border-blue-800 bg-blue-50/40 dark:bg-slate-800 text-blue-600 dark:text-cyan-400 py-1 px-1 focus:ring-blue-500" />
-                                            <button @click="autoFillWorkingReading(bill)" class="text-[9px] px-1 py-0.5 rounded bg-blue-50 dark:bg-blue-900/60 text-blue-600 dark:text-cyan-300 hover:bg-blue-100 font-bold" title="Auto-fill Prev + Avg">⚡</button>
+                                                   class="w-20 text-center font-mono font-bold text-xs rounded-lg py-1 px-1 focus:ring-blue-500 transition"
+                                                   :class="isBillLocked(bill) ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-300 dark:border-slate-700 cursor-not-allowed' : 'border-blue-200 dark:border-blue-800 bg-blue-50/40 dark:bg-slate-800 text-blue-600 dark:text-cyan-400'" />
+                                            <button @click="autoFillWorkingReading(bill)" 
+                                                    :disabled="isBillLocked(bill)"
+                                                    class="text-[9px] px-1 py-0.5 rounded font-bold transition"
+                                                    :class="isBillLocked(bill) ? 'opacity-40 cursor-not-allowed bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600' : 'bg-blue-50 dark:bg-blue-900/60 text-blue-600 dark:text-cyan-300 hover:bg-blue-100'"
+                                                    title="Auto-fill Prev + Avg">⚡</button>
                                         </div>
-                                        <div class="text-[10px] text-slate-400 font-mono mt-0.5" x-text="'Diff: ' + (bill.working_diff_units ?? 0) + 'k'"></div>
+                                        <div class="flex items-center justify-center gap-1 text-[10px] text-slate-400 font-mono mt-0.5">
+                                            <span x-text="'Diff: ' + (bill.working_diff_units ?? 0) + 'k'"></span>
+                                            <span x-show="bill.working_reading" class="text-[9px] px-1 py-0.2 rounded font-bold inline-flex items-center"
+                                                  :class="bill.is_manual ? 'bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800' : 'bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-cyan-300 border border-blue-200 dark:border-blue-800'"
+                                                  :title="bill.is_manual ? 'Manual Custom Override' : 'Auto / Projected Reading'"
+                                                  x-text="bill.is_manual ? '✍️' : '⚡'"></span>
+                                        </div>
                                     </td>
 
                                     <!-- 📅 Previous Reading (DB) -->
@@ -841,11 +862,25 @@
                                     <!-- 2x2 Data Grid: The 4-Box Reading Architecture (Mobile-Optimized Single-Line Labels) -->
                                     <div class="p-3 sm:p-5 grid grid-cols-2 gap-2.5 sm:gap-3 bg-slate-50/50 dark:bg-slate-900/50">
                                         <!-- Box 1: ✍️ Working Reading (Current Month) -->
-                                        <div class="bg-white dark:bg-slate-800 p-2.5 sm:p-3 rounded-2xl border shadow-sm flex flex-col justify-between" :class="bill.pdf_sync_status === 'invalid_behind' ? 'border-rose-400 dark:border-rose-700 bg-rose-50/20' : 'border-blue-200 dark:border-blue-800/80'">
-                                            <!-- Top: Header Label & Shortcut -->
+                                        <div class="bg-white dark:bg-slate-800 p-2.5 sm:p-3 rounded-2xl border shadow-sm flex flex-col justify-between" :class="bill.pdf_sync_status === 'invalid_behind' ? 'border-rose-400 dark:border-rose-700 bg-rose-50/20' : (isBillLocked(bill) ? 'border-slate-300 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/40' : 'border-blue-200 dark:border-blue-800/80')">
+                                            <!-- Top: Header Label, Visual Badge & Lock Indicator / Shortcut -->
                                             <div class="flex items-center justify-between">
+                                                <div class="flex items-center gap-1.5">
+                                                    <span class="text-[10px] font-black uppercase tracking-wider block truncate" :class="bill.pdf_sync_status === 'invalid_behind' ? 'text-rose-600 dark:text-rose-400' : (isBillLocked(bill) ? 'text-slate-500 dark:text-slate-400' : 'text-blue-700 dark:text-cyan-300')">✍️ Working</span>
+                                                    <!-- Visual Badge: Manual vs Auto -->
+                                                    <span x-show="bill.working_reading" class="text-[9px] px-1.5 py-0.5 rounded-full font-bold inline-flex items-center gap-0.5 shadow-2xs"
+                                                          :class="bill.is_manual ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700' : 'bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-cyan-300 border border-blue-300 dark:border-blue-700'"
+                                                          x-text="bill.is_manual ? '✍️ Manual' : '⚡ Auto'"></span>
+                                                </div>
                                                 <div class="flex items-center gap-1">
-                                                    <span class="text-[10px] font-black uppercase tracking-wider block truncate" :class="bill.pdf_sync_status === 'invalid_behind' ? 'text-rose-600 dark:text-rose-400' : 'text-blue-700 dark:text-cyan-300'">✍️ Working</span>
+                                                    <template x-if="bill.review_status === 'submitted'">
+                                                        <button type="button" @click="toggleUnlockBill(bill)" 
+                                                                class="text-[10px] px-1.5 py-0.5 rounded-md font-bold transition flex items-center gap-0.5 shadow-2xs"
+                                                                :class="isBillLocked(bill) ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 hover:bg-emerald-200'"
+                                                                :title="isBillLocked(bill) ? 'Bill is submitted (Locked). Click to unlock for editing.' : 'Bill is unlocked. Click to re-lock.'">
+                                                            <span x-text="isBillLocked(bill) ? '🔒 Locked' : '🔓 Unlocked'"></span>
+                                                        </button>
+                                                    </template>
                                                     <span class="hidden sm:inline-block text-[9px] font-mono bg-blue-100 dark:bg-blue-950 px-1 py-0.2 rounded text-blue-700 dark:text-cyan-300 font-bold" x-text="'[' + (shortcuts.focus_reading?.toUpperCase() || 'R') + ']'"></span>
                                                 </div>
                                             </div>
@@ -855,12 +890,14 @@
                                                 <input type="text" 
                                                        :id="'working-reading-input-' + bill.id"
                                                        x-model="bill.working_reading" 
+                                                       @input="bill.is_manual = true; bill.is_projected = false"
+                                                       :readonly="isBillLocked(bill)"
                                                        @blur="saveWorkingReading(bill)" 
                                                        @keydown.escape="$el.blur()"
-                                                       @keyup.enter="saveWorkingReading(bill); const wasFiltered = updateBillStatus(bill, 'submitted'); if (!wasFiltered) nextCard();"
+                                                       @keyup.enter="if (!isBillLocked(bill)) { saveWorkingReading(bill); if (bill.review_status === 'submitted') { bill._unlocked = false; $el.blur(); nextCard(); } else { const wasFiltered = updateBillStatus(bill, 'submitted'); if (!wasFiltered) nextCard(); } }"
                                                        placeholder="Enter reading" 
-                                                       class="w-full text-base sm:text-lg font-black bg-blue-50/40 dark:bg-slate-900/60 border rounded-xl px-2 py-1 font-mono focus:ring-blue-500 focus:border-blue-500 text-center"
-                                                       :class="bill.pdf_sync_status === 'invalid_behind' ? 'border-rose-400 text-rose-600 dark:text-rose-400' : 'border-blue-200 dark:border-blue-800 text-blue-600 dark:text-cyan-400'">
+                                                       class="w-full text-base sm:text-lg font-black border rounded-xl px-2 py-1 font-mono focus:ring-blue-500 focus:border-blue-500 text-center transition"
+                                                       :class="isBillLocked(bill) ? 'bg-slate-100 dark:bg-slate-900/90 text-slate-400 dark:text-slate-500 border-slate-300 dark:border-slate-700 cursor-not-allowed' : (bill.pdf_sync_status === 'invalid_behind' ? 'border-rose-400 text-rose-600 dark:text-rose-400 bg-blue-50/40 dark:bg-slate-900/60' : 'border-blue-200 dark:border-blue-800 text-blue-600 dark:text-cyan-400 bg-blue-50/40 dark:bg-slate-900/60')">
                                             </div>
 
                                             <!-- Bottom / Downline: Left (Diff) | Center (🚨 < PDF!) | Right (Auto-fill) -->
@@ -872,7 +909,11 @@
                                                     </template>
                                                 </div>
                                                 <div class="text-right shrink-0 flex items-center gap-1">
-                                                    <button @click="autoFillWorkingReading(bill)" class="text-[9px] sm:text-[10px] font-bold text-blue-600 dark:text-cyan-400 hover:text-blue-800 dark:hover:text-cyan-300 hover:underline flex items-center gap-0.5 transition" title="Auto-fill with Prev + Avg (enforcing >= PDF)">
+                                                    <button @click="autoFillWorkingReading(bill)" 
+                                                            :disabled="isBillLocked(bill)"
+                                                            class="text-[9px] sm:text-[10px] font-bold flex items-center gap-0.5 transition"
+                                                            :class="isBillLocked(bill) ? 'opacity-40 cursor-not-allowed text-slate-400' : 'text-blue-600 dark:text-cyan-400 hover:text-blue-800 dark:hover:text-cyan-300 hover:underline'"
+                                                            title="Auto-fill with Prev + Avg (enforcing >= PDF)">
                                                         <span>⚡ Auto</span>
                                                         <span class="hidden sm:inline-block text-[8px] font-mono opacity-75" x-text="'[' + (shortcuts.auto_fill_reading?.toUpperCase() || 'A') + ']'"></span>
                                                     </button>
@@ -1756,7 +1797,7 @@
                                 let body = {};
                                 if (item.type === 'working_reading') {
                                     url = '/bills/update-working-reading';
-                                    body = { id: item.payload.id, working_reading: item.payload.working_reading };
+                                    body = { id: item.payload.id, working_reading: item.payload.working_reading, force: !!item.payload.force };
                                 } else if (item.type === 'status') {
                                     url = '/bills/status';
                                     body = { ca_number: item.payload.ca_number, billing_month: item.payload.billing_month, billing_year: item.payload.billing_year, status: item.payload.status };
@@ -2046,7 +2087,7 @@
                                         pendingForBill.forEach(q => {
                                             if (q.type === 'working_reading' && q.payload && q.payload.working_reading !== undefined) {
                                                 b.working_reading = q.payload.working_reading;
-                                                const prevNum = parseInt(b.db_prev_reading) || 0;
+                                                const prevNum = parseInt(b.db_prev_reading) || parseInt(b.previous_reading) || 0;
                                                 const workNum = parseInt(b.working_reading) || 0;
                                                 b.working_diff_units = Math.max(0, workNum - prevNum);
                                             } else if (q.type === 'status' && q.payload && q.payload.status) {
@@ -2312,10 +2353,36 @@
                     });
                 },
 
+                // 🔒 Check if bill is locked (submitted and not explicitly unlocked)
+                isBillLocked(bill) {
+                    if (!bill) return false;
+                    return (bill.review_status === 'submitted') && !bill._unlocked;
+                },
+
+                // 🔓 Explicit unlock/re-lock toggle for submitted bills
+                toggleUnlockBill(bill) {
+                    if (!bill) return;
+                    bill._unlocked = !bill._unlocked;
+                    if (bill._unlocked) {
+                        this.showToastNotification('🔓', `Unlocked editing for CA ${bill.ca_number}.`);
+                        this.$nextTick(() => {
+                            const el = (this.viewMode === 'table')
+                                ? (document.getElementById('working-reading-input-table-' + bill.id) || document.getElementById('working-reading-input-' + bill.id))
+                                : (document.getElementById('working-reading-input-' + bill.id) || document.getElementById('working-reading-input-table-' + bill.id));
+                            if (el) {
+                                el.focus();
+                                el.select();
+                            }
+                        });
+                    } else {
+                        this.showToastNotification('🔒', `Re-locked CA ${bill.ca_number}.`);
+                    }
+                },
+
                 // ✍️ Save Working Reading via AJAX with Invariant Checks & Offline Resilience
                 saveWorkingReading(bill) {
                     if (!bill.id || bill.working_reading === undefined || bill.working_reading === null) return;
-                    const prevNum = parseInt(bill.db_prev_reading) || 0;
+                    const prevNum = parseInt(bill.db_prev_reading) || parseInt(bill.previous_reading) || 0;
                     const workNum = parseInt(bill.working_reading) || 0;
                     const pdfNum = parseInt(bill.official_pdf_reading);
 
@@ -2336,12 +2403,16 @@
                         }
                     }
 
+                    const isSubmitted = (bill.review_status === 'submitted');
+                    const forceFlag = isSubmitted && !!bill._unlocked;
+
                     // Check offline / server unreachable state
                     if (!this.isOnline || !this.isServerReachable) {
                         this.enqueueOfflineAction('working_reading', {
                             id: bill.id,
                             ca_number: bill.ca_number,
-                            working_reading: String(bill.working_reading).trim()
+                            working_reading: String(bill.working_reading).trim(),
+                            force: forceFlag
                         });
                         this.showToastNotification('☁️', `Reading ${bill.working_reading} saved locally (Offline mode).`);
                         return;
@@ -2356,10 +2427,21 @@
                         },
                         body: JSON.stringify({
                             id: bill.id,
-                            working_reading: String(bill.working_reading).trim()
+                            working_reading: String(bill.working_reading).trim(),
+                            force: forceFlag
                         })
                     })
                     .then(r => {
+                        if (r.status === 422) {
+                            return r.json().then(errData => {
+                                if (errData.requires_override) {
+                                    this.showToastNotification('🔒', errData.message || 'Bill is submitted and locked. Unlock first to update.');
+                                }
+                                const err = new Error(errData.message || 'Validation error');
+                                err.isValidationError = true;
+                                throw err;
+                            });
+                        }
                         if (!r.ok) throw new Error('Network error ' + r.status);
                         return r.json();
                     })
@@ -2371,12 +2453,15 @@
                         }
                     })
                     .catch(err => {
-                        console.warn('Working reading save failed, queuing offline:', err);
+                        console.warn('Working reading save failed:', err);
+                        if (err.isValidationError || (err.message && (err.message.includes('locked') || err.message.includes('submitted')))) return;
+
                         this.isServerReachable = false;
                         this.enqueueOfflineAction('working_reading', {
                             id: bill.id,
                             ca_number: bill.ca_number,
-                            working_reading: String(bill.working_reading).trim()
+                            working_reading: String(bill.working_reading).trim(),
+                            force: forceFlag
                         });
                         this.showToastNotification('☁️', `Working reading saved locally (Connection lost).`);
                     });
@@ -2384,23 +2469,62 @@
 
                 // ⚡ Auto-Fill Working Reading with (Previous + Average) ensuring >= PDF Reading
                 autoFillWorkingReading(bill) {
-                    const prev = parseInt(bill.db_prev_reading) || 0;
+                    if (this.isBillLocked(bill)) {
+                        this.showToastNotification('🔒', 'Cannot auto-fill: Bill is submitted and locked. Unlock first.');
+                        return;
+                    }
+
+                    const prev = parseInt(bill.db_prev_reading) || parseInt(bill.previous_reading) || 0;
                     const avg = parseInt(bill.smart_avg_units) || 50;
-                    let target = prev + avg;
+                    let target = parseInt(bill.projected_reading) || (prev > 0 ? (prev + avg) : avg);
 
                     const pdfNum = parseInt(bill.official_pdf_reading);
                     if (!isNaN(pdfNum) && target < pdfNum) {
                         target = pdfNum; // Guaranteed never < PDF
                     }
 
-                    bill.working_reading = String(target);
+                    const currentVal = (bill.working_reading !== undefined && bill.working_reading !== null) ? String(bill.working_reading).trim() : '';
+                    const targetStr = String(target);
+
+                    // Manual Override Protection:
+                    // If working_reading has already been set and differs from target
+                    const isDifferent = currentVal !== '' && currentVal !== '0' && currentVal !== targetStr;
+                    const isManual = bill.is_manual || isDifferent;
+
+                    if (isManual && isDifferent) {
+                        const confirmMsg = `This account currently has a manual reading of ${currentVal} kWh.\n\nAre you sure you want to replace it with auto-fill ${targetStr} kWh (Prev ${prev} + Avg ${avg})?`;
+                        if (!confirm(confirmMsg)) {
+                            return;
+                        }
+                    }
+
+                    const oldReading = currentVal;
+                    const oldManual = bill.is_manual;
+
+                    bill.working_reading = targetStr;
                     bill.is_projected = true;
+                    bill.is_manual = false;
                     this.saveWorkingReading(bill);
+
+                    if (oldReading && oldReading !== targetStr) {
+                        this.showToastNotification(
+                            '⚡',
+                            `Auto-filled CA ${bill.ca_number} with ${targetStr} (replaced ${oldReading})`,
+                            {
+                                kind: 'working_reading',
+                                bill: bill,
+                                prevReading: oldReading,
+                                prevManual: oldManual
+                            }
+                        );
+                    } else {
+                        this.showToastNotification('⚡', `Auto-filled CA ${bill.ca_number} with ${targetStr}`, null);
+                    }
                 },
 
                 // ⚡ Bulk Auto-Project All Unfilled Readings
                 bulkAutoProjectAll() {
-                    if (!confirm(`Auto-project working readings (Previous + Avg) for all accounts in this cycle?`)) return;
+                    if (!confirm(`Auto-project working readings (Previous + Avg) for accounts with empty readings in this cycle?\n\n(Existing manual readings and submitted bills will remain completely protected.)`)) return;
                     fetch('/bills/bulk-project-readings', {
                         method: 'POST',
                         headers: {
@@ -2521,6 +2645,9 @@
 
                     // Optimistically update status
                     bill.review_status = newStatus;
+                    if (newStatus !== 'submitted') {
+                        bill._unlocked = false;
+                    }
 
                     // Update live global counts immediately
                     if (prevStatus !== newStatus) {
@@ -2832,6 +2959,15 @@
                     if (!this.toast.undoData) return;
                     const data = this.toast.undoData;
                     this.toast.show = false;
+
+                    if (data.kind === 'working_reading') {
+                        data.bill.working_reading = data.prevReading;
+                        data.bill.is_manual = (data.prevManual !== undefined) ? data.prevManual : true;
+                        data.bill.is_projected = !data.bill.is_manual;
+                        this.saveWorkingReading(data.bill);
+                        this.showToastNotification('↩', `Restored reading to ${data.prevReading} for CA ${data.bill.ca_number}`, null);
+                        return;
+                    }
 
                     if (data.kind === 'tag') {
                         // Revert tag locally
@@ -3260,6 +3396,10 @@
                     // 7. Focus / Edit Working Reading
                     if (ks ? ks.matches(e, this.shortcuts.focus_reading) : (e.key === this.shortcuts.focus_reading)) {
                         e.preventDefault();
+                        if (this.isBillLocked(currentBill)) {
+                            this.showToastNotification('🔒', 'Bill is submitted and locked. Click unlock to edit.');
+                            return;
+                        }
                         const el = document.getElementById('working-reading-input-' + currentBill.id);
                         if (el) {
                             el.focus();
@@ -3271,6 +3411,10 @@
                     // 8. Auto-Fill Working Reading (Prev + Avg)
                     if (ks ? ks.matches(e, this.shortcuts.auto_fill_reading) : (e.key === this.shortcuts.auto_fill_reading)) {
                         e.preventDefault();
+                        if (this.isBillLocked(currentBill)) {
+                            this.showToastNotification('🔒', 'Cannot auto-fill: Bill is submitted and locked. Unlock first.');
+                            return;
+                        }
                         this.autoFillWorkingReading(currentBill);
                         return;
                     }
