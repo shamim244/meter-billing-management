@@ -308,5 +308,39 @@ class UserDashboardTest extends TestCase
 
         $response->assertStatus(422);
     }
+
+    public function test_dashboard_ping_endpoint_returns_ok_and_csrf_token(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+
+        $response = $this->actingAs($user)->getJson('/dashboard/ping');
+
+        $response->assertStatus(200);
+        $response->assertJsonStructure([
+            'status',
+            'server_time',
+            'timestamp',
+            'authenticated',
+            'csrf_token',
+        ]);
+        $response->assertJson([
+            'status' => 'ok',
+            'authenticated' => true,
+        ]);
+        $this->assertNotEmpty($response->json('csrf_token'));
+    }
+
+    public function test_dashboard_ping_endpoint_works_for_unauthenticated_requests(): void
+    {
+        $response = $this->getJson('/dashboard/ping');
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'status' => 'ok',
+            'authenticated' => false,
+        ]);
+        $this->assertNotEmpty($response->json('csrf_token'));
+    }
 }
+
 

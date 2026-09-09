@@ -16,6 +16,7 @@ class MruArchitectureTest extends TestCase
     {
         parent::setUp();
         $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(\Database\Seeders\PlanSeeder::class);
     }
 
     public function test_user_can_create_mru_workspace(): void

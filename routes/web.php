@@ -14,6 +14,9 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+// Lightweight health-check ping for real-time connectivity detection & CSRF refresh
+Route::get('/dashboard/ping', [DashboardController::class, 'ping'])->name('dashboard.ping');
+
 // Agent & User Routes
 Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');

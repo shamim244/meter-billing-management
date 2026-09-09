@@ -998,4 +998,20 @@ class DashboardController extends Controller
             'shortcuts' => $user->getShortcutMap(),
         ]);
     }
+
+    /**
+     * Ultra-lightweight health-check ping for offline detection and reconnection synchronization.
+     * Returns server timestamp and fresh CSRF token.
+     */
+    public function ping(Request $request): JsonResponse
+    {
+        return response()->json([
+            'status' => 'ok',
+            'server_time' => now()->toISOString(),
+            'timestamp' => now()->timestamp,
+            'authenticated' => Auth::check(),
+            'csrf_token' => csrf_token(),
+        ]);
+    }
 }
+

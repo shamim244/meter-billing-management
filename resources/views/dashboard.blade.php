@@ -5,9 +5,44 @@
             <!-- Top Header & Action Bar (Clean & Streamlined) -->
             <div class="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 class="text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                        <span>⚡</span> Billing Hub
-                    </h1>
+                    <div class="flex items-center gap-2.5 flex-wrap">
+                        <h1 class="text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                            <span>⚡</span> Billing Hub
+                        </h1>
+
+                        <!-- Real-Time Server Connectivity Badge & Sync -->
+                        <div class="inline-flex items-center gap-1.5">
+                            <!-- Online & Synced -->
+                            <template x-if="isOnline && isServerReachable && !isSyncing">
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 shadow-2xs" title="Connected to server. All data live and synchronized.">
+                                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    <span>Online</span>
+                                </span>
+                            </template>
+
+                            <!-- Offline / Disconnected -->
+                            <template x-if="!isOnline || !isServerReachable">
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/80 animate-pulse shadow-2xs" title="Disconnected from server. Working offline safely — your work is saved locally.">
+                                    <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                                    <span>Offline</span>
+                                    <span x-show="offlineQueue.length > 0" class="px-1.5 py-0.2 rounded-full bg-rose-200 dark:bg-rose-900 text-rose-900 dark:text-rose-100 text-[9px]" x-text="offlineQueue.length + ' queued'"></span>
+                                </span>
+                            </template>
+
+                            <!-- Syncing in Progress -->
+                            <template x-if="isSyncing">
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/80 shadow-2xs" title="Synchronizing with server...">
+                                    <svg class="w-3 h-3 animate-spin text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                    <span>Syncing...</span>
+                                </span>
+                            </template>
+
+                            <!-- Instant Sync Refresh Button -->
+                            <button type="button" @click="forceSync()" :disabled="isSyncing" class="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white transition active:scale-95 cursor-pointer" title="Synchronize / Refresh latest data from server">
+                                <svg class="w-3.5 h-3.5" :class="isSyncing ? 'animate-spin text-blue-600 dark:text-cyan-400' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            </button>
+                        </div>
+                    </div>
                     <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
                         Manage, verify & analyze monthly consumer bills
                     </p>
@@ -36,6 +71,46 @@
                             <span>ZIP</span>
                         </button>
                     </div>
+                </div>
+            </div>
+
+            <!-- OFFLINE REASSURANCE BANNER (High Visibility & Reassurance) -->
+            <div x-show="!isOnline || !isServerReachable" x-cloak class="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-amber-500/10 border-2 border-amber-400/90 dark:border-amber-600/90 text-slate-900 dark:text-white shadow-lg transition-all">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+                    <div class="flex items-start sm:items-center gap-3.5">
+                        <div class="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl font-black shrink-0">
+                            📡
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-xs font-black uppercase tracking-wider text-amber-700 dark:text-amber-300">You are Working Offline</span>
+                                <span class="px-2 py-0.5 text-[10px] font-black rounded-full bg-amber-200/80 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700">Safe Offline Mode</span>
+                            </div>
+                            <p class="text-xs text-slate-700 dark:text-slate-300 mt-1 font-medium leading-relaxed">
+                                Server connection is temporarily unavailable. <strong>Don't worry — your work is completely safe!</strong> All meter readings, remarks, and status submissions are saved directly to your device and will <strong>automatically synchronize</strong> the second connection is restored.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
+                        <template x-if="offlineQueue.length > 0">
+                            <span class="text-xs font-bold text-amber-800 dark:text-amber-200 px-3 py-1.5 rounded-xl bg-amber-100/90 dark:bg-amber-950/90 border border-amber-300 dark:border-amber-700 flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                                <span x-text="offlineQueue.length + ' pending sync'"></span>
+                            </span>
+                        </template>
+                        <button type="button" @click="checkServerConnection(true)" :disabled="isCheckingConnection" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-600/20 transition active:scale-95 flex items-center gap-1.5 cursor-pointer">
+                            <svg x-show="isCheckingConnection" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            <span x-text="isCheckingConnection ? 'Testing...' : '🔄 Retry Connection'"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RECONNECTING & SYNCING BANNER -->
+            <div x-show="isOnline && isServerReachable && isSyncing" x-cloak class="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-blue-500/15 via-cyan-500/10 to-indigo-500/15 border border-blue-400/80 dark:border-blue-700/80 text-blue-900 dark:text-cyan-200 shadow-sm flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5 text-xs font-semibold">
+                    <svg class="w-4 h-4 animate-spin text-blue-600 dark:text-cyan-400 shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <span>Connected to server! Synchronizing offline updates and refreshing latest data...</span>
                 </div>
             </div>
 
@@ -489,6 +564,11 @@
                                                               x-text="'⚠️ ' + bill.consecutive_count + 'x ' + bill.billing_basis">
                                                         </span>
                                                     </template>
+                                                    <template x-if="isCaPendingSync(bill.ca_number)">
+                                                        <span class="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-800" title="Changes saved locally on device, waiting to sync with server">
+                                                            ☁️ Offline
+                                                        </span>
+                                                    </template>
                                                 </div>
                                                 <div class="text-slate-900 dark:text-white font-semibold truncate max-w-[150px] text-xs" x-text="bill.consumer_name || '—'"></div>
                                             </div>
@@ -709,6 +789,13 @@
                                                         'bg-amber-500 text-white': bill.review_status === 'doubt',
                                                         'bg-slate-700 text-slate-300': bill.review_status === 'pending'
                                                     }" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider inline-block whitespace-nowrap" x-text="bill.review_status === 'pending' ? '⏳ PENDING' : (bill.review_status === 'submitted' ? '✅ SUBMITTED' : (bill.review_status === 'critical' ? '❌ CRITICAL' : '⚠️ DOUBT'))"></span>
+                                                    <template x-if="isCaPendingSync(bill.ca_number)">
+                                                        <div class="mt-1">
+                                                            <span class="px-2 py-0.5 rounded-md text-[9px] font-bold bg-amber-400 text-slate-950 shadow-2xs inline-flex items-center gap-1 animate-pulse" title="Saved locally on device, waiting to sync with server">
+                                                                <span>☁️ Offline Saved</span>
+                                                            </span>
+                                                        </div>
+                                                    </template>
                                                 </div>
                                             </div>
                                         </div>
@@ -1455,6 +1542,21 @@
                 copiedCaId: null,
                 copiedCaTimeout: null,
 
+                // Offline & Reconnection Sync Engine (Lifetime Future-Proof)
+                isOnline: navigator.onLine,
+                isServerReachable: true,
+                isSyncing: false,
+                isCheckingConnection: false,
+                lastSyncedAt: null,
+                offlineQueue: (function() {
+                    try {
+                        return JSON.parse(localStorage.getItem('nbpdcl_offline_queue_v1') || '[]');
+                    } catch (e) {
+                        return [];
+                    }
+                })(),
+                pendingCaSet: {},
+
                 // Modals
                 showCreateMruModal: false,
                 showExistingMruPopup: false,
@@ -1577,7 +1679,195 @@
                     this.cycleYear = this.selectedYear || new Date().getFullYear();
 
                     this.parseSortOption();
+                    this.initNetworkListeners();
                     this.fetchData(1);
+                },
+
+                // --- LIFETIME OFFLINE & RECONNECTION SYNC ENGINE ---
+                getCsrfToken() {
+                    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+                },
+
+                updatePendingCaSet() {
+                    const map = {};
+                    if (Array.isArray(this.offlineQueue)) {
+                        this.offlineQueue.forEach(item => {
+                            if (item.ca_number) map[String(item.ca_number)] = true;
+                        });
+                    }
+                    this.pendingCaSet = map;
+                },
+
+                isCaPendingSync(ca) {
+                    return Boolean(this.pendingCaSet && this.pendingCaSet[String(ca)]);
+                },
+
+                enqueueOfflineAction(type, payload) {
+                    const ca = payload.ca_number || payload.ca || (payload.id ? String(payload.id) : null);
+                    if (!Array.isArray(this.offlineQueue)) this.offlineQueue = [];
+                    const existingIdx = this.offlineQueue.findIndex(q => q.type === type && (q.ca_number === ca || (payload.id && q.id === payload.id)));
+                    const item = {
+                        type: type,
+                        payload: payload,
+                        ca_number: ca,
+                        id: payload.id || null,
+                        queued_at: new Date().toISOString()
+                    };
+                    if (existingIdx !== -1) {
+                        this.offlineQueue[existingIdx] = item;
+                    } else {
+                        this.offlineQueue.push(item);
+                    }
+                    try {
+                        localStorage.setItem('nbpdcl_offline_queue_v1', JSON.stringify(this.offlineQueue));
+                    } catch (e) {
+                        console.error('Failed to save offline queue to localStorage', e);
+                    }
+                    this.updatePendingCaSet();
+                },
+
+                async syncOfflineQueueAndRefresh() {
+                    if (this.isSyncing) return;
+                    this.isSyncing = true;
+
+                    // 1. Drain offline queue if any
+                    if (this.offlineQueue && this.offlineQueue.length > 0) {
+                        const queueToProcess = [...this.offlineQueue];
+                        let successCount = 0;
+                        for (const item of queueToProcess) {
+                            try {
+                                let url = '';
+                                let body = {};
+                                if (item.type === 'working_reading') {
+                                    url = '/bills/update-working-reading';
+                                    body = { id: item.payload.id, working_reading: item.payload.working_reading };
+                                } else if (item.type === 'status') {
+                                    url = '/bills/status';
+                                    body = { ca_number: item.payload.ca_number, billing_month: item.payload.billing_month, billing_year: item.payload.billing_year, status: item.payload.status };
+                                } else if (item.type === 'remark') {
+                                    url = '/bills/remark';
+                                    body = { ca_number: item.payload.ca_number, billing_month: item.payload.billing_month, billing_year: item.payload.billing_year, remark: item.payload.remark };
+                                } else if (item.type === 'tag') {
+                                    url = '/bills/tag';
+                                    body = { id: item.payload.id, ca_number: item.payload.ca_number, billing_month: item.payload.billing_month, billing_year: item.payload.billing_year, tag: item.payload.tag };
+                                }
+
+                                if (url) {
+                                    const res = await fetch(url, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'X-CSRF-TOKEN': this.getCsrfToken(),
+                                            'Accept': 'application/json'
+                                        },
+                                        body: JSON.stringify(body)
+                                    });
+                                    if (res.ok) {
+                                        successCount++;
+                                        this.offlineQueue = this.offlineQueue.filter(q => !(q.type === item.type && (q.ca_number === item.ca_number || (item.id && q.id === item.id))));
+                                        localStorage.setItem('nbpdcl_offline_queue_v1', JSON.stringify(this.offlineQueue));
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn('Sync item deferred:', item, e);
+                                break;
+                            }
+                        }
+                        this.updatePendingCaSet();
+                        if (successCount > 0) {
+                            this.showToastNotification('✅', `Synchronized ${successCount} offline update(s) with server.`);
+                        }
+                    }
+
+                    // 2. Fetch authoritative server data
+                    await this.fetchData(this.pagination.current_page || 1);
+                    this.lastSyncedAt = new Date();
+                    this.isSyncing = false;
+                },
+
+                async checkServerConnection(isManual = false) {
+                    this.isCheckingConnection = true;
+                    try {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 4000);
+                        const res = await fetch('/dashboard/ping', {
+                            method: 'GET',
+                            headers: { 'Accept': 'application/json' },
+                            signal: controller.signal
+                        });
+                        clearTimeout(timeoutId);
+
+                        if (res.ok) {
+                            const json = await res.json().catch(() => ({}));
+                            if (json.csrf_token) {
+                                const metaCsrf = document.querySelector('meta[name="csrf-token"]');
+                                if (metaCsrf) metaCsrf.setAttribute('content', json.csrf_token);
+                            }
+
+                            const wasDisconnected = (!this.isOnline || !this.isServerReachable);
+                            this.isOnline = true;
+                            this.isServerReachable = true;
+
+                            if (wasDisconnected || isManual || (this.offlineQueue && this.offlineQueue.length > 0)) {
+                                await this.syncOfflineQueueAndRefresh();
+                                if (isManual) {
+                                    this.showToastNotification('🟢', 'Connected! Data refreshed from server.');
+                                }
+                            }
+                        } else {
+                            this.isServerReachable = false;
+                            if (isManual) {
+                                this.showToastNotification('📡', 'Server responded with error. Working offline safely.');
+                            }
+                        }
+                    } catch (err) {
+                        this.isServerReachable = false;
+                        if (isManual) {
+                            this.showToastNotification('📡', 'Server unreachable. Working offline safely.');
+                        }
+                    } finally {
+                        this.isCheckingConnection = false;
+                    }
+                },
+
+                forceSync() {
+                    this.checkServerConnection(true);
+                },
+
+                initNetworkListeners() {
+                    this.updatePendingCaSet();
+
+                    // 1. Browser online/offline events
+                    window.addEventListener('online', () => {
+                        this.isOnline = true;
+                        this.checkServerConnection(false);
+                    });
+
+                    window.addEventListener('offline', () => {
+                        this.isOnline = false;
+                        this.isServerReachable = false;
+                        this.showToastNotification('📡', 'Connection lost. Working offline safely — changes saved locally.');
+                    });
+
+                    // 2. Tab focus / screen wakeup
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.visibilityState === 'visible') {
+                            this.checkServerConnection(false);
+                        }
+                    });
+
+                    // 3. Heartbeat retry intervals
+                    setInterval(() => {
+                        if (!this.isOnline || !this.isServerReachable || (this.offlineQueue && this.offlineQueue.length > 0)) {
+                            this.checkServerConnection(false);
+                        }
+                    }, 5000);
+
+                    setInterval(() => {
+                        if (this.isOnline && this.isServerReachable && !this.isSyncing) {
+                            this.checkServerConnection(false);
+                        }
+                    }, 60000);
                 },
 
                 setViewMode(mode) {
@@ -1702,14 +1992,43 @@
                     url.searchParams.append('sort_col', this.sortCol);
                     url.searchParams.append('sort_asc', this.sortAsc ? 'true' : 'false');
 
-                    fetch(url)
-                        .then(res => res.json())
+                    return fetch(url)
+                        .then(res => {
+                            if (!res.ok) throw new Error('Network response not ok: ' + res.status);
+                            return res.json();
+                        })
                         .then(json => {
                             if (json.success) {
+                                this.isServerReachable = true;
                                 this.items = json.data.map(b => {
                                     b._lastSavedRemark = b.remark || '';
+
+                                    // Overlay pending offline edits so in-flight local work is never lost on refresh
+                                    if (this.offlineQueue && this.offlineQueue.length > 0) {
+                                        const pendingForBill = this.offlineQueue.filter(q => 
+                                            q.ca_number === b.ca_number || (b.id && q.id === b.id)
+                                        );
+                                        pendingForBill.forEach(q => {
+                                            if (q.type === 'working_reading' && q.payload && q.payload.working_reading !== undefined) {
+                                                b.working_reading = q.payload.working_reading;
+                                                const prevNum = parseInt(b.db_prev_reading) || 0;
+                                                const workNum = parseInt(b.working_reading) || 0;
+                                                b.working_diff_units = Math.max(0, workNum - prevNum);
+                                            } else if (q.type === 'status' && q.payload && q.payload.status) {
+                                                b.review_status = q.payload.status;
+                                            } else if (q.type === 'remark' && q.payload && q.payload.remark !== undefined) {
+                                                b.remark = q.payload.remark;
+                                                b._lastSavedRemark = q.payload.remark;
+                                            } else if (q.type === 'tag' && q.payload && q.payload.tag) {
+                                                b.tag = q.payload.tag;
+                                                b.display_tag = this.getTagDisplayLabel(q.payload.tag);
+                                                b.full_tag = this.getTagFullLabel(q.payload.tag);
+                                            }
+                                        });
+                                    }
                                     return b;
                                 });
+                                this.updatePendingCaSet();
                                 this.pagination = json.pagination;
                                 if (json.counts) this.counts = json.counts;
                                 if (json.filtered_units !== undefined) this.counts.filtered_units = json.filtered_units;
@@ -1733,7 +2052,8 @@
                             this.loading = false;
                         })
                         .catch(err => {
-                            console.error(err);
+                            console.warn('fetchData error (server offline/unreachable):', err);
+                            this.isServerReachable = false;
                             this.loading = false;
                         });
                 },
@@ -1913,7 +2233,7 @@
                     });
                 },
 
-                // ✍️ Save Working Reading via AJAX with Invariant Checks
+                // ✍️ Save Working Reading via AJAX with Invariant Checks & Offline Resilience
                 saveWorkingReading(bill) {
                     if (!bill.id || bill.working_reading === undefined || bill.working_reading === null) return;
                     const prevNum = parseInt(bill.db_prev_reading) || 0;
@@ -1937,11 +2257,22 @@
                         }
                     }
 
+                    // Check offline / server unreachable state
+                    if (!this.isOnline || !this.isServerReachable) {
+                        this.enqueueOfflineAction('working_reading', {
+                            id: bill.id,
+                            ca_number: bill.ca_number,
+                            working_reading: String(bill.working_reading).trim()
+                        });
+                        this.showToastNotification('☁️', `Reading ${bill.working_reading} saved locally (Offline mode).`);
+                        return;
+                    }
+
                     fetch('/bills/update-working-reading', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                            'X-CSRF-TOKEN': this.getCsrfToken(),
                             'Accept': 'application/json'
                         },
                         body: JSON.stringify({
@@ -1949,13 +2280,27 @@
                             working_reading: String(bill.working_reading).trim()
                         })
                     })
-                    .then(r => r.json())
+                    .then(r => {
+                        if (!r.ok) throw new Error('Network error ' + r.status);
+                        return r.json();
+                    })
                     .then(data => {
                         if (data.success) {
                             this.showToastNotification('💾', 'Working reading saved: ' + bill.working_reading);
+                        } else {
+                            throw new Error(data.message || 'Save failed');
                         }
                     })
-                    .catch(err => console.error(err));
+                    .catch(err => {
+                        console.warn('Working reading save failed, queuing offline:', err);
+                        this.isServerReachable = false;
+                        this.enqueueOfflineAction('working_reading', {
+                            id: bill.id,
+                            ca_number: bill.ca_number,
+                            working_reading: String(bill.working_reading).trim()
+                        });
+                        this.showToastNotification('☁️', `Working reading saved locally (Connection lost).`);
+                    });
                 },
 
                 // ⚡ Auto-Fill Working Reading with (Previous + Average) ensuring >= PDF Reading
@@ -2122,6 +2467,30 @@
                         }
                     }
 
+                    // Check offline / server unreachable state
+                    if (!this.isOnline || !this.isServerReachable) {
+                        this.enqueueOfflineAction('status', {
+                            id: bill.id,
+                            ca_number: bill.ca_number,
+                            billing_month: bill.billing_month || this.selectedMonth,
+                            billing_year: bill.billing_year || this.selectedYear,
+                            status: newStatus
+                        });
+                        this.showToastNotification(
+                            '☁️',
+                            `Marked CA ${bill.ca_number} as ${statusLabels[newStatus]} (Saved Offline)`,
+                            {
+                                kind: 'status',
+                                bill: bill,
+                                prevStatus: prevStatus,
+                                newStatus: newStatus,
+                                wasFilteredOut: wasFilteredOut,
+                                removedIndex: removedIndex
+                            }
+                        );
+                        return wasFilteredOut;
+                    }
+
                     // Show toast with Undo option
                     this.showToastNotification(
                         statusIcons[newStatus],
@@ -2141,16 +2510,20 @@
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            'X-CSRF-TOKEN': this.getCsrfToken(),
+                            'Accept': 'application/json'
                         },
                         body: JSON.stringify({
                             ca_number: bill.ca_number,
-                            billing_month: bill.billing_month,
-                            billing_year: bill.billing_year,
+                            billing_month: bill.billing_month || this.selectedMonth,
+                            billing_year: bill.billing_year || this.selectedYear,
                             status: newStatus
                         })
                     })
-                    .then(res => res.json())
+                    .then(res => {
+                        if (!res.ok) throw new Error('Status update failed ' + res.status);
+                        return res.json();
+                    })
                     .then(json => {
                         if (!json.success) {
                             // If failed, revert
@@ -2158,7 +2531,16 @@
                         }
                     })
                     .catch(err => {
-                        console.error('Failed to update status:', err);
+                        console.warn('Status update online failed, queuing offline:', err);
+                        this.isServerReachable = false;
+                        this.enqueueOfflineAction('status', {
+                            id: bill.id,
+                            ca_number: bill.ca_number,
+                            billing_month: bill.billing_month || this.selectedMonth,
+                            billing_year: bill.billing_year || this.selectedYear,
+                            status: newStatus
+                        });
+                        this.showToastNotification('☁️', `Status saved locally for CA ${bill.ca_number} (Connection lost).`);
                     });
 
                     return wasFilteredOut;
@@ -2185,20 +2567,45 @@
                     const current = bill.remark || '';
                     bill._lastSavedRemark = current;
 
+                    if (!this.isOnline || !this.isServerReachable) {
+                        this.enqueueOfflineAction('remark', {
+                            id: bill.id,
+                            ca_number: bill.ca_number,
+                            billing_month: bill.billing_month || this.selectedMonth,
+                            billing_year: bill.billing_year || this.selectedYear,
+                            remark: current
+                        });
+                        this.showToastNotification(
+                            '☁️',
+                            current.trim() ? `Saved note for CA ${bill.ca_number} (Offline)` : `Cleared note for CA ${bill.ca_number} (Offline)`,
+                            {
+                                kind: 'remark',
+                                bill: bill,
+                                prevRemark: prev,
+                                newRemark: current
+                            }
+                        );
+                        return;
+                    }
+
                     fetch('/bills/remark', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            'X-CSRF-TOKEN': this.getCsrfToken(),
+                            'Accept': 'application/json'
                         },
                         body: JSON.stringify({
                             ca_number: bill.ca_number,
-                            billing_month: bill.billing_month,
-                            billing_year: bill.billing_year,
+                            billing_month: bill.billing_month || this.selectedMonth,
+                            billing_year: bill.billing_year || this.selectedYear,
                             remark: current
                         })
                     })
-                    .then(res => res.json())
+                    .then(res => {
+                        if (!res.ok) throw new Error('Remark save error: ' + res.status);
+                        return res.json();
+                    })
                     .then(json => {
                         if (json.success) {
                             this.showToastNotification(
@@ -2213,7 +2620,18 @@
                             );
                         }
                     })
-                    .catch(err => console.error(err));
+                    .catch(err => {
+                        console.warn('Remark save failed online, queuing offline:', err);
+                        this.isServerReachable = false;
+                        this.enqueueOfflineAction('remark', {
+                            id: bill.id,
+                            ca_number: bill.ca_number,
+                            billing_month: bill.billing_month || this.selectedMonth,
+                            billing_year: bill.billing_year || this.selectedYear,
+                            remark: current
+                        });
+                        this.showToastNotification('☁️', `Note saved locally for CA ${bill.ca_number} (Connection lost).`);
+                    });
                 },
 
                 clearBillRemark(bill) {
@@ -2229,11 +2647,33 @@
                     bill.display_tag = this.getTagDisplayLabel(tagCode);
                     bill.full_tag = this.getTagFullLabel(tagCode);
 
+                    if (!this.isOnline || !this.isServerReachable) {
+                        this.enqueueOfflineAction('tag', {
+                            id: bill.id,
+                            ca_number: bill.ca_number,
+                            billing_month: bill.billing_month || this.selectedMonth,
+                            billing_year: bill.billing_year || this.selectedYear,
+                            tag: tagCode
+                        });
+                        this.showToastNotification(
+                            '☁️',
+                            `Tag for CA ${bill.ca_number} set to ${bill.display_tag} (Offline)`,
+                            {
+                                kind: 'tag',
+                                bill: bill,
+                                prevTag: prevTag,
+                                newTag: tagCode
+                            }
+                        );
+                        return;
+                    }
+
                     fetch('/bills/tag', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            'X-CSRF-TOKEN': this.getCsrfToken(),
+                            'Accept': 'application/json'
                         },
                         body: JSON.stringify({
                             id: bill.id,
@@ -2243,7 +2683,10 @@
                             tag: tagCode
                         })
                     })
-                    .then(res => res.json())
+                    .then(res => {
+                        if (!res.ok) throw new Error('Tag save error: ' + res.status);
+                        return res.json();
+                    })
                     .then(json => {
                         if (json.success) {
                             this.showToastNotification(
@@ -2259,10 +2702,16 @@
                         }
                     })
                     .catch(err => {
-                        console.error('Failed to save tag:', err);
-                        bill.tag = prevTag;
-                        bill.display_tag = this.getTagDisplayLabel(prevTag);
-                        bill.full_tag = this.getTagFullLabel(prevTag);
+                        console.warn('Failed to save tag online, queuing offline:', err);
+                        this.isServerReachable = false;
+                        this.enqueueOfflineAction('tag', {
+                            id: bill.id,
+                            ca_number: bill.ca_number,
+                            billing_month: bill.billing_month || this.selectedMonth,
+                            billing_year: bill.billing_year || this.selectedYear,
+                            tag: tagCode
+                        });
+                        this.showToastNotification('☁️', `Tag saved locally for CA ${bill.ca_number} (Connection lost).`);
                     });
                 },
 
@@ -2317,12 +2766,24 @@
                             null
                         );
 
+                        if (!this.isOnline || !this.isServerReachable) {
+                            this.enqueueOfflineAction('tag', {
+                                id: data.bill.id,
+                                ca_number: data.bill.ca_number,
+                                billing_month: data.bill.billing_month,
+                                billing_year: data.bill.billing_year,
+                                tag: data.prevTag
+                            });
+                            return;
+                        }
+
                         // Revert tag in DB
                         fetch('/bills/tag', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                'X-CSRF-TOKEN': this.getCsrfToken(),
+                                'Accept': 'application/json'
                             },
                             body: JSON.stringify({
                                 id: data.bill.id,
@@ -2331,7 +2792,16 @@
                                 billing_year: data.bill.billing_year,
                                 tag: data.prevTag
                             })
-                        }).catch(err => console.error(err));
+                        }).catch(err => {
+                            console.warn('Revert tag online failed, queuing offline:', err);
+                            this.enqueueOfflineAction('tag', {
+                                id: data.bill.id,
+                                ca_number: data.bill.ca_number,
+                                billing_month: data.bill.billing_month,
+                                billing_year: data.bill.billing_year,
+                                tag: data.prevTag
+                            });
+                        });
                         return;
                     }
 
@@ -2346,12 +2816,24 @@
                             null
                         );
 
+                        if (!this.isOnline || !this.isServerReachable) {
+                            this.enqueueOfflineAction('remark', {
+                                id: data.bill.id,
+                                ca_number: data.bill.ca_number,
+                                billing_month: data.bill.billing_month,
+                                billing_year: data.bill.billing_year,
+                                remark: data.prevRemark
+                            });
+                            return;
+                        }
+
                         // Revert remark in DB
                         fetch('/bills/remark', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                'X-CSRF-TOKEN': this.getCsrfToken(),
+                                'Accept': 'application/json'
                             },
                             body: JSON.stringify({
                                 ca_number: data.bill.ca_number,
@@ -2359,7 +2841,16 @@
                                 billing_year: data.bill.billing_year,
                                 remark: data.prevRemark
                             })
-                        }).catch(err => console.error(err));
+                        }).catch(err => {
+                            console.warn('Revert remark online failed, queuing offline:', err);
+                            this.enqueueOfflineAction('remark', {
+                                id: data.bill.id,
+                                ca_number: data.bill.ca_number,
+                                billing_month: data.bill.billing_month,
+                                billing_year: data.bill.billing_year,
+                                remark: data.prevRemark
+                            });
+                        });
                         return;
                     }
 
@@ -2398,12 +2889,24 @@
                             null
                         );
 
+                        if (!this.isOnline || !this.isServerReachable) {
+                            this.enqueueOfflineAction('status', {
+                                id: data.bill.id,
+                                ca_number: data.bill.ca_number,
+                                billing_month: data.bill.billing_month,
+                                billing_year: data.bill.billing_year,
+                                status: data.prevStatus
+                            });
+                            return;
+                        }
+
                         // API call to restore status in DB
                         fetch('/bills/status', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                'X-CSRF-TOKEN': this.getCsrfToken(),
+                                'Accept': 'application/json'
                             },
                             body: JSON.stringify({
                                 ca_number: data.bill.ca_number,
@@ -2411,7 +2914,16 @@
                                 billing_year: data.bill.billing_year,
                                 status: data.prevStatus
                             })
-                        }).catch(err => console.error(err));
+                        }).catch(err => {
+                            console.warn('Revert status online failed, queuing offline:', err);
+                            this.enqueueOfflineAction('status', {
+                                id: data.bill.id,
+                                ca_number: data.bill.ca_number,
+                                billing_month: data.bill.billing_month,
+                                billing_year: data.bill.billing_year,
+                                status: data.prevStatus
+                            });
+                        });
                     }
                 },
 
