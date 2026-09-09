@@ -171,7 +171,12 @@ class DashboardController extends Controller
         $filter = $request->get('filter', $request->get('status', 'all'));
         $search = strtolower(trim($request->get('search', '')));
         $page = max(1, (int) $request->get('page', 1));
-        $perPage = max(1, (int) $request->get('per_page', 50));
+        $perPageParam = $request->get('per_page');
+        if ($perPageParam === 'all' || $perPageParam === '-1') {
+            $perPage = 1000;
+        } else {
+            $perPage = max(1, min(1000, (int) ($perPageParam ?: 50)));
+        }
         
         $statusSort = $request->get('status_sort', 'default');
         $sortCol = $request->get('sort_col', 'ca_number');

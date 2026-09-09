@@ -1036,34 +1036,49 @@
                 </div>
 
                 <!-- Navigation Controller (Placed AFTER card info) -->
-                <div class="flex items-center justify-between bg-white dark:bg-slate-900 px-6 py-3.5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm max-w-lg mx-auto">
-                    <button @click="prevCard()" :disabled="currentCardIndex <= 0 && pagination.current_page <= 1" class="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 dark:text-slate-200 rounded-2xl font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-                        Prev Card
-                    </button>
+                <div class="flex flex-col gap-2 max-w-lg mx-auto">
+                    <div class="flex items-center justify-between bg-white dark:bg-slate-900 px-6 py-3.5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <button @click="prevCard()" :disabled="currentCardIndex <= 0" class="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 dark:text-slate-200 rounded-2xl font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                            Prev Card
+                        </button>
 
-                    <div class="text-center">
-                        <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">Slide Counter</div>
-                        <div class="text-sm font-black text-slate-900 dark:text-white mt-0.5">
-                            <span class="text-blue-600 dark:text-cyan-400 font-mono" x-text="items.length > 0 ? ((pagination.current_page - 1) * pagination.per_page + currentCardIndex + 1) : 0"></span>
-                            <span class="text-slate-400">/</span>
-                            <span class="text-slate-600 dark:text-slate-300 font-mono" x-text="pagination.total"></span>
+                        <div class="text-center">
+                            <div class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-center gap-1.5">
+                                <span>Slide Counter</span>
+                                <span x-show="loadingMoreCards" class="inline-flex items-center gap-1 text-[10px] text-blue-500 font-semibold animate-pulse" title="Loading more cards in background...">
+                                    <svg class="animate-spin w-3 h-3 text-blue-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                                    <span>Loading...</span>
+                                </span>
+                            </div>
+                            <div class="text-sm font-black text-slate-900 dark:text-white mt-0.5">
+                                <span class="text-blue-600 dark:text-cyan-400 font-mono" x-text="items.length > 0 ? (currentCardIndex + 1) : 0"></span>
+                                <span class="text-slate-400">/</span>
+                                <span class="text-slate-600 dark:text-slate-300 font-mono" x-text="pagination.total || items.length"></span>
+                            </div>
                         </div>
+
+                        <button @click="nextCard()" :disabled="currentCardIndex >= items.length - 1 && (!pagination.last_page || pagination.current_page >= pagination.last_page)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-xs transition flex items-center gap-1.5 shadow-md shadow-blue-500/20">
+                            Next Card
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </button>
                     </div>
 
-                    <button @click="nextCard()" :disabled="currentCardIndex >= items.length - 1 && pagination.current_page >= pagination.last_page" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-xs transition flex items-center gap-1.5 shadow-md shadow-blue-500/20">
-                        Next Card
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                    </button>
+                    <!-- Subtle deck progress line -->
+                    <div class="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div class="bg-blue-600 dark:bg-cyan-500 h-full transition-all duration-300 rounded-full"
+                             :style="'width: ' + (items.length > 0 ? Math.min(100, Math.round(((currentCardIndex + 1) / (pagination.total || items.length)) * 100)) : 0) + '%;'">
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Slide Navigation Dots (up to 30 visible dots) -->
+                <!-- Slide Navigation Dots (dynamic sliding window around current card) -->
                 <div class="flex flex-wrap items-center justify-center gap-1.5 max-w-md mx-auto pt-1">
-                    <template x-for="(b, i) in items.slice(0, Math.min(items.length, 30))" :key="b.id">
-                        <button @click="currentCardIndex = i"
-                                :class="i === currentCardIndex ? 'bg-blue-600 dark:bg-cyan-400 w-6 h-2 rounded-full shadow-sm' : 'bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 w-2 h-2 rounded-full'"
+                    <template x-for="dot in getVisibleCardDots()" :key="dot.id">
+                        <button @click="currentCardIndex = dot.index"
+                                :class="dot.index === currentCardIndex ? 'bg-blue-600 dark:bg-cyan-400 w-6 h-2 rounded-full shadow-sm' : 'bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 w-2 h-2 rounded-full'"
                                 class="transition-all duration-200 focus:outline-none"
-                                :title="'Go to card ' + (i + 1)">
+                                :title="'Go to card ' + (dot.index + 1)">
                         </button>
                     </template>
                 </div>
@@ -1536,6 +1551,7 @@
                 pagination: {},
                 viewMode: localStorage.getItem('dashboard_view_mode') || 'table',
                 currentCardIndex: 0,
+                loadingMoreCards: false,
                 touchStartX: 0,
                 touchStartY: 0,
                 isPinching: false,
@@ -1871,8 +1887,16 @@
                 },
 
                 setViewMode(mode) {
+                    const prevMode = this.viewMode;
                     this.viewMode = mode;
                     localStorage.setItem('dashboard_view_mode', mode);
+
+                    // When switching to Card View, ensure all available cycle records are loaded for continuous sliding
+                    if (mode === 'card' && (prevMode !== 'card' || (this.pagination.total > this.items.length))) {
+                        this.fetchData(1);
+                    } else if (mode === 'table' && prevMode === 'card') {
+                        this.fetchData(1);
+                    }
                 },
 
                 updateAvailablePeriods(triggerFetch = true) {
@@ -1974,11 +1998,17 @@
                     this.sortAsc = (dir === 'asc');
                 },
 
-                fetchData(page = 1) {
-                    if (page === 1) {
+                fetchData(page = 1, append = false) {
+                    if (page === 1 && !append) {
                         this.currentCardIndex = 0;
                     }
-                    this.loading = true;
+
+                    if (append) {
+                        this.loadingMoreCards = true;
+                    } else {
+                        this.loading = true;
+                    }
+
                     const url = new URL('/dashboard/data', window.location.origin);
                     url.searchParams.append('page', page);
                     url.searchParams.append('month', this.selectedMonth);
@@ -1992,6 +2022,11 @@
                     url.searchParams.append('sort_col', this.sortCol);
                     url.searchParams.append('sort_asc', this.sortAsc ? 'true' : 'false');
 
+                    // If in card view and loading page 1 fresh, fetch up to 500 records so all cards are immediately available
+                    if (this.viewMode === 'card' && !append) {
+                        url.searchParams.append('per_page', '500');
+                    }
+
                     return fetch(url)
                         .then(res => {
                             if (!res.ok) throw new Error('Network response not ok: ' + res.status);
@@ -2000,7 +2035,7 @@
                         .then(json => {
                             if (json.success) {
                                 this.isServerReachable = true;
-                                this.items = json.data.map(b => {
+                                const mappedIncoming = json.data.map(b => {
                                     b._lastSavedRemark = b.remark || '';
 
                                     // Overlay pending offline edits so in-flight local work is never lost on refresh
@@ -2028,6 +2063,16 @@
                                     }
                                     return b;
                                 });
+
+                                if (append) {
+                                    // Append incoming cards without duplicates
+                                    const existingIds = new Set(this.items.map(b => b.id));
+                                    const freshItems = mappedIncoming.filter(b => !existingIds.has(b.id));
+                                    this.items = [...this.items, ...freshItems];
+                                } else {
+                                    this.items = mappedIncoming;
+                                }
+
                                 this.updatePendingCaSet();
                                 this.pagination = json.pagination;
                                 if (json.counts) this.counts = json.counts;
@@ -2050,12 +2095,46 @@
                                 }
                             }
                             this.loading = false;
+                            this.loadingMoreCards = false;
+
+                            // If in card view and more pages exist, silently prefetch the next batch in background
+                            if (this.viewMode === 'card' && this.pagination.current_page < this.pagination.last_page) {
+                                this.fetchMoreCards();
+                            }
                         })
                         .catch(err => {
                             console.warn('fetchData error (server offline/unreachable):', err);
                             this.isServerReachable = false;
                             this.loading = false;
+                            this.loadingMoreCards = false;
                         });
+                },
+
+                fetchMoreCards() {
+                    if (this.loadingMoreCards || this.loading) return Promise.resolve();
+                    if (!this.pagination.last_page || this.pagination.current_page >= this.pagination.last_page) return Promise.resolve();
+
+                    const nextPage = (this.pagination.current_page || 1) + 1;
+                    return this.fetchData(nextPage, true);
+                },
+
+                getVisibleCardDots() {
+                    if (!this.items || this.items.length === 0) return [];
+                    const total = this.items.length;
+                    if (total <= 25) {
+                        return this.items.map((b, idx) => ({ id: b.id, index: idx }));
+                    }
+                    const windowSize = 25;
+                    let start = Math.max(0, this.currentCardIndex - Math.floor(windowSize / 2));
+                    let end = start + windowSize;
+                    if (end > total) {
+                        end = total;
+                        start = Math.max(0, end - windowSize);
+                    }
+                    return this.items.slice(start, end).map((b, sliceIdx) => ({
+                        id: b.id,
+                        index: start + sliceIdx
+                    }));
                 },
 
                 // PDF Viewer Modal Methods
@@ -2928,18 +3007,26 @@
                 },
 
                 nextCard() {
+                    // Pre-fetch next chunk if approaching the edge of loaded items
+                    if (this.currentCardIndex >= this.items.length - 5 && this.pagination.current_page < this.pagination.last_page && !this.loadingMoreCards) {
+                        this.fetchMoreCards();
+                    }
+
                     if (this.currentCardIndex < this.items.length - 1) {
                         this.currentCardIndex++;
                     } else if (this.pagination.current_page < this.pagination.last_page) {
-                        this.fetchData(this.pagination.current_page + 1);
+                        // At the last loaded card: await background load and advance smoothly
+                        this.fetchMoreCards().then(() => {
+                            if (this.currentCardIndex < this.items.length - 1) {
+                                this.currentCardIndex++;
+                            }
+                        });
                     }
                 },
 
                 prevCard() {
                     if (this.currentCardIndex > 0) {
                         this.currentCardIndex--;
-                    } else if (this.pagination.current_page > 1) {
-                        this.fetchData(this.pagination.current_page - 1);
                     }
                 },
 

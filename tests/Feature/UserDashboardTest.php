@@ -341,6 +341,61 @@ class UserDashboardTest extends TestCase
         ]);
         $this->assertNotEmpty($response->json('csrf_token'));
     }
+
+    public function test_ajax_dashboard_data_endpoint_supports_all_and_large_per_page(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+
+        $mru = Mru::create([
+            'code' => 'TEST_BATCH_MRU',
+            'name' => 'Batch Test Village',
+            'full_identifier' => 'TEST_BATCH_MRU',
+            'status' => 'active',
+        ]);
+
+        for ($i = 1; $i <= 60; $i++) {
+            BillRecord::create([
+                'user_id' => $user->id,
+                'ca_number' => '1023009' . str_pad((string) $i, 4, '0', STR_PAD_LEFT),
+                'mru_id' => $mru->id,
+                'billing_month' => 4,
+                'billing_year' => 2026,
+                'consumer_name' => "Batch Consumer $i",
+                'total_amount' => 100.00 + $i,
+                'units_consumed' => 20 + $i,
+                'download_status' => 'downloaded',
+                'parse_status' => 'parsed',
+            ]);
+        }
+
+        // Test with per_page=all
+        $responseAll = $this->actingAs($user)->getJson('/dashboard/data?month=4&year=2026&per_page=all');
+        $responseAll->assertStatus(200);
+        $responseAll->assertJson([
+            'success' => true,
+            'pagination' => [
+                'total' => 60,
+                'per_page' => 1000,
+                'current_page' => 1,
+                'last_page' => 1,
+            ]
+        ]);
+        $this->assertCount(60, $responseAll->json('data'));
+
+        // Test with per_page=500
+        $response500 = $this->actingAs($user)->getJson('/dashboard/data?month=4&year=2026&per_page=500');
+        $response500->assertStatus(200);
+        $response500->assertJson([
+            'success' => true,
+            'pagination' => [
+                'total' => 60,
+                'per_page' => 500,
+                'current_page' => 1,
+                'last_page' => 1,
+            ]
+        ]);
+        $this->assertCount(60, $response500->json('data'));
+    }
 }
 
 
