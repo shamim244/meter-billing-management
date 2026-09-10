@@ -355,20 +355,22 @@ class DashboardController extends Controller
 
             $bill->projected_reading = (string) $projectedReading;
 
-            $bill->is_projected = false;
-            $bill->is_manual = false;
-            $bill->reading_source = 'auto';
+            $readingSource = $bill->reading_source ?: 'auto';
 
-            if (empty($bill->working_reading) || $bill->working_reading == '0') {
-                if ($projectedReading > 0) {
-                    $bill->working_reading = (string) $projectedReading;
-                    $bill->is_projected = true;
-                }
+            if ($readingSource === 'manual') {
+                $bill->is_manual = true;
+                $bill->is_projected = false;
+                $bill->reading_source = 'manual';
             } else {
-                $isDiffFromProjected = ((int)$bill->working_reading !== $projectedReading);
-                $bill->is_manual = $isDiffFromProjected;
-                $bill->is_projected = !$isDiffFromProjected;
-                $bill->reading_source = $isDiffFromProjected ? 'manual' : 'auto';
+                $bill->is_manual = false;
+                $bill->is_projected = true;
+                $bill->reading_source = 'auto';
+
+                if (empty($bill->working_reading) || $bill->working_reading == '0') {
+                    if ($projectedReading > 0) {
+                        $bill->working_reading = (string) $projectedReading;
+                    }
+                }
             }
 
             $workNum = is_numeric($bill->working_reading) ? (int)$bill->working_reading : $projectedReading;
@@ -639,8 +641,11 @@ class DashboardController extends Controller
             ], 422);
         }
 
-        $bill = \Illuminate\Support\Facades\DB::transaction(function () use ($userId, $bill, $readingVal) {
+        $readingSource = $request->input('source', 'manual');
+
+        $bill = \Illuminate\Support\Facades\DB::transaction(function () use ($userId, $bill, $readingVal, $readingSource) {
             $bill->working_reading = $readingVal;
+            $bill->reading_source = $readingSource;
             $bill->save();
 
             // 1. Update Master Reading Ledger on ConsumerAccount
@@ -688,9 +693,10 @@ class DashboardController extends Controller
             foreach ($subsequentBills as $futureBill) {
                 $statusKey = "{$futureBill->billing_month}_{$futureBill->billing_year}";
                 $isFutureSubmitted = (strtolower(trim($futureBill->review_status ?? '')) === 'submitted') || isset($submittedFutureStatuses[$statusKey]);
+                $isFutureManual = ($futureBill->reading_source === 'manual');
 
-                // Cascade Protection: Do NOT overwrite future bills whose review_status is 'submitted'
-                if ($isFutureSubmitted) {
+                // Cascade Protection: Do NOT overwrite future bills whose review_status is 'submitted' or reading_source is 'manual'
+                if ($isFutureSubmitted || $isFutureManual) {
                     if (!empty($futureBill->working_reading) && is_numeric($futureBill->working_reading)) {
                         $currentChainReading = (int) $futureBill->working_reading;
                     }
@@ -707,6 +713,7 @@ class DashboardController extends Controller
                     }
                 }
                 $futureBill->working_reading = (string) $newProjected;
+                $futureBill->reading_source = 'auto';
                 $futureBill->save();
                 $currentChainReading = $newProjected;
             }
@@ -718,6 +725,9 @@ class DashboardController extends Controller
             'success' => true,
             'message' => "Working reading updated to {$bill->working_reading}",
             'working_reading' => $bill->working_reading,
+            'reading_source' => $bill->reading_source,
+            'is_manual' => ($bill->reading_source === 'manual'),
+            'is_projected' => ($bill->reading_source !== 'manual'),
         ]);
     }
 
@@ -736,13 +746,12 @@ class DashboardController extends Controller
             ->where('billing_month', $month)
             ->where('billing_year', $year)
             ->where(function ($q) {
-                $q->whereNull('working_reading')
-                  ->orWhere('working_reading', '')
-                  ->orWhere('working_reading', '0');
-            })
-            ->where(function ($q) {
                 $q->whereNull('review_status')
                   ->orWhereRaw('LOWER(review_status) != ?', ['submitted']);
+            })
+            ->where(function ($q) {
+                $q->whereNull('reading_source')
+                  ->orWhere('reading_source', '!=', 'manual');
             });
 
         // Exclude accounts already marked submitted in bill_statuses
@@ -778,8 +787,8 @@ class DashboardController extends Controller
                 ->keyBy('ca_number');
 
             foreach ($bills as $bill) {
-                // Safeguard against overwriting existing reading or submitted bill
-                if (!empty($bill->working_reading) && $bill->working_reading !== '0') {
+                // Safeguard against overwriting manual custom entries or submitted bills
+                if ($bill->reading_source === 'manual') {
                     continue;
                 }
                 if (strtolower(trim($bill->review_status ?? '')) === 'submitted') {
@@ -820,6 +829,7 @@ class DashboardController extends Controller
                 }
 
                 $bill->working_reading = (string) $projected;
+                $bill->reading_source = 'auto';
                 $bill->save();
 
                 // Sync master ledger

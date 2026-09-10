@@ -678,6 +678,7 @@ class MruController extends Controller
                         'consumer_name' => $consumer->consumer_name,
                         'meter_no' => $consumer->meter_no,
                         'previous_reading' => $initialPrevReading,
+                        'reading_source' => 'auto',
                     ]
                 );
             }

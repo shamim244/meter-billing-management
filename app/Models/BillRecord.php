@@ -22,6 +22,7 @@ class BillRecord extends Model
         'total_amount',
         'current_reading',
         'working_reading',
+        'reading_source',
         'review_status',
         'remark',
         'tag',

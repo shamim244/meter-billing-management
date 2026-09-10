@@ -603,7 +603,7 @@
                                             <input type="text" 
                                                    :id="'working-reading-input-table-' + bill.id"
                                                    x-model="bill.working_reading" 
-                                                   @input="bill.is_manual = true; bill.is_projected = false"
+                                                   @input="bill.is_manual = true; bill.reading_source = 'manual'; bill.is_projected = false"
                                                    :readonly="isBillLocked(bill)"
                                                    @blur="saveWorkingReading(bill)" 
                                                    @keyup.enter="$event.target.blur()"
@@ -618,9 +618,9 @@
                                         <div class="flex items-center justify-center gap-1 text-[10px] text-slate-400 font-mono mt-0.5">
                                             <span x-text="'Diff: ' + (bill.working_diff_units ?? 0) + 'k'"></span>
                                             <span x-show="bill.working_reading" class="text-[9px] px-1 py-0.2 rounded font-bold inline-flex items-center"
-                                                  :class="bill.is_manual ? 'bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800' : 'bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-cyan-300 border border-blue-200 dark:border-blue-800'"
-                                                  :title="bill.is_manual ? 'Manual Custom Override' : 'Auto / Projected Reading'"
-                                                  x-text="bill.is_manual ? '✍️' : '⚡'"></span>
+                                                  :class="(bill.reading_source === 'manual' || bill.is_manual) ? 'bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800' : 'bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-cyan-300 border border-blue-200 dark:border-blue-800'"
+                                                  :title="(bill.reading_source === 'manual' || bill.is_manual) ? 'Manual Custom Override' : 'Auto / Projected Reading'"
+                                                  x-text="(bill.reading_source === 'manual' || bill.is_manual) ? '✍️' : '⚡'"></span>
                                         </div>
                                     </td>
 
@@ -869,8 +869,8 @@
                                                     <span class="text-[10px] font-black uppercase tracking-wider block truncate" :class="bill.pdf_sync_status === 'invalid_behind' ? 'text-rose-600 dark:text-rose-400' : (isBillLocked(bill) ? 'text-slate-500 dark:text-slate-400' : 'text-blue-700 dark:text-cyan-300')">✍️ Working</span>
                                                     <!-- Visual Badge: Manual vs Auto -->
                                                     <span x-show="bill.working_reading" class="text-[9px] px-1.5 py-0.5 rounded-full font-bold inline-flex items-center gap-0.5 shadow-2xs"
-                                                          :class="bill.is_manual ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700' : 'bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-cyan-300 border border-blue-300 dark:border-blue-700'"
-                                                          x-text="bill.is_manual ? '✍️ Manual' : '⚡ Auto'"></span>
+                                                          :class="(bill.reading_source === 'manual' || bill.is_manual) ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700' : 'bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-cyan-300 border border-blue-300 dark:border-blue-700'"
+                                                          x-text="(bill.reading_source === 'manual' || bill.is_manual) ? '✍️ Manual' : '⚡ Auto'"></span>
                                                 </div>
                                                 <div class="flex items-center gap-1">
                                                     <template x-if="bill.review_status === 'submitted'">
@@ -890,7 +890,7 @@
                                                 <input type="text" 
                                                        :id="'working-reading-input-' + bill.id"
                                                        x-model="bill.working_reading" 
-                                                       @input="bill.is_manual = true; bill.is_projected = false"
+                                                       @input="bill.is_manual = true; bill.reading_source = 'manual'; bill.is_projected = false"
                                                        :readonly="isBillLocked(bill)"
                                                        @blur="saveWorkingReading(bill)" 
                                                        @keydown.escape="$el.blur()"
@@ -2404,7 +2404,9 @@
                     }
 
                     const isSubmitted = (bill.review_status === 'submitted');
-                    const forceFlag = isSubmitted && !!bill._unlocked;
+                    const computedForce = isSubmitted && !!bill._unlocked;
+                    const finalForce = forceFlag || computedForce;
+                    const saveSource = source || bill.reading_source || (bill.is_manual ? 'manual' : 'auto');
 
                     // Check offline / server unreachable state
                     if (!this.isOnline || !this.isServerReachable) {
@@ -2412,7 +2414,8 @@
                             id: bill.id,
                             ca_number: bill.ca_number,
                             working_reading: String(bill.working_reading).trim(),
-                            force: forceFlag
+                            source: saveSource,
+                            force: finalForce
                         });
                         this.showToastNotification('☁️', `Reading ${bill.working_reading} saved locally (Offline mode).`);
                         return;
@@ -2428,7 +2431,8 @@
                         body: JSON.stringify({
                             id: bill.id,
                             working_reading: String(bill.working_reading).trim(),
-                            force: forceFlag
+                            source: saveSource,
+                            force: finalForce
                         })
                     })
                     .then(r => {
@@ -2447,6 +2451,11 @@
                     })
                     .then(data => {
                         if (data.success) {
+                            if (data.reading_source) {
+                                bill.reading_source = data.reading_source;
+                                bill.is_manual = (data.reading_source === 'manual');
+                                bill.is_projected = (data.reading_source !== 'manual');
+                            }
                             this.showToastNotification('💾', 'Working reading saved: ' + bill.working_reading);
                         } else {
                             throw new Error(data.message || 'Save failed');
@@ -2461,7 +2470,8 @@
                             id: bill.id,
                             ca_number: bill.ca_number,
                             working_reading: String(bill.working_reading).trim(),
-                            force: forceFlag
+                            source: saveSource,
+                            force: finalForce
                         });
                         this.showToastNotification('☁️', `Working reading saved locally (Connection lost).`);
                     });
@@ -2487,11 +2497,9 @@
                     const targetStr = String(target);
 
                     // Manual Override Protection:
-                    // If working_reading has already been set and differs from target
-                    const isDifferent = currentVal !== '' && currentVal !== '0' && currentVal !== targetStr;
-                    const isManual = bill.is_manual || isDifferent;
-
-                    if (isManual && isDifferent) {
+                    // ONLY prompt if the user explicitly set this bill as manual!
+                    const isManualUserEntry = (bill.reading_source === 'manual' || bill.is_manual);
+                    if (isManualUserEntry && currentVal !== '' && currentVal !== targetStr) {
                         const confirmMsg = `This account currently has a manual reading of ${currentVal} kWh.\n\nAre you sure you want to replace it with auto-fill ${targetStr} kWh (Prev ${prev} + Avg ${avg})?`;
                         if (!confirm(confirmMsg)) {
                             return;
@@ -2500,21 +2508,24 @@
 
                     const oldReading = currentVal;
                     const oldManual = bill.is_manual;
+                    const oldSource = bill.reading_source;
 
                     bill.working_reading = targetStr;
                     bill.is_projected = true;
                     bill.is_manual = false;
-                    this.saveWorkingReading(bill);
+                    bill.reading_source = 'auto';
+                    this.saveWorkingReading(bill, false, 'auto');
 
                     if (oldReading && oldReading !== targetStr) {
                         this.showToastNotification(
                             '⚡',
-                            `Auto-filled CA ${bill.ca_number} with ${targetStr} (replaced ${oldReading})`,
+                            `Auto-filled CA ${bill.ca_number} with ${targetStr}` + (isManualUserEntry ? ` (replaced ${oldReading})` : ''),
                             {
                                 kind: 'working_reading',
                                 bill: bill,
                                 prevReading: oldReading,
-                                prevManual: oldManual
+                                prevManual: oldManual,
+                                prevSource: oldSource
                             }
                         );
                     } else {
@@ -2524,7 +2535,7 @@
 
                 // ⚡ Bulk Auto-Project All Unfilled Readings
                 bulkAutoProjectAll() {
-                    if (!confirm(`Auto-project working readings (Previous + Avg) for accounts with empty readings in this cycle?\n\n(Existing manual readings and submitted bills will remain completely protected.)`)) return;
+                    if (!confirm(`Auto-project working readings (Previous + Avg) for all active accounts in this cycle?\n\n(Submitted bills and manual custom overrides will remain protected.)`)) return;
                     fetch('/bills/bulk-project-readings', {
                         method: 'POST',
                         headers: {
@@ -2964,7 +2975,8 @@
                         data.bill.working_reading = data.prevReading;
                         data.bill.is_manual = (data.prevManual !== undefined) ? data.prevManual : true;
                         data.bill.is_projected = !data.bill.is_manual;
-                        this.saveWorkingReading(data.bill);
+                        data.bill.reading_source = data.prevSource || (data.bill.is_manual ? 'manual' : 'auto');
+                        this.saveWorkingReading(data.bill, false, data.bill.reading_source);
                         this.showToastNotification('↩', `Restored reading to ${data.prevReading} for CA ${data.bill.ca_number}`, null);
                         return;
                     }

@@ -254,6 +254,7 @@ class WorkingReadingTest extends TestCase
             'previous_reading' => '100',
             'units_consumed' => 50,
             'working_reading' => '190',
+            'reading_source' => 'manual',
             'review_status' => 'pending',
         ]);
 
@@ -434,6 +435,7 @@ class WorkingReadingTest extends TestCase
             'previous_reading' => '100',
             'units_consumed' => 50,
             'working_reading' => '190',
+            'reading_source' => 'manual',
             'billing_basis' => 'OK',
         ]);
 
@@ -612,5 +614,95 @@ class WorkingReadingTest extends TestCase
         $this->assertArrayHasKey('reading_source', $item);
         $this->assertFalse($item['is_manual']);
         $this->assertEquals('auto', $item['reading_source']);
+    }
+
+    public function test_new_cycle_defaults_to_auto_and_is_not_manual(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $mru = Mru::create(['user_id' => $user->id, 'code' => '0244', 'name' => 'NISARBHATI', 'status' => 'active']);
+
+        // Previous August bill
+        BillRecord::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '102300783999',
+            'billing_month' => 8,
+            'billing_year' => 2026,
+            'working_reading' => '3560',
+            'review_status' => 'submitted',
+            'units_consumed' => 20,
+            'billing_basis' => 'OK',
+        ]);
+
+        // September bill in new cycle (reading_source auto, working_reading was old or null)
+        $septBill = BillRecord::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '102300783999',
+            'billing_month' => 9,
+            'billing_year' => 2026,
+            'previous_reading' => '3560',
+            'working_reading' => null, // Fresh cycle starts with null working reading
+            'reading_source' => 'auto',
+            'review_status' => 'pending',
+            'units_consumed' => 20,
+            'billing_basis' => 'OK',
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/dashboard/data?mru_id={$mru->id}&month=9&year=2026");
+        $response->assertStatus(200);
+
+        $items = collect($response->json('data'))->keyBy('ca_number');
+        $item = $items['102300783999'];
+
+        // Must be primary AUTO, NOT manual!
+        $this->assertFalse($item['is_manual']);
+        $this->assertTrue($item['is_projected']);
+        $this->assertEquals('auto', $item['reading_source']);
+        $this->assertEquals('3580', $item['working_reading']); // Automatically 3560 + 20
+    }
+
+    public function test_manual_update_sets_reading_source_manual_and_bulk_projection_skips_it(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $mru = Mru::create(['user_id' => $user->id, 'code' => '0244', 'name' => 'NISARBHATI', 'status' => 'active']);
+
+        $bill = BillRecord::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '102300783888',
+            'billing_month' => 9,
+            'billing_year' => 2026,
+            'previous_reading' => '100',
+            'working_reading' => '120',
+            'reading_source' => 'auto',
+            'review_status' => 'pending',
+            'units_consumed' => 20,
+            'billing_basis' => 'OK',
+        ]);
+
+        // Operator explicitly updates reading to 190 manually
+        $response = $this->actingAs($user)->postJson('/bills/update-working-reading', [
+            'id' => $bill->id,
+            'working_reading' => '190',
+            'source' => 'manual',
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertEquals('190', $bill->fresh()->working_reading);
+        $this->assertEquals('manual', $bill->fresh()->reading_source);
+
+        // Run bulk project readings
+        $bulkResponse = $this->actingAs($user)->postJson('/bills/bulk-project-readings', [
+            'mru_id' => $mru->id,
+            'month' => 9,
+            'year' => 2026,
+        ]);
+
+        $bulkResponse->assertStatus(200);
+        // The manual bill should NOT have been projected
+        $this->assertEquals(0, $bulkResponse->json('count'));
+        $this->assertEquals('190', $bill->fresh()->working_reading);
+        $this->assertEquals('manual', $bill->fresh()->reading_source);
     }
 }
