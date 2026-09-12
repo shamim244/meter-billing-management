@@ -247,6 +247,7 @@
                                     <th class="py-3.5 px-4 text-center">Tariff</th>
                                     <th class="py-3.5 px-4 text-center">Basis</th>
                                     <th class="py-3.5 px-4 text-center">Baseline Amount</th>
+                                    <th class="py-3.5 px-4 text-center">Initial Reading</th>
                                     <th class="py-3.5 px-4 text-center">Meter No</th>
                                     <th class="py-3.5 px-4 text-center">Mobile</th>
                                     <th class="py-3.5 px-4 text-center">Status</th>
@@ -289,6 +290,9 @@
                                         </td>
                                         <td class="py-3.5 px-4 text-center font-mono font-bold text-slate-800 dark:text-slate-200">
                                             ₹{{ number_format((float)($consumer->baseline_amount ?: 0), 2) }}
+                                        </td>
+                                        <td class="py-3.5 px-4 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
+                                            {{ $consumer->baseline_previous_reading !== null ? $consumer->baseline_previous_reading : ($consumer->last_working_reading !== null ? $consumer->last_working_reading : '—') }}
                                         </td>
                                         <td class="py-3.5 px-4 text-center font-mono text-slate-500 dark:text-slate-400">
                                             {{ $consumer->meter_no ?: '—' }}
@@ -390,10 +394,14 @@
                                 <input type="number" step="0.01" min="0" name="baseline_amount" placeholder="0.00" class="w-full text-xs font-mono rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3.5 py-2.5 focus:ring-2 focus:ring-blue-500">
                             </div>
                         </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Meter Number</label>
                                 <input type="text" name="meter_no" placeholder="e.g. 3808220" class="w-full text-xs font-mono rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3.5 py-2.5 focus:ring-2 focus:ring-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Initial / Prev Reading</label>
+                                <input type="number" step="1" min="0" name="baseline_previous_reading" placeholder="e.g. 1000" class="w-full text-xs font-mono rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3.5 py-2.5 focus:ring-2 focus:ring-blue-500">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Mobile</label>
@@ -458,10 +466,14 @@
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Meter Number</label>
                                 <input type="text" name="meter_no" x-model="editingConsumer.meter_no" placeholder="e.g. 3808220" class="w-full text-xs font-mono rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3.5 py-2.5 focus:ring-2 focus:ring-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Initial / Prev Reading</label>
+                                <input type="number" step="1" min="0" name="baseline_previous_reading" x-model="editingConsumer.baseline_previous_reading" placeholder="e.g. 1000" class="w-full text-xs font-mono rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3.5 py-2.5 focus:ring-2 focus:ring-blue-500">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Mobile</label>
@@ -510,8 +522,8 @@
                         @csrf
                         <div>
                             <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Paste CA Numbers / Master Data:</label>
-                            <p class="text-[11px] text-slate-400 dark:text-slate-500 mb-2">Supported: Plain CAs, or CSV/TSV with columns (<code>CA Number, Name, Tariff, Basis, Amount, Meter, Mobile, Address</code>)</p>
-                            <textarea name="ca_data" x-model="bulkImportText" rows="7" placeholder="10230046961, Ramesh Kumar, DS-II, OK, 450.00, 3808220, 9876543210, Village Area&#10;102300783538, Suresh Devi, DS-II, LK, 320.00, 3808221, 9876543211&#10;102300783541" required class="w-full text-xs font-mono rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white p-3 focus:ring-2 focus:ring-blue-500"></textarea>
+                            <p class="text-[11px] text-slate-400 dark:text-slate-500 mb-2">Supported: Plain CAs, or CSV/TSV with columns (<code>CA Number, Name, Tariff, Basis, Amount, Meter, Initial Reading, Mobile, Address</code>)</p>
+                            <textarea name="ca_data" x-model="bulkImportText" rows="7" placeholder="10230046961, Ramesh Kumar, DS-II, OK, 450.00, 3808220, 1000, 9876543210, Village Area&#10;102300783538, Suresh Devi, DS-II, LK, 320.00, 3808221, 9876543211&#10;102300783541" required class="w-full text-xs font-mono rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white p-3 focus:ring-2 focus:ring-blue-500"></textarea>
                         </div>
                         <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                             <span>Detected Lines: <strong class="font-mono text-slate-900 dark:text-white" x-text="detectedLinesCount">0</strong></span>
@@ -795,6 +807,7 @@
                         tariff_category: consumer.tariff_category || 'DS-II',
                         billing_basis: consumer.billing_basis || 'OK',
                         baseline_amount: consumer.baseline_amount !== null && consumer.baseline_amount !== undefined ? consumer.baseline_amount : '0.00',
+                        baseline_previous_reading: consumer.baseline_previous_reading !== null && consumer.baseline_previous_reading !== undefined ? consumer.baseline_previous_reading : (consumer.last_working_reading || ''),
                         mobile: consumer.mobile || '',
                         address: consumer.address || '',
                         status: consumer.status || 'active'

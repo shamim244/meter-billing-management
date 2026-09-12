@@ -17,20 +17,25 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+use App\Services\SmartAverageCalculationService;
+
 class MruController extends Controller
 {
     protected EngineService $engineService;
     protected MruQuotaService $mruQuotaService;
     protected ConsumerQuotaService $consumerQuotaService;
+    protected SmartAverageCalculationService $smartAverageService;
 
     public function __construct(
         EngineService $engineService,
         MruQuotaService $mruQuotaService,
-        ConsumerQuotaService $consumerQuotaService
+        ConsumerQuotaService $consumerQuotaService,
+        SmartAverageCalculationService $smartAverageService
     ) {
         $this->engineService = $engineService;
         $this->mruQuotaService = $mruQuotaService;
         $this->consumerQuotaService = $consumerQuotaService;
+        $this->smartAverageService = $smartAverageService;
     }
 
     /**
@@ -449,26 +454,34 @@ class MruController extends Controller
             'tariff_category' => 'nullable|string|max:50',
             'billing_basis' => 'nullable|string|max:20',
             'baseline_amount' => 'nullable|numeric|min:0',
+            'baseline_previous_reading' => 'nullable|integer|min:0',
             'mobile' => 'nullable|string|max:20',
             'address' => 'nullable|string|max:500',
         ]);
 
         $userId = Auth::id();
         $ca = trim($request->ca_number);
+        $baseReading = $request->filled('baseline_previous_reading') ? (int) $request->baseline_previous_reading : null;
+
+        $payload = [
+            'mru_id' => $mru->id,
+            'consumer_name' => $request->consumer_name,
+            'meter_no' => $request->meter_no,
+            'tariff_category' => $request->tariff_category ? strtoupper(trim($request->tariff_category)) : null,
+            'billing_basis' => $request->billing_basis ? strtoupper(trim($request->billing_basis)) : 'OK',
+            'baseline_amount' => $request->filled('baseline_amount') ? (float)$request->baseline_amount : 0.00,
+            'baseline_previous_reading' => $baseReading,
+            'mobile' => $request->mobile,
+            'address' => $request->address,
+            'status' => 'active',
+        ];
+        if ($baseReading !== null) {
+            $payload['last_working_reading'] = $baseReading;
+        }
 
         ConsumerAccount::updateOrCreate(
             ['user_id' => $userId, 'ca_number' => $ca],
-            [
-                'mru_id' => $mru->id,
-                'consumer_name' => $request->consumer_name,
-                'meter_no' => $request->meter_no,
-                'tariff_category' => $request->tariff_category ? strtoupper(trim($request->tariff_category)) : null,
-                'billing_basis' => $request->billing_basis ? strtoupper(trim($request->billing_basis)) : 'OK',
-                'baseline_amount' => $request->filled('baseline_amount') ? (float)$request->baseline_amount : 0.00,
-                'mobile' => $request->mobile,
-                'address' => $request->address,
-                'status' => 'active',
-            ]
+            $payload
         );
 
         return back()->with('success', "Consumer CA '{$ca}' added to MRU '{$mru->name}'.");
@@ -515,6 +528,8 @@ class MruController extends Controller
                                 $headerMap['basis'] = $idx;
                             } elseif (str_contains($normalized, 'amount')) {
                                 $headerMap['amount'] = $idx;
+                            } elseif (str_contains($normalized, 'prev') || str_contains($normalized, 'initial') || str_contains($normalized, 'reading')) {
+                                $headerMap['prev_reading'] = $idx;
                             } elseif (str_contains($normalized, 'name')) {
                                 $headerMap['name'] = $idx;
                             } elseif (str_contains($normalized, 'meter')) {
@@ -537,6 +552,7 @@ class MruController extends Controller
                 $basis = null;
                 $amount = null;
                 $meter = null;
+                $prevReading = null;
                 $mobile = null;
                 $address = null;
 
@@ -548,6 +564,7 @@ class MruController extends Controller
                     $tariff = isset($headerMap['tariff']) ? ($cols[$headerMap['tariff']] ?? null) : null;
                     $basis = isset($headerMap['basis']) ? ($cols[$headerMap['basis']] ?? null) : null;
                     $amount = isset($headerMap['amount']) ? ($cols[$headerMap['amount']] ?? null) : null;
+                    $prevReading = isset($headerMap['prev_reading']) ? ($cols[$headerMap['prev_reading']] ?? null) : null;
                     $meter = isset($headerMap['meter']) ? ($cols[$headerMap['meter']] ?? null) : null;
                     $mobile = isset($headerMap['mobile']) ? ($cols[$headerMap['mobile']] ?? null) : null;
                     $address = isset($headerMap['address']) ? ($cols[$headerMap['address']] ?? null) : null;
@@ -556,31 +573,42 @@ class MruController extends Controller
                     if (!preg_match('/^\d+$/', $ca)) continue;
 
                     $colCount = count($cols);
-                    if ($colCount >= 8) {
-                        // Full standard format: CA, Name, Tariff, Basis, Amount, Meter, Mobile, Address
+                    $c2 = strtoupper($cols[2] ?? '');
+                    $c3 = strtoupper($cols[3] ?? '');
+
+                    $isMasterFormat = preg_match('/^(DS|NDS|LTIS|IAS)/i', $c2) || in_array($c3, ['OK', 'LK', 'MD', 'PL', 'RN']);
+
+                    if ($isMasterFormat) {
+                        // Positional: CA, Name, Tariff, Basis, Amount, Meter, [Reading], [Mobile], [Address]
                         $name = !empty($cols[1]) ? $cols[1] : null;
                         $tariff = !empty($cols[2]) ? $cols[2] : null;
                         $basis = !empty($cols[3]) ? $cols[3] : null;
                         $amount = !empty($cols[4]) ? $cols[4] : null;
                         $meter = !empty($cols[5]) ? $cols[5] : null;
-                        $mobile = !empty($cols[6]) ? $cols[6] : null;
-                        $address = !empty($cols[7]) ? $cols[7] : null;
-                    } elseif ($colCount === 5) {
-                        // Check if 5 columns is [CA, Name, Tariff, Basis, Amount] or traditional [CA, Name, Meter, Mobile, Address]
-                        $c3 = strtoupper($cols[3] ?? '');
-                        if (in_array($c3, ['OK', 'LK', 'MD', 'PL', 'RN']) || preg_match('/^(DS|NDS|LTIS|IAS)/i', $cols[2] ?? '')) {
-                            $name = !empty($cols[1]) ? $cols[1] : null;
-                            $tariff = !empty($cols[2]) ? $cols[2] : null;
-                            $basis = !empty($cols[3]) ? $cols[3] : null;
-                            $amount = !empty($cols[4]) ? $cols[4] : null;
-                        } else {
-                            $name = !empty($cols[1]) ? $cols[1] : null;
-                            $meter = !empty($cols[2]) ? $cols[2] : null;
-                            $mobile = !empty($cols[3]) ? $cols[3] : null;
-                            $address = !empty($cols[4]) ? $cols[4] : null;
+
+                        if (isset($cols[6])) {
+                            if (preg_match('/^[6-9]\d{9}$/', $cols[6])) {
+                                // Exactly 10-digit mobile number starting with 6-9
+                                $mobile = $cols[6];
+                                $address = !empty($cols[7]) ? $cols[7] : null;
+                            } elseif (is_numeric($cols[6])) {
+                                // Numeric initial / baseline meter reading
+                                $prevReading = $cols[6];
+                                if (isset($cols[7])) {
+                                    if (preg_match('/^[6-9]\d{9}$/', $cols[7]) || is_numeric($cols[7])) {
+                                        $mobile = $cols[7];
+                                        $address = !empty($cols[8]) ? $cols[8] : null;
+                                    } else {
+                                        $address = $cols[7];
+                                    }
+                                }
+                            } else {
+                                $mobile = $cols[6];
+                                $address = !empty($cols[7]) ? $cols[7] : null;
+                            }
                         }
                     } else {
-                        // Fewer columns fallback
+                        // Traditional fallback: CA, Name, Meter, Mobile, Address
                         $name = !empty($cols[1]) ? $cols[1] : null;
                         $meter = !empty($cols[2]) ? $cols[2] : null;
                         $mobile = !empty($cols[3]) ? $cols[3] : null;
@@ -597,6 +625,10 @@ class MruController extends Controller
                 if ($tariff !== null && $tariff !== '') $payload['tariff_category'] = strtoupper($tariff);
                 if ($basis !== null && $basis !== '') $payload['billing_basis'] = strtoupper($basis);
                 if ($amount !== null && $amount !== '' && is_numeric($amount)) $payload['baseline_amount'] = (float)$amount;
+                if ($prevReading !== null && $prevReading !== '' && is_numeric($prevReading)) {
+                    $payload['baseline_previous_reading'] = (int)$prevReading;
+                    $payload['last_working_reading'] = (int)$prevReading;
+                }
                 if ($mobile !== null && $mobile !== '') $payload['mobile'] = $mobile;
                 if ($address !== null && $address !== '') $payload['address'] = $address;
 
@@ -624,6 +656,7 @@ class MruController extends Controller
             'tariff_category' => 'nullable|string|max:50',
             'billing_basis' => 'nullable|string|max:20',
             'baseline_amount' => 'nullable|numeric|min:0',
+            'baseline_previous_reading' => 'nullable|integer|min:0',
             'mobile' => 'nullable|string|max:20',
             'address' => 'nullable|string|max:500',
             'status' => 'nullable|string|in:active,inactive',
@@ -641,6 +674,13 @@ class MruController extends Controller
         }
         if ($request->has('baseline_amount')) {
             $updateData['baseline_amount'] = $request->filled('baseline_amount') ? (float)$request->baseline_amount : 0.00;
+        }
+        if ($request->has('baseline_previous_reading')) {
+            $baseReading = $request->filled('baseline_previous_reading') ? (int)$request->baseline_previous_reading : null;
+            $updateData['baseline_previous_reading'] = $baseReading;
+            if ($baseReading !== null && empty($consumer->last_working_reading)) {
+                $updateData['last_working_reading'] = $baseReading;
+            }
         }
 
         $consumer->update($updateData);
@@ -675,7 +715,7 @@ class MruController extends Controller
             $output = fopen('php://output', 'w');
             fwrite($output, "\xEF\xBB\xBF");
 
-            fputcsv($output, ['CA Number', 'Consumer Name', 'Tariff Category', 'Billing Basis', 'Baseline Amount', 'MRU Code', 'MRU Name', 'Meter No', 'Mobile', 'Address', 'Status']);
+            fputcsv($output, ['CA Number', 'Consumer Name', 'Tariff Category', 'Billing Basis', 'Baseline Amount', 'Baseline Previous Reading', 'MRU Code', 'MRU Name', 'Meter No', 'Mobile', 'Address', 'Status']);
 
             foreach ($consumers as $c) {
                 fputcsv($output, [
@@ -684,6 +724,7 @@ class MruController extends Controller
                     $c->tariff_category ?: 'DS-II',
                     $c->billing_basis ?: 'OK',
                     number_format((float)($c->baseline_amount ?? 0), 2, '.', ''),
+                    $c->baseline_previous_reading ?? ($c->last_working_reading ?? ''),
                     $mru->code,
                     $mru->name,
                     $c->meter_no,
@@ -753,27 +794,39 @@ class MruController extends Controller
         }
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($activeConsumers, $userId, $month, $year, $monthLabel, $mru) {
-            foreach ($activeConsumers as $consumer) {
-                // Find strictly preceding record in DB if exists
-                $prevRecord = BillRecord::where('user_id', $userId)
-                    ->where('ca_number', $consumer->ca_number)
-                    ->where(function ($q) use ($month, $year) {
-                        $q->where('billing_year', '<', $year)
-                          ->orWhere(function ($q2) use ($month, $year) {
-                              $q2->where('billing_year', $year)
-                                 ->where('billing_month', '<', $month);
-                          });
-                    })
-                    ->orderBy('billing_year', 'desc')
-                    ->orderBy('billing_month', 'desc')
-                    ->first();
+            $caNumbers = $activeConsumers->pluck('ca_number')->unique()->values();
+            $historicalBills = BillRecord::where('user_id', $userId)
+                ->whereIn('ca_number', $caNumbers)
+                ->orderBy('billing_year', 'desc')
+                ->orderBy('billing_month', 'desc')
+                ->get()
+                ->groupBy('ca_number');
 
-                $initialPrevReading = null;
-                if ($prevRecord) {
-                    $initialPrevReading = $prevRecord->working_reading ?: ($prevRecord->current_reading ?: $prevRecord->previous_reading);
-                } else {
-                    $initialPrevReading = $consumer->last_working_reading ?: $consumer->baseline_previous_reading;
-                }
+            foreach ($activeConsumers as $consumer) {
+                $history = $historicalBills->get($consumer->ca_number, collect());
+
+                $resolvedPrev = $this->smartAverageService->resolvePreviousReading(
+                    $consumer->ca_number,
+                    $month,
+                    $year,
+                    null,
+                    $consumer,
+                    $history
+                );
+
+                $avgCalc = $this->smartAverageService->calculateSmartAverage(
+                    $consumer->ca_number,
+                    $month,
+                    $year,
+                    $consumer->billing_basis ?: 'OK',
+                    null,
+                    $consumer,
+                    $history
+                );
+
+                $prevReading = $resolvedPrev['reading'];
+                $avgUnits = $avgCalc['avg_units'];
+                $projectedReading = $this->smartAverageService->calculateProjectedReading($prevReading, $avgUnits, null);
 
                 BillRecord::updateOrCreate(
                     [
@@ -787,10 +840,13 @@ class MruController extends Controller
                         'bill_month_label' => $monthLabel,
                         'consumer_name' => $consumer->consumer_name,
                         'meter_no' => $consumer->meter_no,
-                        'tariff_category' => $consumer->tariff_category,
+                        'tariff_category' => $consumer->tariff_category ?: 'DS-II',
                         'billing_basis' => $consumer->billing_basis ?: 'OK',
                         'total_amount' => $consumer->baseline_amount !== null ? (float)$consumer->baseline_amount : 0.00,
-                        'previous_reading' => $initialPrevReading,
+                        'previous_reading' => $prevReading,
+                        'units_consumed' => $avgUnits,
+                        'calculated_avg_units' => $avgUnits,
+                        'working_reading' => (string) $projectedReading,
                         'reading_source' => 'auto',
                         'download_status' => 'pending',
                     ]

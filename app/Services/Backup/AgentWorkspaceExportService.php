@@ -49,7 +49,7 @@ class AgentWorkspaceExportService
         // 2. Consumers CSV
         $consumers = ConsumerAccount::where('user_id', $userId)->orderBy('mru_code')->orderBy('sequence_no')->get();
         $conCsv = fopen('php://temp', 'r+');
-        fputcsv($conCsv, ['ID', 'MRU Code', 'CA Number', 'Consumer Name', 'Father Name', 'Address', 'Tariff Category', 'Meter Number', 'Phone', 'Sequence', 'Created At']);
+        fputcsv($conCsv, ['ID', 'MRU Code', 'CA Number', 'Consumer Name', 'Father Name', 'Address', 'Tariff Category', 'Billing Basis', 'Baseline Amount', 'Baseline Reading', 'Meter Number', 'Phone', 'Sequence', 'Created At']);
         foreach ($consumers as $c) {
             fputcsv($conCsv, [
                 $c->id,
@@ -59,6 +59,9 @@ class AgentWorkspaceExportService
                 $c->father_name ?? '',
                 $c->address ?? '',
                 $c->tariff_category ?? $c->tariff,
+                $c->billing_basis ?? 'OK',
+                $c->baseline_amount !== null ? $c->baseline_amount : '0.00',
+                $c->baseline_previous_reading !== null ? $c->baseline_previous_reading : ($c->last_working_reading ?? ''),
                 $c->meter_number ?? $c->meter_no,
                 $c->mobile_number ?? $c->phone,
                 $c->sequence_no ?? 0,

@@ -7,6 +7,7 @@ use App\Models\BillStatus;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Services\BillTagService;
+use App\Services\SmartAverageCalculationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,10 +16,14 @@ use Illuminate\View\View;
 class DashboardController extends Controller
 {
     protected BillTagService $billTagService;
+    protected SmartAverageCalculationService $smartAverageService;
 
-    public function __construct(BillTagService $billTagService)
-    {
+    public function __construct(
+        BillTagService $billTagService,
+        SmartAverageCalculationService $smartAverageService
+    ) {
         $this->billTagService = $billTagService;
+        $this->smartAverageService = $smartAverageService;
     }
 
     /**
@@ -131,39 +136,44 @@ class DashboardController extends Controller
         $statusCounts['basis_ok'] = (clone $periodBillsQuery)->where(function($q) {
             $q->where('billing_basis', 'OK')
               ->orWhere(function($sub) {
-                  $sub->whereNull('billing_basis')
-                      ->where(function($sub2) {
-                          $sub2->whereDoesntHave('consumerAccount')
-                               ->orWhereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'OK')->orWhereNull('billing_basis'));
-                      });
+                  $sub->where(function($b) {
+                      $b->whereNull('billing_basis')->orWhere('billing_basis', '');
+                  })->where(function($sub2) {
+                      $sub2->whereDoesntHave('consumerAccount')
+                           ->orWhereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'OK')->orWhereNull('billing_basis')->orWhere('billing_basis', ''));
+                  });
               });
         })->count();
         $statusCounts['basis_lk'] = (clone $periodBillsQuery)->where(function($q) {
             $q->where('billing_basis', 'LK')
               ->orWhere(function($sub) {
-                  $sub->whereNull('billing_basis')
-                      ->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'LK'));
+                  $sub->where(function($b) {
+                      $b->whereNull('billing_basis')->orWhere('billing_basis', '');
+                  })->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'LK'));
               });
         })->count();
         $statusCounts['basis_md'] = (clone $periodBillsQuery)->where(function($q) {
             $q->where('billing_basis', 'MD')
               ->orWhere(function($sub) {
-                  $sub->whereNull('billing_basis')
-                      ->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'MD'));
+                  $sub->where(function($b) {
+                      $b->whereNull('billing_basis')->orWhere('billing_basis', '');
+                  })->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'MD'));
               });
         })->count();
         $statusCounts['basis_pl'] = (clone $periodBillsQuery)->where(function($q) {
             $q->where('billing_basis', 'PL')
               ->orWhere(function($sub) {
-                  $sub->whereNull('billing_basis')
-                      ->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'PL'));
+                  $sub->where(function($b) {
+                      $b->whereNull('billing_basis')->orWhere('billing_basis', '');
+                  })->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'PL'));
               });
         })->count();
         $statusCounts['basis_rn'] = (clone $periodBillsQuery)->where(function($q) {
             $q->where('billing_basis', 'RN')
               ->orWhere(function($sub) {
-                  $sub->whereNull('billing_basis')
-                      ->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'RN'));
+                  $sub->where(function($b) {
+                      $b->whereNull('billing_basis')->orWhere('billing_basis', '');
+                  })->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'RN'));
               });
         })->count();
 
@@ -308,145 +318,39 @@ class DashboardController extends Controller
                 $bill->is_baseline_amount = true;
             }
 
-            // 1. Box 2: Previous Reading from DB
+            // 1. Box 2: Previous Reading from DB / Master Ledger
             $history = $historicalBills->get($bill->ca_number, collect());
-            
-            // Find strictly preceding record in DB
-            $prevRecord = $history->first(function ($h) use ($month, $year) {
-                return ($h->billing_year < $year) || ($h->billing_year == $year && $h->billing_month < $month);
-            });
+            $resolvedPrev = $this->smartAverageService->resolvePreviousReading(
+                $bill->ca_number,
+                $month,
+                $year,
+                $bill,
+                $consumerAcc,
+                $history
+            );
 
-            // 1. Box 2: Previous Reading (Prioritize previous month's Working Reading; fallback to PDF baseline on First Cycle)
-            $dbPrevReading = null;
-            $dbPrevMonthLabel = null;
-            if ($prevRecord) {
-                if (!empty($prevRecord->working_reading)) {
-                    $dbPrevReading = (string) $prevRecord->working_reading;
-                    $priorMonthName = $prevRecord->bill_month_label ?: date('M, Y', mktime(0, 0, 0, $prevRecord->billing_month, 1, $prevRecord->billing_year));
-                    $dbPrevMonthLabel = "From {$priorMonthName} (Working)";
-                } elseif (!empty($prevRecord->current_reading)) {
-                    $dbPrevReading = (string) $prevRecord->current_reading;
-                    $priorMonthName = $prevRecord->bill_month_label ?: date('M, Y', mktime(0, 0, 0, $prevRecord->billing_month, 1, $prevRecord->billing_year));
-                    $dbPrevMonthLabel = "From {$priorMonthName} (PDF)";
-                } else {
-                    $dbPrevReading = (string) ($prevRecord->previous_reading ?? '0');
-                    $priorMonthName = $prevRecord->bill_month_label ?: date('M, Y', mktime(0, 0, 0, $prevRecord->billing_month, 1, $prevRecord->billing_year));
-                    $dbPrevMonthLabel = "From {$priorMonthName} (Baseline)";
-                }
-            } else {
-                // First Cycle in DB (no prior month in local database yet)
-                if (!empty($bill->previous_reading) && is_numeric($bill->previous_reading)) {
-                    $dbPrevReading = (string) $bill->previous_reading;
-                    $priorMonthNum = $month == 1 ? 12 : $month - 1;
-                    $priorYearNum = $month == 1 ? $year - 1 : $year;
-                    $priorMonthName = date('M, Y', mktime(0, 0, 0, $priorMonthNum, 1, $priorYearNum));
-                    $dbPrevMonthLabel = "From {$priorMonthName} (PDF Baseline)";
-                } elseif ($consumerAcc && !empty($consumerAcc->last_working_reading)) {
-                    $dbPrevReading = (string) $consumerAcc->last_working_reading;
-                    $dbPrevMonthLabel = "From Ledger ({$consumerAcc->last_working_month}/{$consumerAcc->last_working_year})";
-                } elseif ($consumerAcc && !empty($consumerAcc->baseline_previous_reading)) {
-                    $dbPrevReading = (string) $consumerAcc->baseline_previous_reading;
-                    $dbPrevMonthLabel = "From Ledger Baseline";
-                } else {
-                    $dbPrevReading = '—';
-                    $dbPrevMonthLabel = 'Initial Cycle Baseline';
-                }
-            }
+            $bill->db_prev_reading = $resolvedPrev['reading_str'];
+            $bill->db_prev_label = $resolvedPrev['label'];
 
-            $bill->db_prev_reading = $dbPrevReading;
-            $bill->db_prev_label = $dbPrevMonthLabel;
+            // 2. Box 3: Smart Average Usage Calculation (Outlier-Proof DB-driven delta & OK vs LK vs MD)
+            $avgCalc = $this->smartAverageService->calculateSmartAverage(
+                $bill->ca_number,
+                $month,
+                $year,
+                $bill->billing_basis ?: 'OK',
+                $bill,
+                $consumerAcc,
+                $history
+            );
 
-            // 2. Box 3: Smart Average Usage Calculation (Outlier-Proof, DB-driven delta & OK vs LK vs MD)
-            $avgUnits = 50;
-            $avgLabel = '50 kWh (Initial)';
-            $avgRange = '42–58 kWh';
-
-            // Collect historical consumption units from clean DB history deltas
-            $historyList = $history->values();
-            $okUnits = collect();
-            $lkUnits = collect();
-
-            for ($i = 0; $i < $historyList->count(); $i++) {
-                $h = $historyList[$i];
-                $hBasis = strtoupper(trim((string)($h->billing_basis ?: 'OK')));
-
-                $units = 0;
-                if ($h->units_consumed && $h->units_consumed > 0) {
-                    $units = (int) $h->units_consumed;
-                } else {
-                    $rCurr = is_numeric($h->working_reading) ? (int)$h->working_reading : (is_numeric($h->current_reading) ? (int)$h->current_reading : null);
-                    $rPrev = is_numeric($h->previous_reading) ? (int)$h->previous_reading : null;
-                    if ($rCurr !== null && $rPrev !== null && $rCurr >= $rPrev) {
-                        $units = $rCurr - $rPrev;
-                    } elseif ($rCurr !== null && isset($historyList[$i + 1])) {
-                        $nextH = $historyList[$i + 1];
-                        $rNext = is_numeric($nextH->working_reading) ? (int)$nextH->working_reading : (is_numeric($nextH->current_reading) ? (int)$nextH->current_reading : null);
-                        if ($rNext !== null && $rCurr >= $rNext) {
-                            $units = $rCurr - $rNext;
-                        }
-                    }
-                }
-
-                if ($units > 0) {
-                    if ($hBasis === 'OK') {
-                        $okUnits->push($units);
-                    } elseif ($hBasis === 'LK') {
-                        $lkUnits->push($units);
-                    }
-                }
-            }
-
-            $currentBillUnits = 0;
-            if ($bill->units_consumed > 0) {
-                $currentBillUnits = (int) $bill->units_consumed;
-            } else {
-                $w = is_numeric($bill->working_reading) ? (int)$bill->working_reading : (is_numeric($bill->current_reading) ? (int)$bill->current_reading : 0);
-                $p = is_numeric($dbPrevReading) ? (int)$dbPrevReading : (is_numeric($bill->previous_reading) ? (int)$bill->previous_reading : 0);
-                if ($w > 0 && $p > 0 && $w >= $p) {
-                    $currentBillUnits = $w - $p;
-                }
-            }
-
-            if ($bill->billing_basis === 'MD') {
-                $avgUnits = $currentBillUnits ?: ($bill->units_consumed ?: 76);
-                $avgLabel = "{$avgUnits} kWh (MD Assessed)";
-                $avgRange = 'Flat Assessed';
-            } else {
-                if ($okUnits->isNotEmpty()) {
-                    $sortedOk = $okUnits->sort()->values();
-                    $avgUnits = (int) round($sortedOk->median());
-                    $avgLabel = "{$avgUnits} kWh (From OK History)";
-                    $minR = max(1, (int) round($avgUnits * 0.85));
-                    $maxR = (int) round($avgUnits * 1.15);
-                    $avgRange = "{$minR}–{$maxR} kWh";
-                } elseif ($lkUnits->isNotEmpty()) {
-                    $avgUnits = (int) round($lkUnits->median());
-                    $avgLabel = "~{$avgUnits} kWh (LK Approx)";
-                    $avgRange = 'Provisional';
-                } elseif ($currentBillUnits > 0) {
-                    $avgUnits = (int) $currentBillUnits;
-                    $avgLabel = "{$avgUnits} kWh (This Bill)";
-                    $minR = max(1, (int) round($avgUnits * 0.85));
-                    $maxR = (int) round($avgUnits * 1.15);
-                    $avgRange = "{$minR}–{$maxR} kWh";
-                }
-            }
-
-            $bill->smart_avg_units = $avgUnits;
-            $bill->smart_avg_label = $avgLabel;
-            $bill->smart_avg_range = $avgRange;
+            $bill->smart_avg_units = $avgCalc['avg_units'];
+            $bill->smart_avg_label = $avgCalc['label'];
+            $bill->smart_avg_range = $avgCalc['range'];
 
             // 3. Box 1: Working Reading (Current) & Auto-Fill Projection
-            // 80-90% Workflow: Rely on (Previous Working Reading + Smart Average)
-            $prevNum = is_numeric($bill->db_prev_reading) ? (int)$bill->db_prev_reading : (is_numeric($bill->previous_reading) ? (int)$bill->previous_reading : 0);
-            $projectedReading = $prevNum > 0 ? ($prevNum + $avgUnits) : $avgUnits;
-
-            // Invariant: Working Reading MUST NEVER be less than Official PDF Reading if PDF is present!
+            $prevNum = $resolvedPrev['reading'] ?? 0;
             $pdfNum = (!empty($bill->current_reading) && is_numeric($bill->current_reading)) ? (int)$bill->current_reading : null;
-            if ($pdfNum !== null && $projectedReading < $pdfNum) {
-                // If projected is less than PDF reading, bump to at least PDF reading or (PDF + avg delta)
-                $projectedReading = $pdfNum;
-            }
+            $projectedReading = $this->smartAverageService->calculateProjectedReading($prevNum, $avgCalc['avg_units'], $pdfNum);
 
             $bill->projected_reading = (string) $projectedReading;
 
@@ -469,7 +373,10 @@ class DashboardController extends Controller
             }
 
             $workNum = is_numeric($bill->working_reading) ? (int)$bill->working_reading : $projectedReading;
-            $bill->working_diff_units = ($prevNum > 0 && $workNum >= $prevNum) ? ($workNum - $prevNum) : ($bill->units_consumed ?: $avgUnits);
+            $bill->working_diff_units = ($prevNum > 0 && $workNum >= $prevNum) ? ($workNum - $prevNum) : ($bill->units_consumed ?: $avgCalc['avg_units']);
+            if (empty($bill->units_consumed) || (int)$bill->units_consumed === 0) {
+                $bill->units_consumed = $bill->working_diff_units;
+            }
 
             // 4. Box 4: Official PDF Reading & Sync / Invariant Status
             $bill->official_pdf_reading = $bill->current_reading ?: null;
@@ -743,8 +650,17 @@ class DashboardController extends Controller
             $bill->reading_source = $readingSource;
             if (is_numeric($readingVal)) {
                 $prev = is_numeric($bill->previous_reading) ? (int)$bill->previous_reading : 0;
+                if ($prev <= 0) {
+                    $consumer = ConsumerAccount::where('user_id', $userId)->where('ca_number', $bill->ca_number)->first();
+                    $resolved = $this->smartAverageService->resolvePreviousReading($bill->ca_number, $bill->billing_month, $bill->billing_year, $bill, $consumer, null);
+                    if (!empty($resolved['reading'])) {
+                        $prev = (int) $resolved['reading'];
+                        $bill->previous_reading = $prev;
+                    }
+                }
                 if ($prev > 0 && (int)$readingVal >= $prev) {
                     $bill->units_consumed = (int)$readingVal - $prev;
+                    $bill->calculated_avg_units = $bill->units_consumed;
                 }
             }
             $bill->save();
@@ -898,66 +814,35 @@ class DashboardController extends Controller
 
                 $history = $historicalBills->get($bill->ca_number, collect());
                 $consumer = $consumers->get($bill->ca_number);
-                
-                // Prioritize strictly preceding record's working_reading
-                $prevRecord = $history->first(function ($h) use ($month, $year) {
-                    return ($h->billing_year < $year) || ($h->billing_year == $year && $h->billing_month < $month);
-                });
 
-                $dbPrevReading = 0;
-                if ($prevRecord) {
-                    $dbPrevReading = (int) ($prevRecord->working_reading ?: ($prevRecord->current_reading ?: $prevRecord->previous_reading));
-                } elseif ($consumer && !empty($consumer->last_working_reading)) {
-                    $dbPrevReading = (int) $consumer->last_working_reading;
-                } elseif ($consumer && !empty($consumer->baseline_previous_reading)) {
-                    $dbPrevReading = (int) $consumer->baseline_previous_reading;
-                } else {
-                    $dbPrevReading = is_numeric($bill->previous_reading) ? (int)$bill->previous_reading : 0;
+                $resolvedPrev = $this->smartAverageService->resolvePreviousReading(
+                    $bill->ca_number,
+                    $month,
+                    $year,
+                    $bill,
+                    $consumer,
+                    $history
+                );
+
+                $avgCalc = $this->smartAverageService->calculateSmartAverage(
+                    $bill->ca_number,
+                    $month,
+                    $year,
+                    $bill->billing_basis ?: ($consumer?->billing_basis ?: 'OK'),
+                    $bill,
+                    $consumer,
+                    $history
+                );
+
+                $dbPrevReading = $resolvedPrev['reading'] ?? 0;
+                $avgUnits = $avgCalc['avg_units'];
+
+                $pdfReading = (!empty($bill->current_reading) && is_numeric($bill->current_reading)) ? (int) $bill->current_reading : null;
+                $projected = $this->smartAverageService->calculateProjectedReading($dbPrevReading, $avgUnits, $pdfReading);
+
+                if ($dbPrevReading > 0) {
+                    $bill->previous_reading = $dbPrevReading;
                 }
-
-                // Calculate clean average for this CA from DB history deltas
-                $priorHistory = $history->filter(function ($h) use ($month, $year) {
-                    return ($h->billing_year < $year) || ($h->billing_year == $year && $h->billing_month < $month);
-                })->values();
-
-                $okUnits = collect();
-                for ($i = 0; $i < $priorHistory->count(); $i++) {
-                    $h = $priorHistory[$i];
-                    if (($h->billing_basis ?? 'OK') !== 'OK') continue;
-
-                    $units = 0;
-                    if ($h->units_consumed && $h->units_consumed > 0) {
-                        $units = (int) $h->units_consumed;
-                    } else {
-                        $rCurr = is_numeric($h->working_reading) ? (int)$h->working_reading : (is_numeric($h->current_reading) ? (int)$h->current_reading : null);
-                        $rPrev = is_numeric($h->previous_reading) ? (int)$h->previous_reading : null;
-                        if ($rCurr !== null && $rPrev !== null && $rCurr >= $rPrev) {
-                            $units = $rCurr - $rPrev;
-                        } elseif ($rCurr !== null && isset($priorHistory[$i + 1])) {
-                            $nextH = $priorHistory[$i + 1];
-                            $rNext = is_numeric($nextH->working_reading) ? (int)$nextH->working_reading : (is_numeric($nextH->current_reading) ? (int)$nextH->current_reading : null);
-                            if ($rNext !== null && $rCurr >= $rNext) {
-                                $units = $rCurr - $rNext;
-                            }
-                        }
-                    }
-                    if ($units > 0) {
-                        $okUnits->push($units);
-                    }
-                }
-
-                $avgUnits = $okUnits->isNotEmpty() ? (int) round($okUnits->median()) : ($bill->units_consumed ?: 50);
-
-                $projected = $dbPrevReading + $avgUnits;
-
-                // Invariant: Working Reading MUST NEVER be < PDF Reading if PDF exists!
-                if (!empty($bill->current_reading) && is_numeric($bill->current_reading)) {
-                    $pdfReading = (int) $bill->current_reading;
-                    if ($projected < $pdfReading) {
-                        $projected = $pdfReading;
-                    }
-                }
-
                 $bill->working_reading = (string) $projected;
                 $bill->reading_source = 'auto';
                 $bill->units_consumed = $avgUnits;

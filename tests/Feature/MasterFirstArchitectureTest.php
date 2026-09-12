@@ -436,4 +436,271 @@ class MasterFirstArchitectureTest extends TestCase
         $this->assertEquals(40, (int) $activeBill->units_consumed);
         $this->assertEquals(40, (int) $activeBill->calculated_avg_units);
     }
+
+    public function test_user_can_add_consumer_with_initial_baseline_reading(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $mru = Mru::create([
+            'user_id' => $user->id,
+            'code' => '0477',
+            'name' => 'Gerua',
+            'status' => 'active',
+        ]);
+
+        $response = $this->actingAs($user)->post("/mrus/{$mru->id}/consumers", [
+            'ca_number' => '10230046999',
+            'consumer_name' => 'Vijay Kumar',
+            'meter_no' => '5544332',
+            'mobile' => '9876543210',
+            'tariff_category' => 'DS-II',
+            'billing_basis' => 'OK',
+            'baseline_amount' => 420.00,
+            'baseline_previous_reading' => 1250,
+        ]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('consumer_accounts', [
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '10230046999',
+            'consumer_name' => 'Vijay Kumar',
+            'baseline_previous_reading' => 1250,
+        ]);
+    }
+
+    public function test_bulk_import_handles_6_and_7_column_rows_without_corrupting_columns(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $mru = Mru::create([
+            'user_id' => $user->id,
+            'code' => '0014',
+            'name' => 'Lalpur',
+            'status' => 'active',
+        ]);
+
+        // 6 columns: CA, Name, Tariff, Basis, Amount, Meter
+        // 7 columns: CA, Name, Tariff, Basis, Amount, Meter, Initial Reading
+        $importText = "102300990001, Six Col User, DS-II, LK, 350.00, MTR-6COL\n"
+                    . "102300990002, Seven Col User, NDS-I, MD, 500.00, MTR-7COL, 2400";
+
+        $response = $this->actingAs($user)->post("/mrus/{$mru->id}/consumers/import", [
+            'ca_data' => $importText,
+        ]);
+
+        $response->assertRedirect();
+
+        $this->assertDatabaseHas('consumer_accounts', [
+            'ca_number' => '102300990001',
+            'consumer_name' => 'Six Col User',
+            'tariff_category' => 'DS-II',
+            'billing_basis' => 'LK',
+            'baseline_amount' => 350.00,
+            'meter_no' => 'MTR-6COL',
+        ]);
+
+        $this->assertDatabaseHas('consumer_accounts', [
+            'ca_number' => '102300990002',
+            'consumer_name' => 'Seven Col User',
+            'tariff_category' => 'NDS-I',
+            'billing_basis' => 'MD',
+            'baseline_amount' => 500.00,
+            'meter_no' => 'MTR-7COL',
+            'baseline_previous_reading' => 2400,
+        ]);
+    }
+
+    public function test_create_cycle_only_populates_working_reading_units_consumed_and_calculated_avg(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $this->subscribeUser($user);
+
+        $mru = Mru::create([
+            'user_id' => $user->id,
+            'code' => '0244',
+            'name' => 'NISARBHATI',
+            'status' => 'active',
+        ]);
+
+        ConsumerAccount::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '10230088888',
+            'consumer_name' => 'Cycle Seeder User',
+            'meter_no' => 'MTR-SEED',
+            'tariff_category' => 'DS-II',
+            'billing_basis' => 'OK',
+            'baseline_amount' => 300.00,
+            'baseline_previous_reading' => 200,
+            'status' => 'active',
+        ]);
+
+        // Prior Month bill
+        BillRecord::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '10230088888',
+            'billing_month' => 8,
+            'billing_year' => 2026,
+            'previous_reading' => '200',
+            'current_reading' => '260',
+            'units_consumed' => 60,
+            'billing_basis' => 'OK',
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/mrus/{$mru->id}/start-billing", [
+            'billing_month' => 9,
+            'billing_year' => 2026,
+            'action_type' => 'create_only',
+        ]);
+
+        $response->assertStatus(200);
+
+        $createdBill = BillRecord::where('user_id', $user->id)
+            ->where('ca_number', '10230088888')
+            ->where('billing_month', 9)
+            ->where('billing_year', 2026)
+            ->first();
+
+        $this->assertNotNull($createdBill);
+        $this->assertEquals(260, (int) $createdBill->previous_reading);
+        $this->assertEquals(60, (int) $createdBill->calculated_avg_units);
+        $this->assertEquals(60, (int) $createdBill->units_consumed);
+        $this->assertEquals(320, (int) $createdBill->working_reading);
+    }
+
+    public function test_update_working_reading_falls_back_to_baseline_reading_when_previous_is_missing(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $mru = Mru::create([
+            'user_id' => $user->id,
+            'code' => '0244',
+            'name' => 'NISARBHATI',
+            'status' => 'active',
+        ]);
+
+        ConsumerAccount::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '10230077777',
+            'consumer_name' => 'Fallback Reading User',
+            'meter_no' => 'MTR-FB',
+            'tariff_category' => 'DS-II',
+            'billing_basis' => 'OK',
+            'baseline_previous_reading' => 500,
+            'status' => 'active',
+        ]);
+
+        $bill = BillRecord::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '10230077777',
+            'billing_month' => 9,
+            'billing_year' => 2026,
+            'previous_reading' => null,
+            'billing_basis' => 'OK',
+        ]);
+
+        $response = $this->actingAs($user)->postJson('/bills/update-working-reading', [
+            'id' => $bill->id,
+            'working_reading' => '575',
+        ]);
+
+        $response->assertStatus(200);
+        $bill->refresh();
+
+        $this->assertEquals('575', $bill->working_reading);
+        $this->assertEquals(75, (int) $bill->units_consumed);
+    }
+
+    public function test_bill_export_csv_includes_master_tariff_basis_and_working_reading(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $mru = Mru::create([
+            'user_id' => $user->id,
+            'code' => '0244',
+            'name' => 'NISARBHATI',
+            'status' => 'active',
+        ]);
+
+        ConsumerAccount::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '10230066666',
+            'consumer_name' => 'Export Master User',
+            'meter_no' => 'MTR-EXP',
+            'tariff_category' => 'DS-II',
+            'billing_basis' => 'LK',
+            'baseline_amount' => 750.00,
+            'status' => 'active',
+        ]);
+
+        BillRecord::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '10230066666',
+            'billing_month' => 9,
+            'billing_year' => 2026,
+            'working_reading' => '820',
+            'previous_reading' => '780',
+            'units_consumed' => 40,
+            'total_amount' => null, // empty total amount, should fall back to baseline
+            'tariff_category' => null, // empty, should fall back to master
+            'billing_basis' => null, // empty, should fall back to master
+        ]);
+
+        $response = $this->actingAs($user)->get('/bills/export-csv?month=9&year=2026');
+        $response->assertStatus(200);
+
+        $content = $response->streamedContent();
+        $this->assertStringContainsString('Tariff Category', $content);
+        $this->assertStringContainsString('Billing Basis', $content);
+        $this->assertStringContainsString('Working Reading', $content);
+        $this->assertStringContainsString('Export Master User', $content);
+        $this->assertStringContainsString('DS-II', $content);
+        $this->assertStringContainsString('LK', $content);
+        $this->assertStringContainsString('820', $content);
+        $this->assertStringContainsString('750.00', $content);
+    }
+
+    public function test_agent_backup_registry_csv_includes_billing_basis_and_baseline_values(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $mru = Mru::create([
+            'user_id' => $user->id,
+            'code' => '0244',
+            'name' => 'NISARBHATI',
+            'status' => 'active',
+        ]);
+
+        ConsumerAccount::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '10230055555',
+            'consumer_name' => 'Backup Master User',
+            'meter_no' => 'MTR-BAK',
+            'tariff_category' => 'DS-II',
+            'billing_basis' => 'MD',
+            'baseline_amount' => 999.50,
+            'baseline_previous_reading' => 3120,
+            'status' => 'active',
+        ]);
+
+        $tempZip = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'test_backup_' . uniqid() . '.zip';
+        $exportService = app(\App\Services\Backup\AgentWorkspaceExportService::class);
+        $exportService->export($user, $tempZip);
+
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open($tempZip));
+        $csvContent = $zip->getFromName('ledger/02_consumers_registry.csv');
+        $this->assertNotEmpty($csvContent);
+        $zip->close();
+        @unlink($tempZip);
+
+        $this->assertStringContainsString('Billing Basis', $csvContent);
+        $this->assertStringContainsString('Baseline Amount', $csvContent);
+        $this->assertStringContainsString('Baseline Reading', $csvContent);
+        $this->assertStringContainsString('MD', $csvContent);
+        $this->assertStringContainsString('999.50', $csvContent);
+        $this->assertStringContainsString('3120', $csvContent);
+    }
 }

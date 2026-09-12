@@ -386,6 +386,9 @@ class BillController extends Controller
             ->get()
             ->keyBy('ca_number');
 
+        $caNumbers = $bills->pluck('ca_number')->unique();
+        $masterAccounts = ConsumerAccount::whereIn('ca_number', $caNumbers)->get()->keyBy('ca_number');
+
         $tagFilter = $request->get('tag_filter', $request->get('tag', 'all'));
 
         if (!empty($filter) && $filter !== 'all') {
@@ -406,7 +409,7 @@ class BillController extends Controller
 
         $fileName = "nbpdcl_bills_{$year}_{$month}_" . date('Ymd_His') . ".csv";
 
-        return response()->streamDownload(function () use ($bills, $userStatuses) {
+        return response()->streamDownload(function () use ($bills, $userStatuses, $masterAccounts) {
             $output = fopen('php://output', 'w');
             fwrite($output, "\xEF\xBB\xBF"); // UTF-8 BOM for Excel compatibility
 
@@ -414,6 +417,9 @@ class BillController extends Controller
                 'Consumer No',
                 'Consumer Name',
                 'MRU Code',
+                'Tariff Category',
+                'Billing Basis',
+                'Working Reading',
                 'Current Reading',
                 'Previous Reading',
                 'Units Consumed',
@@ -429,6 +435,18 @@ class BillController extends Controller
 
             foreach ($bills as $bill) {
                 $st = $userStatuses[$bill->ca_number] ?? null;
+                $master = $masterAccounts[$bill->ca_number] ?? null;
+
+                $consumerName = $bill->consumer_name ?: ($master?->consumer_name ?: '');
+                $tariff = $bill->tariff_category ?: ($master?->tariff_category ?: 'DS-II');
+                $basis = $bill->billing_basis ?: ($master?->billing_basis ?: 'OK');
+                $workingReading = $bill->working_reading !== null && $bill->working_reading !== '' ? $bill->working_reading : '—';
+                $meterNo = $bill->meter_no ?: ($master?->meter_no ?: '—');
+
+                $amount = $bill->total_amount > 0
+                    ? $bill->total_amount
+                    : ($master && (float)$master->baseline_amount > 0 ? $master->baseline_amount : 'N/A');
+
                 $status = $st ? $st->status : 'pending';
                 $remark = $st ? ($st->remark ?? '') : '';
                 $rawTag = !empty($bill->tag) ? $bill->tag : ($st ? ($st->tag ?? 'OK') : 'OK');
@@ -436,13 +454,16 @@ class BillController extends Controller
 
                 fputcsv($output, [
                     $bill->ca_number,
-                    $bill->consumer_name,
+                    $consumerName,
                     $bill->mru ? $bill->mru->code : 'GENERAL',
+                    $tariff,
+                    $basis,
+                    $workingReading,
                     $bill->current_reading ?? '—',
                     $bill->previous_reading ?? '—',
                     $bill->units_consumed ?? 0,
-                    $bill->total_amount > 0 ? $bill->total_amount : 'N/A',
-                    $bill->meter_no ?? '—',
+                    $amount,
+                    $meterNo,
                     $bill->bill_month_label ?: "{$bill->billing_month}/{$bill->billing_year}",
                     ucfirst($status),
                     $tagLabel,

@@ -35,7 +35,24 @@ class ConsumerAccount extends Model
         'baseline_amount' => 'decimal:2',
         'last_working_month' => 'integer',
         'last_working_year' => 'integer',
+        'baseline_previous_reading' => 'integer',
     ];
+
+    /**
+     * Get initial / baseline reading alias.
+     */
+    public function getInitialReadingAttribute(): ?int
+    {
+        return $this->baseline_previous_reading !== null ? (int) $this->baseline_previous_reading : ($this->last_working_reading !== null ? (int) $this->last_working_reading : null);
+    }
+
+    /**
+     * Set initial / baseline reading alias.
+     */
+    public function setInitialReadingAttribute($value): void
+    {
+        $this->attributes['baseline_previous_reading'] = is_numeric($value) ? (int) $value : null;
+    }
 
     /**
      * Get fallback-safe billing basis (OK, LK, MD, PL, RN).
