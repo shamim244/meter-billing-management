@@ -66,8 +66,7 @@ class BillRecord extends Model
      */
     public function consumerAccount(): BelongsTo
     {
-        return $this->belongsTo(ConsumerAccount::class, 'ca_number', 'ca_number')
-                    ->where('consumer_accounts.user_id', $this->user_id);
+        return $this->belongsTo(ConsumerAccount::class, 'ca_number', 'ca_number');
     }
 
     /**

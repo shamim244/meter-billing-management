@@ -94,6 +94,8 @@ class BillParseService
                         'father_name' => $extracted['father_name'] ?? null,
                         'meter_no' => $extracted['meter_no'],
                         'tariff_category' => $extracted['tariff_category'] ?? null,
+                        'billing_basis' => $extracted['billing_basis'] ?? 'OK',
+                        'baseline_amount' => $extracted['total_amount'] ?? 0.00,
                         'status' => 'active',
                     ]);
                 } else {
@@ -123,6 +125,16 @@ class BillParseService
                     // Update tariff category if found
                     if (!empty($extracted['tariff_category']) && $masterAccount->tariff_category !== $extracted['tariff_category']) {
                         $masterAccount->tariff_category = $extracted['tariff_category'];
+                        $changed = true;
+                    }
+
+                    if (!empty($extracted['billing_basis']) && (empty($masterAccount->billing_basis) || $masterAccount->billing_basis === 'OK')) {
+                        $masterAccount->billing_basis = $extracted['billing_basis'];
+                        $changed = true;
+                    }
+
+                    if (!empty($extracted['total_amount']) && ((float)$masterAccount->baseline_amount == 0.0 || empty($masterAccount->baseline_amount))) {
+                        $masterAccount->baseline_amount = (float) $extracted['total_amount'];
                         $changed = true;
                     }
 
@@ -271,6 +283,8 @@ class BillParseService
                         'father_name' => $extracted['father_name'] ?? null,
                         'meter_no' => $extracted['meter_no'],
                         'tariff_category' => $extracted['tariff_category'] ?? null,
+                        'billing_basis' => $extracted['billing_basis'] ?? 'OK',
+                        'baseline_amount' => $extracted['total_amount'] ?? 0.00,
                         'status' => 'active',
                     ]);
                 } else {
@@ -292,6 +306,14 @@ class BillParseService
                     }
                     if (!empty($extracted['tariff_category']) && $masterAccount->tariff_category !== $extracted['tariff_category']) {
                         $masterAccount->tariff_category = $extracted['tariff_category'];
+                        $changed = true;
+                    }
+                    if (!empty($extracted['billing_basis']) && (empty($masterAccount->billing_basis) || $masterAccount->billing_basis === 'OK')) {
+                        $masterAccount->billing_basis = $extracted['billing_basis'];
+                        $changed = true;
+                    }
+                    if (!empty($extracted['total_amount']) && ((float)$masterAccount->baseline_amount == 0.0 || empty($masterAccount->baseline_amount))) {
+                        $masterAccount->baseline_amount = (float) $extracted['total_amount'];
                         $changed = true;
                     }
                     if ($record->mru_id && $masterAccount->mru_id !== $record->mru_id) {

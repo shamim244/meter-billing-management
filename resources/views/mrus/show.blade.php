@@ -244,9 +244,12 @@
                                 <tr>
                                     <th class="py-3.5 px-6">CA Number</th>
                                     <th class="py-3.5 px-6">Consumer Name</th>
-                                    <th class="py-3.5 px-6 text-center">Meter No</th>
-                                    <th class="py-3.5 px-6 text-center">Mobile</th>
-                                    <th class="py-3.5 px-6 text-center">Status</th>
+                                    <th class="py-3.5 px-4 text-center">Tariff</th>
+                                    <th class="py-3.5 px-4 text-center">Basis</th>
+                                    <th class="py-3.5 px-4 text-center">Baseline Amount</th>
+                                    <th class="py-3.5 px-4 text-center">Meter No</th>
+                                    <th class="py-3.5 px-4 text-center">Mobile</th>
+                                    <th class="py-3.5 px-4 text-center">Status</th>
                                     <th class="py-3.5 px-6 text-center">Actions</th>
                                 </tr>
                             </thead>
@@ -258,23 +261,42 @@
                                                 <a href="{{ route('bills.history', $consumer->ca_number) }}" class="hover:underline" title="View historical ledger">
                                                     {{ $consumer->ca_number }}
                                                 </a>
-                                                @if($consumer->tariff_category)
-                                                    <span class="px-1.5 py-0.2 rounded text-[9px] font-bold font-mono bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50 dark:border-indigo-800/50">
-                                                        {{ $consumer->tariff_category }}
-                                                    </span>
-                                                @endif
                                             </div>
                                         </td>
                                         <td class="py-3.5 px-6 font-semibold text-slate-900 dark:text-white">
                                             {{ $consumer->consumer_name ?: '—' }}
                                         </td>
-                                        <td class="py-3.5 px-6 text-center font-mono text-slate-500 dark:text-slate-400">
+                                        <td class="py-3.5 px-4 text-center">
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50 dark:border-indigo-800/50">
+                                                {{ $consumer->tariff_category ?: 'DS-II' }}
+                                            </span>
+                                        </td>
+                                        <td class="py-3.5 px-4 text-center">
+                                            @php
+                                                $basis = strtoupper(trim((string)($consumer->billing_basis ?: 'OK')));
+                                                $basisColor = match($basis) {
+                                                    'OK' => 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border-emerald-200/50 dark:border-emerald-800/50',
+                                                    'LK' => 'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border-amber-200/50 dark:border-amber-800/50',
+                                                    'MD' => 'bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border-rose-200/50 dark:border-rose-800/50',
+                                                    'PL' => 'bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border-blue-200/50 dark:border-blue-800/50',
+                                                    'RN' => 'bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border-purple-200/50 dark:border-purple-800/50',
+                                                    default => 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+                                                };
+                                            @endphp
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold font-mono border {{ $basisColor }}">
+                                                {{ $basis }}
+                                            </span>
+                                        </td>
+                                        <td class="py-3.5 px-4 text-center font-mono font-bold text-slate-800 dark:text-slate-200">
+                                            ₹{{ number_format((float)($consumer->baseline_amount ?: 0), 2) }}
+                                        </td>
+                                        <td class="py-3.5 px-4 text-center font-mono text-slate-500 dark:text-slate-400">
                                             {{ $consumer->meter_no ?: '—' }}
                                         </td>
-                                        <td class="py-3.5 px-6 text-center font-mono text-slate-500 dark:text-slate-400">
+                                        <td class="py-3.5 px-4 text-center font-mono text-slate-500 dark:text-slate-400">
                                             {{ $consumer->mobile ?: '—' }}
                                         </td>
-                                        <td class="py-3.5 px-6 text-center">
+                                        <td class="py-3.5 px-4 text-center">
                                             <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider {{ $consumer->status === 'active' ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' }}">
                                                 <span class="w-1 h-1 rounded-full {{ $consumer->status === 'active' ? 'bg-emerald-500' : 'bg-slate-400' }}"></span>
                                                 {{ $consumer->status }}
@@ -297,7 +319,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="6" class="py-12 text-center text-slate-400 dark:text-slate-500">
+                                        <td colspan="9" class="py-12 text-center text-slate-400 dark:text-slate-500">
                                             <div class="text-2xl mb-1">👥</div>
                                             No consumers found matching your search.
                                         </td>
@@ -340,6 +362,33 @@
                         <div>
                             <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Consumer Name</label>
                             <input type="text" name="consumer_name" placeholder="Full name" class="w-full text-xs rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3.5 py-2.5 focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Tariff</label>
+                                <input type="text" name="tariff_category" placeholder="e.g. DS-II" value="DS-II" list="tariffOptions" class="w-full text-xs font-mono rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3.5 py-2.5 focus:ring-2 focus:ring-blue-500">
+                                <datalist id="tariffOptions">
+                                    <option value="DS-II">
+                                    <option value="DS-I">
+                                    <option value="NDS-II">
+                                    <option value="LTIS">
+                                    <option value="IAS">
+                                </datalist>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Basis</label>
+                                <select name="billing_basis" class="w-full text-xs font-bold rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-blue-500">
+                                    <option value="OK" selected>OK (Normal)</option>
+                                    <option value="LK">LK (Lock)</option>
+                                    <option value="MD">MD (Defective)</option>
+                                    <option value="PL">PL (Loss)</option>
+                                    <option value="RN">RN (No Reading)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Amount (₹)</label>
+                                <input type="number" step="0.01" min="0" name="baseline_amount" placeholder="0.00" class="w-full text-xs font-mono rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3.5 py-2.5 focus:ring-2 focus:ring-blue-500">
+                            </div>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
@@ -386,6 +435,27 @@
                         <div>
                             <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Consumer Name</label>
                             <input type="text" name="consumer_name" x-model="editingConsumer.consumer_name" placeholder="Full name" class="w-full text-xs rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3.5 py-2.5 focus:ring-2 focus:ring-blue-500">
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Tariff</label>
+                                <input type="text" name="tariff_category" x-model="editingConsumer.tariff_category" placeholder="e.g. DS-II" class="w-full text-xs font-mono rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3.5 py-2.5 focus:ring-2 focus:ring-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Basis</label>
+                                <select name="billing_basis" x-model="editingConsumer.billing_basis" class="w-full text-xs font-bold rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-blue-500">
+                                    <option value="OK">OK (Normal)</option>
+                                    <option value="LK">LK (Lock)</option>
+                                    <option value="MD">MD (Defective)</option>
+                                    <option value="PL">PL (Loss)</option>
+                                    <option value="RN">RN (No Reading)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Amount (₹)</label>
+                                <input type="number" step="0.01" min="0" name="baseline_amount" x-model="editingConsumer.baseline_amount" placeholder="0.00" class="w-full text-xs font-mono rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3.5 py-2.5 focus:ring-2 focus:ring-blue-500">
+                            </div>
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -439,8 +509,9 @@
                     <form method="POST" action="{{ route('mrus.consumers.import', $mru) }}" class="overflow-y-auto p-4 sm:p-6 space-y-4">
                         @csrf
                         <div>
-                            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Paste CA Numbers (one per line):</label>
-                            <textarea name="ca_data" x-model="bulkImportText" rows="7" placeholder="10230046961&#10;102300783538&#10;102300783541" required class="w-full text-xs font-mono rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white p-3 focus:ring-2 focus:ring-blue-500"></textarea>
+                            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Paste CA Numbers / Master Data:</label>
+                            <p class="text-[11px] text-slate-400 dark:text-slate-500 mb-2">Supported: Plain CAs, or CSV/TSV with columns (<code>CA Number, Name, Tariff, Basis, Amount, Meter, Mobile, Address</code>)</p>
+                            <textarea name="ca_data" x-model="bulkImportText" rows="7" placeholder="10230046961, Ramesh Kumar, DS-II, OK, 450.00, 3808220, 9876543210, Village Area&#10;102300783538, Suresh Devi, DS-II, LK, 320.00, 3808221, 9876543211&#10;102300783541" required class="w-full text-xs font-mono rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white p-3 focus:ring-2 focus:ring-blue-500"></textarea>
                         </div>
                         <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                             <span>Detected Lines: <strong class="font-mono text-slate-900 dark:text-white" x-text="detectedLinesCount">0</strong></span>
@@ -721,6 +792,9 @@
                         ca_number: consumer.ca_number,
                         consumer_name: consumer.consumer_name || '',
                         meter_no: consumer.meter_no || '',
+                        tariff_category: consumer.tariff_category || 'DS-II',
+                        billing_basis: consumer.billing_basis || 'OK',
+                        baseline_amount: consumer.baseline_amount !== null && consumer.baseline_amount !== undefined ? consumer.baseline_amount : '0.00',
                         mobile: consumer.mobile || '',
                         address: consumer.address || '',
                         status: consumer.status || 'active'

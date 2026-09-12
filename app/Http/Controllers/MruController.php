@@ -446,6 +446,9 @@ class MruController extends Controller
             'ca_number' => 'required|string|max:50',
             'consumer_name' => 'nullable|string|max:255',
             'meter_no' => 'nullable|string|max:50',
+            'tariff_category' => 'nullable|string|max:50',
+            'billing_basis' => 'nullable|string|max:20',
+            'baseline_amount' => 'nullable|numeric|min:0',
             'mobile' => 'nullable|string|max:20',
             'address' => 'nullable|string|max:500',
         ]);
@@ -459,6 +462,9 @@ class MruController extends Controller
                 'mru_id' => $mru->id,
                 'consumer_name' => $request->consumer_name,
                 'meter_no' => $request->meter_no,
+                'tariff_category' => $request->tariff_category ? strtoupper(trim($request->tariff_category)) : null,
+                'billing_basis' => $request->billing_basis ? strtoupper(trim($request->billing_basis)) : 'OK',
+                'baseline_amount' => $request->filled('baseline_amount') ? (float)$request->baseline_amount : 0.00,
                 'mobile' => $request->mobile,
                 'address' => $request->address,
                 'status' => 'active',
@@ -484,6 +490,8 @@ class MruController extends Controller
         $importedCount = 0;
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($rawLines, $mru, $userId, &$importedCount) {
+            $headerMap = null;
+
             foreach ($rawLines as $line) {
                 $line = trim($line);
                 if (empty($line)) continue;
@@ -492,23 +500,105 @@ class MruController extends Controller
                 $cols = str_contains($line, "\t") ? explode("\t", $line) : str_getcsv($line);
                 $cols = array_map('trim', $cols);
 
-                $ca = $cols[0] ?? '';
-                // Skip header or non-numeric CAs
-                if (!preg_match('/^\d+$/', $ca)) continue;
+                // Detect header row on first processed non-empty line
+                if ($headerMap === null) {
+                    $lowerLine = strtolower(implode(' ', $cols));
+                    if (str_contains($lowerLine, 'ca') && (str_contains($lowerLine, 'name') || str_contains($lowerLine, 'meter') || str_contains($lowerLine, 'tariff') || str_contains($lowerLine, 'basis') || str_contains($lowerLine, 'amount'))) {
+                        $headerMap = [];
+                        foreach ($cols as $idx => $colName) {
+                            $normalized = strtolower(trim($colName));
+                            if (str_contains($normalized, 'ca') || str_contains($normalized, 'consumer number') || str_contains($normalized, 'account')) {
+                                $headerMap['ca'] = $idx;
+                            } elseif (str_contains($normalized, 'tariff')) {
+                                $headerMap['tariff'] = $idx;
+                            } elseif (str_contains($normalized, 'basis')) {
+                                $headerMap['basis'] = $idx;
+                            } elseif (str_contains($normalized, 'amount')) {
+                                $headerMap['amount'] = $idx;
+                            } elseif (str_contains($normalized, 'name')) {
+                                $headerMap['name'] = $idx;
+                            } elseif (str_contains($normalized, 'meter')) {
+                                $headerMap['meter'] = $idx;
+                            } elseif (str_contains($normalized, 'mobile') || str_contains($normalized, 'phone')) {
+                                $headerMap['mobile'] = $idx;
+                            } elseif (str_contains($normalized, 'address')) {
+                                $headerMap['address'] = $idx;
+                            }
+                        }
+                        continue; // skip header row
+                    } else {
+                        $headerMap = false; // no header detected
+                    }
+                }
 
-                $name = !empty($cols[1]) ? $cols[1] : null;
-                $meter = !empty($cols[2]) ? $cols[2] : null;
-                $mobile = !empty($cols[3]) ? $cols[3] : null;
-                $address = !empty($cols[4]) ? $cols[4] : null;
+                $ca = '';
+                $name = null;
+                $tariff = null;
+                $basis = null;
+                $amount = null;
+                $meter = null;
+                $mobile = null;
+                $address = null;
+
+                if (is_array($headerMap)) {
+                    $ca = isset($headerMap['ca']) ? ($cols[$headerMap['ca']] ?? '') : ($cols[0] ?? '');
+                    if (!preg_match('/^\d+$/', $ca)) continue;
+
+                    $name = isset($headerMap['name']) ? ($cols[$headerMap['name']] ?? null) : null;
+                    $tariff = isset($headerMap['tariff']) ? ($cols[$headerMap['tariff']] ?? null) : null;
+                    $basis = isset($headerMap['basis']) ? ($cols[$headerMap['basis']] ?? null) : null;
+                    $amount = isset($headerMap['amount']) ? ($cols[$headerMap['amount']] ?? null) : null;
+                    $meter = isset($headerMap['meter']) ? ($cols[$headerMap['meter']] ?? null) : null;
+                    $mobile = isset($headerMap['mobile']) ? ($cols[$headerMap['mobile']] ?? null) : null;
+                    $address = isset($headerMap['address']) ? ($cols[$headerMap['address']] ?? null) : null;
+                } else {
+                    $ca = $cols[0] ?? '';
+                    if (!preg_match('/^\d+$/', $ca)) continue;
+
+                    $colCount = count($cols);
+                    if ($colCount >= 8) {
+                        // Full standard format: CA, Name, Tariff, Basis, Amount, Meter, Mobile, Address
+                        $name = !empty($cols[1]) ? $cols[1] : null;
+                        $tariff = !empty($cols[2]) ? $cols[2] : null;
+                        $basis = !empty($cols[3]) ? $cols[3] : null;
+                        $amount = !empty($cols[4]) ? $cols[4] : null;
+                        $meter = !empty($cols[5]) ? $cols[5] : null;
+                        $mobile = !empty($cols[6]) ? $cols[6] : null;
+                        $address = !empty($cols[7]) ? $cols[7] : null;
+                    } elseif ($colCount === 5) {
+                        // Check if 5 columns is [CA, Name, Tariff, Basis, Amount] or traditional [CA, Name, Meter, Mobile, Address]
+                        $c3 = strtoupper($cols[3] ?? '');
+                        if (in_array($c3, ['OK', 'LK', 'MD', 'PL', 'RN']) || preg_match('/^(DS|NDS|LTIS|IAS)/i', $cols[2] ?? '')) {
+                            $name = !empty($cols[1]) ? $cols[1] : null;
+                            $tariff = !empty($cols[2]) ? $cols[2] : null;
+                            $basis = !empty($cols[3]) ? $cols[3] : null;
+                            $amount = !empty($cols[4]) ? $cols[4] : null;
+                        } else {
+                            $name = !empty($cols[1]) ? $cols[1] : null;
+                            $meter = !empty($cols[2]) ? $cols[2] : null;
+                            $mobile = !empty($cols[3]) ? $cols[3] : null;
+                            $address = !empty($cols[4]) ? $cols[4] : null;
+                        }
+                    } else {
+                        // Fewer columns fallback
+                        $name = !empty($cols[1]) ? $cols[1] : null;
+                        $meter = !empty($cols[2]) ? $cols[2] : null;
+                        $mobile = !empty($cols[3]) ? $cols[3] : null;
+                        $address = !empty($cols[4]) ? $cols[4] : null;
+                    }
+                }
 
                 $payload = [
                     'mru_id' => $mru->id,
                     'status' => 'active',
                 ];
-                if ($name !== null) $payload['consumer_name'] = $name;
-                if ($meter !== null) $payload['meter_no'] = $meter;
-                if ($mobile !== null) $payload['mobile'] = $mobile;
-                if ($address !== null) $payload['address'] = $address;
+                if ($name !== null && $name !== '') $payload['consumer_name'] = $name;
+                if ($meter !== null && $meter !== '') $payload['meter_no'] = $meter;
+                if ($tariff !== null && $tariff !== '') $payload['tariff_category'] = strtoupper($tariff);
+                if ($basis !== null && $basis !== '') $payload['billing_basis'] = strtoupper($basis);
+                if ($amount !== null && $amount !== '' && is_numeric($amount)) $payload['baseline_amount'] = (float)$amount;
+                if ($mobile !== null && $mobile !== '') $payload['mobile'] = $mobile;
+                if ($address !== null && $address !== '') $payload['address'] = $address;
 
                 ConsumerAccount::updateOrCreate(
                     ['user_id' => $userId, 'ca_number' => $ca],
@@ -531,12 +621,29 @@ class MruController extends Controller
         $request->validate([
             'consumer_name' => 'nullable|string|max:255',
             'meter_no' => 'nullable|string|max:50',
+            'tariff_category' => 'nullable|string|max:50',
+            'billing_basis' => 'nullable|string|max:20',
+            'baseline_amount' => 'nullable|numeric|min:0',
             'mobile' => 'nullable|string|max:20',
             'address' => 'nullable|string|max:500',
-            'status' => 'required|string|in:active,inactive',
+            'status' => 'nullable|string|in:active,inactive',
         ]);
 
-        $consumer->update($request->only(['consumer_name', 'meter_no', 'mobile', 'address', 'status']));
+        $updateData = $request->only(['consumer_name', 'meter_no', 'mobile', 'address']);
+        if ($request->filled('status')) {
+            $updateData['status'] = $request->status;
+        }
+        if ($request->has('tariff_category')) {
+            $updateData['tariff_category'] = $request->tariff_category ? strtoupper(trim($request->tariff_category)) : null;
+        }
+        if ($request->has('billing_basis')) {
+            $updateData['billing_basis'] = $request->billing_basis ? strtoupper(trim($request->billing_basis)) : 'OK';
+        }
+        if ($request->has('baseline_amount')) {
+            $updateData['baseline_amount'] = $request->filled('baseline_amount') ? (float)$request->baseline_amount : 0.00;
+        }
+
+        $consumer->update($updateData);
 
         return back()->with('success', "Consumer '{$consumer->ca_number}' updated.");
     }
@@ -568,12 +675,15 @@ class MruController extends Controller
             $output = fopen('php://output', 'w');
             fwrite($output, "\xEF\xBB\xBF");
 
-            fputcsv($output, ['CA Number', 'Consumer Name', 'MRU Code', 'MRU Name', 'Meter No', 'Mobile', 'Address', 'Status']);
+            fputcsv($output, ['CA Number', 'Consumer Name', 'Tariff Category', 'Billing Basis', 'Baseline Amount', 'MRU Code', 'MRU Name', 'Meter No', 'Mobile', 'Address', 'Status']);
 
             foreach ($consumers as $c) {
                 fputcsv($output, [
                     $c->ca_number,
                     $c->consumer_name,
+                    $c->tariff_category ?: 'DS-II',
+                    $c->billing_basis ?: 'OK',
+                    number_format((float)($c->baseline_amount ?? 0), 2, '.', ''),
                     $mru->code,
                     $mru->name,
                     $c->meter_no,
@@ -677,8 +787,12 @@ class MruController extends Controller
                         'bill_month_label' => $monthLabel,
                         'consumer_name' => $consumer->consumer_name,
                         'meter_no' => $consumer->meter_no,
+                        'tariff_category' => $consumer->tariff_category,
+                        'billing_basis' => $consumer->billing_basis ?: 'OK',
+                        'total_amount' => $consumer->baseline_amount !== null ? (float)$consumer->baseline_amount : 0.00,
                         'previous_reading' => $initialPrevReading,
                         'reading_source' => 'auto',
+                        'download_status' => 'pending',
                     ]
                 );
             }

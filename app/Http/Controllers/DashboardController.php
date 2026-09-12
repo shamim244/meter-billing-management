@@ -129,12 +129,43 @@ class DashboardController extends Controller
         $statusCounts['pending'] = max(0, $totalPeriodBills - ($statusCounts['submitted'] + $statusCounts['critical'] + $statusCounts['doubt']));
 
         $statusCounts['basis_ok'] = (clone $periodBillsQuery)->where(function($q) {
-            $q->where('billing_basis', 'OK')->orWhereNull('billing_basis');
+            $q->where('billing_basis', 'OK')
+              ->orWhere(function($sub) {
+                  $sub->whereNull('billing_basis')
+                      ->where(function($sub2) {
+                          $sub2->whereDoesntHave('consumerAccount')
+                               ->orWhereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'OK')->orWhereNull('billing_basis'));
+                      });
+              });
         })->count();
-        $statusCounts['basis_lk'] = (clone $periodBillsQuery)->where('billing_basis', 'LK')->count();
-        $statusCounts['basis_md'] = (clone $periodBillsQuery)->where('billing_basis', 'MD')->count();
-        $statusCounts['basis_pl'] = (clone $periodBillsQuery)->where('billing_basis', 'PL')->count();
-        $statusCounts['basis_rn'] = (clone $periodBillsQuery)->where('billing_basis', 'RN')->count();
+        $statusCounts['basis_lk'] = (clone $periodBillsQuery)->where(function($q) {
+            $q->where('billing_basis', 'LK')
+              ->orWhere(function($sub) {
+                  $sub->whereNull('billing_basis')
+                      ->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'LK'));
+              });
+        })->count();
+        $statusCounts['basis_md'] = (clone $periodBillsQuery)->where(function($q) {
+            $q->where('billing_basis', 'MD')
+              ->orWhere(function($sub) {
+                  $sub->whereNull('billing_basis')
+                      ->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'MD'));
+              });
+        })->count();
+        $statusCounts['basis_pl'] = (clone $periodBillsQuery)->where(function($q) {
+            $q->where('billing_basis', 'PL')
+              ->orWhere(function($sub) {
+                  $sub->whereNull('billing_basis')
+                      ->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'PL'));
+              });
+        })->count();
+        $statusCounts['basis_rn'] = (clone $periodBillsQuery)->where(function($q) {
+            $q->where('billing_basis', 'RN')
+              ->orWhere(function($sub) {
+                  $sub->whereNull('billing_basis')
+                      ->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'RN'));
+              });
+        })->count();
 
         $activeTags = $this->billTagService->getActiveTags();
         $defaultTag = $this->billTagService->getDefaultTag();
@@ -195,7 +226,14 @@ class DashboardController extends Controller
             $baseQuery->where(function ($q) use ($escapedSearch) {
                 $q->where('ca_number', 'like', "%{$escapedSearch}%")
                   ->orWhere('consumer_name', 'like', "%{$escapedSearch}%")
-                  ->orWhere('meter_no', 'like', "%{$escapedSearch}%");
+                  ->orWhere('meter_no', 'like', "%{$escapedSearch}%")
+                  ->orWhere('tariff_category', 'like', "%{$escapedSearch}%")
+                  ->orWhereHas('consumerAccount', function ($caQ) use ($escapedSearch) {
+                      $caQ->where('consumer_name', 'like', "%{$escapedSearch}%")
+                          ->orWhere('meter_no', 'like', "%{$escapedSearch}%")
+                          ->orWhere('tariff_category', 'like', "%{$escapedSearch}%")
+                          ->orWhere('billing_basis', 'like', "%{$escapedSearch}%");
+                  });
             });
         }
 
@@ -223,8 +261,13 @@ class DashboardController extends Controller
             ->get()
             ->keyBy('ca_number');
 
+        $consumers = ConsumerAccount::where('user_id', $userId)
+            ->whereIn('ca_number', $caNumbers)
+            ->get()
+            ->keyBy('ca_number');
+
         // Attach review_status, remark, and 4-Box Reading Metrics
-        $mapped = $allRecords->map(function ($bill) use ($userStatusModels, $historicalBills, $basisHistories, $month, $year) {
+        $mapped = $allRecords->map(function ($bill) use ($userStatusModels, $historicalBills, $basisHistories, $consumers, $month, $year) {
             $st = $userStatusModels[$bill->ca_number] ?? null;
             $bill->review_status = !empty($bill->review_status) && $bill->review_status !== 'pending' ? $bill->review_status : ($st ? $st->status : ($bill->review_status ?: 'pending'));
             $bill->remark = !empty($bill->remark) ? $bill->remark : ($st ? ($st->remark ?? '') : '');
@@ -237,22 +280,33 @@ class DashboardController extends Controller
             $bill->is_consecutive_alert = (bool) ($bbh?->is_consecutive_alert ?? false);
             $bill->consecutive_count = (int) ($bbh?->consecutive_count ?? 0);
 
-            // Master-First Identity Resolution
-            $masterName = $bill->consumerAccount?->consumer_name;
+            // Master-First Identity & Profile Resolution
+            $consumerAcc = $bill->consumerAccount ?? ($consumers[$bill->ca_number] ?? null);
+            $masterName = $consumerAcc?->consumer_name;
             if (!empty($masterName) && !str_starts_with($masterName, 'Consumer ')) {
                 $bill->consumer_name = $masterName;
             } elseif (empty($bill->consumer_name)) {
                 $bill->consumer_name = "Consumer {$bill->ca_number}";
             }
 
-            $masterMeter = $bill->consumerAccount?->meter_no;
+            $masterMeter = $consumerAcc?->meter_no;
             if (!empty($masterMeter)) {
                 $bill->meter_no = $masterMeter;
             }
 
-            $masterTariff = $bill->consumerAccount?->tariff_category;
-            $bill->tariff_category = !empty($masterTariff) ? $masterTariff : ($bill->tariff_category ?: '');
+            $masterTariff = $consumerAcc?->tariff_category;
+            $bill->tariff_category = !empty($masterTariff) ? $masterTariff : ($bill->tariff_category ?: 'DS-II');
+
+            $masterBasis = $consumerAcc?->billing_basis;
+            if (empty($bill->billing_basis) && !empty($masterBasis)) {
+                $bill->billing_basis = $masterBasis;
+            }
             $bill->billing_basis = $bill->billing_basis ?: 'OK';
+
+            if ((empty($bill->total_amount) || (float)$bill->total_amount == 0.0) && $consumerAcc && (float)$consumerAcc->baseline_amount > 0) {
+                $bill->total_amount = (float) $consumerAcc->baseline_amount;
+                $bill->is_baseline_amount = true;
+            }
 
             // 1. Box 2: Previous Reading from DB
             $history = $historicalBills->get($bill->ca_number, collect());
@@ -281,7 +335,6 @@ class DashboardController extends Controller
                 }
             } else {
                 // First Cycle in DB (no prior month in local database yet)
-                $consumerAcc = $bill->consumerAccount;
                 if (!empty($bill->previous_reading) && is_numeric($bill->previous_reading)) {
                     $dbPrevReading = (string) $bill->previous_reading;
                     $priorMonthNum = $month == 1 ? 12 : $month - 1;
@@ -303,20 +356,62 @@ class DashboardController extends Controller
             $bill->db_prev_reading = $dbPrevReading;
             $bill->db_prev_label = $dbPrevMonthLabel;
 
-            // 2. Box 3: Smart Average Usage Calculation (Outlier-Proof, OK vs LK vs MD)
+            // 2. Box 3: Smart Average Usage Calculation (Outlier-Proof, DB-driven delta & OK vs LK vs MD)
             $avgUnits = 50;
             $avgLabel = '50 kWh (Initial)';
             $avgRange = '42–58 kWh';
 
+            // Collect historical consumption units from clean DB history deltas
+            $historyList = $history->values();
+            $okUnits = collect();
+            $lkUnits = collect();
+
+            for ($i = 0; $i < $historyList->count(); $i++) {
+                $h = $historyList[$i];
+                $hBasis = strtoupper(trim((string)($h->billing_basis ?: 'OK')));
+
+                $units = 0;
+                if ($h->units_consumed && $h->units_consumed > 0) {
+                    $units = (int) $h->units_consumed;
+                } else {
+                    $rCurr = is_numeric($h->working_reading) ? (int)$h->working_reading : (is_numeric($h->current_reading) ? (int)$h->current_reading : null);
+                    $rPrev = is_numeric($h->previous_reading) ? (int)$h->previous_reading : null;
+                    if ($rCurr !== null && $rPrev !== null && $rCurr >= $rPrev) {
+                        $units = $rCurr - $rPrev;
+                    } elseif ($rCurr !== null && isset($historyList[$i + 1])) {
+                        $nextH = $historyList[$i + 1];
+                        $rNext = is_numeric($nextH->working_reading) ? (int)$nextH->working_reading : (is_numeric($nextH->current_reading) ? (int)$nextH->current_reading : null);
+                        if ($rNext !== null && $rCurr >= $rNext) {
+                            $units = $rCurr - $rNext;
+                        }
+                    }
+                }
+
+                if ($units > 0) {
+                    if ($hBasis === 'OK') {
+                        $okUnits->push($units);
+                    } elseif ($hBasis === 'LK') {
+                        $lkUnits->push($units);
+                    }
+                }
+            }
+
+            $currentBillUnits = 0;
+            if ($bill->units_consumed > 0) {
+                $currentBillUnits = (int) $bill->units_consumed;
+            } else {
+                $w = is_numeric($bill->working_reading) ? (int)$bill->working_reading : (is_numeric($bill->current_reading) ? (int)$bill->current_reading : 0);
+                $p = is_numeric($dbPrevReading) ? (int)$dbPrevReading : (is_numeric($bill->previous_reading) ? (int)$bill->previous_reading : 0);
+                if ($w > 0 && $p > 0 && $w >= $p) {
+                    $currentBillUnits = $w - $p;
+                }
+            }
+
             if ($bill->billing_basis === 'MD') {
-                $avgUnits = $bill->units_consumed ?: 76;
+                $avgUnits = $currentBillUnits ?: ($bill->units_consumed ?: 76);
                 $avgLabel = "{$avgUnits} kWh (MD Assessed)";
                 $avgRange = 'Flat Assessed';
             } else {
-                // Collect units from clean historical months
-                $okUnits = $history->filter(fn($h) => ($h->billing_basis ?? 'OK') === 'OK' && $h->units_consumed > 0)->pluck('units_consumed');
-                $lkUnits = $history->filter(fn($h) => ($h->billing_basis ?? '') === 'LK' && $h->units_consumed > 0)->pluck('units_consumed');
-
                 if ($okUnits->isNotEmpty()) {
                     $sortedOk = $okUnits->sort()->values();
                     $avgUnits = (int) round($sortedOk->median());
@@ -328,8 +423,8 @@ class DashboardController extends Controller
                     $avgUnits = (int) round($lkUnits->median());
                     $avgLabel = "~{$avgUnits} kWh (LK Approx)";
                     $avgRange = 'Provisional';
-                } elseif ($bill->units_consumed > 0) {
-                    $avgUnits = (int) $bill->units_consumed;
+                } elseif ($currentBillUnits > 0) {
+                    $avgUnits = (int) $currentBillUnits;
                     $avgLabel = "{$avgUnits} kWh (This Bill)";
                     $minR = max(1, (int) round($avgUnits * 0.85));
                     $maxR = (int) round($avgUnits * 1.15);
@@ -646,6 +741,12 @@ class DashboardController extends Controller
         $bill = \Illuminate\Support\Facades\DB::transaction(function () use ($userId, $bill, $readingVal, $readingSource) {
             $bill->working_reading = $readingVal;
             $bill->reading_source = $readingSource;
+            if (is_numeric($readingVal)) {
+                $prev = is_numeric($bill->previous_reading) ? (int)$bill->previous_reading : 0;
+                if ($prev > 0 && (int)$readingVal >= $prev) {
+                    $bill->units_consumed = (int)$readingVal - $prev;
+                }
+            }
             $bill->save();
 
             // 1. Update Master Reading Ledger on ConsumerAccount
@@ -814,8 +915,37 @@ class DashboardController extends Controller
                     $dbPrevReading = is_numeric($bill->previous_reading) ? (int)$bill->previous_reading : 0;
                 }
 
-                // Calculate clean average for this CA
-                $okUnits = $history->filter(fn($h) => ($h->billing_basis ?? 'OK') === 'OK' && $h->units_consumed > 0)->pluck('units_consumed');
+                // Calculate clean average for this CA from DB history deltas
+                $priorHistory = $history->filter(function ($h) use ($month, $year) {
+                    return ($h->billing_year < $year) || ($h->billing_year == $year && $h->billing_month < $month);
+                })->values();
+
+                $okUnits = collect();
+                for ($i = 0; $i < $priorHistory->count(); $i++) {
+                    $h = $priorHistory[$i];
+                    if (($h->billing_basis ?? 'OK') !== 'OK') continue;
+
+                    $units = 0;
+                    if ($h->units_consumed && $h->units_consumed > 0) {
+                        $units = (int) $h->units_consumed;
+                    } else {
+                        $rCurr = is_numeric($h->working_reading) ? (int)$h->working_reading : (is_numeric($h->current_reading) ? (int)$h->current_reading : null);
+                        $rPrev = is_numeric($h->previous_reading) ? (int)$h->previous_reading : null;
+                        if ($rCurr !== null && $rPrev !== null && $rCurr >= $rPrev) {
+                            $units = $rCurr - $rPrev;
+                        } elseif ($rCurr !== null && isset($priorHistory[$i + 1])) {
+                            $nextH = $priorHistory[$i + 1];
+                            $rNext = is_numeric($nextH->working_reading) ? (int)$nextH->working_reading : (is_numeric($nextH->current_reading) ? (int)$nextH->current_reading : null);
+                            if ($rNext !== null && $rCurr >= $rNext) {
+                                $units = $rCurr - $rNext;
+                            }
+                        }
+                    }
+                    if ($units > 0) {
+                        $okUnits->push($units);
+                    }
+                }
+
                 $avgUnits = $okUnits->isNotEmpty() ? (int) round($okUnits->median()) : ($bill->units_consumed ?: 50);
 
                 $projected = $dbPrevReading + $avgUnits;
@@ -830,6 +960,8 @@ class DashboardController extends Controller
 
                 $bill->working_reading = (string) $projected;
                 $bill->reading_source = 'auto';
+                $bill->units_consumed = $avgUnits;
+                $bill->calculated_avg_units = $avgUnits;
                 $bill->save();
 
                 // Sync master ledger

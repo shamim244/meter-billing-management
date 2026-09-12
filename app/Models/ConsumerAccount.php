@@ -20,6 +20,8 @@ class ConsumerAccount extends Model
         'father_name',
         'meter_no',
         'tariff_category',
+        'billing_basis',
+        'baseline_amount',
         'mobile',
         'address',
         'status',
@@ -28,6 +30,44 @@ class ConsumerAccount extends Model
         'last_working_year',
         'baseline_previous_reading',
     ];
+
+    protected $casts = [
+        'baseline_amount' => 'decimal:2',
+        'last_working_month' => 'integer',
+        'last_working_year' => 'integer',
+    ];
+
+    /**
+     * Get fallback-safe billing basis (OK, LK, MD, PL, RN).
+     */
+    public function getBasisAttribute(): string
+    {
+        return $this->billing_basis ?: 'OK';
+    }
+
+    /**
+     * Set billing basis ensuring uppercase standard format.
+     */
+    public function setBasisAttribute(?string $value): void
+    {
+        $this->attributes['billing_basis'] = $value ? strtoupper(trim($value)) : 'OK';
+    }
+
+    /**
+     * Get baseline amount alias.
+     */
+    public function getAmountAttribute(): ?float
+    {
+        return $this->baseline_amount !== null ? (float) $this->baseline_amount : null;
+    }
+
+    /**
+     * Set baseline amount alias.
+     */
+    public function setAmountAttribute($value): void
+    {
+        $this->attributes['baseline_amount'] = is_numeric($value) ? (float)$value : 0.00;
+    }
 
     /**
      * Get the parent MRU this consumer belongs to.
@@ -72,7 +112,9 @@ class ConsumerAccount extends Model
         return $query->where(function ($q) use ($escaped) {
             $q->where('ca_number', 'like', "%{$escaped}%")
               ->orWhere('consumer_name', 'like', "%{$escaped}%")
-              ->orWhere('meter_no', 'like', "%{$escaped}%");
+              ->orWhere('meter_no', 'like', "%{$escaped}%")
+              ->orWhere('tariff_category', 'like', "%{$escaped}%")
+              ->orWhere('billing_basis', 'like', "%{$escaped}%");
         });
     }
 }
