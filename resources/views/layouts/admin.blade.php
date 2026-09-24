@@ -93,6 +93,11 @@
                         <span class="text-base">⚡</span>
                         <span>Billing Engine Settings</span>
                     </a>
+
+                    <a href="{{ route('admin.compression.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.compression.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">🗜️</span>
+                        <span>Adaptive Compression</span>
+                    </a>
                 </div>
 
                 <!-- Section 2: Finance & Payments -->
