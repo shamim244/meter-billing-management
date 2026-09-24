@@ -58,7 +58,7 @@ class WalletController extends Controller
 
         $headers = [
             'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="wallet_ledger_' . date('Y-m-d_His') . '.csv"',
+            'Content-Disposition' => 'attachment; filename="wallet_ledger_'.date('Y-m-d_His').'.csv"',
             'Pragma' => 'no-cache',
             'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
             'Expires' => '0',

@@ -2,12 +2,14 @@
 
 namespace Tests\Feature;
 
-use App\Enums\PaymentMode;
 use App\Enums\PaymentPurpose;
+use App\Enums\PaymentStatus;
+use App\Events\PaymentSuccessEvent;
 use App\Models\AgentSubscription;
+use App\Models\Payment;
 use App\Models\Plan;
-use App\Models\PlanDuration;
 use App\Models\User;
+use App\Services\Payment\PaymentVerificationService;
 use App\Services\Plan\PlanService;
 use App\Services\Wallet\WalletService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -19,6 +21,7 @@ class PlanVisibilityAndPaymentSeparationTest extends TestCase
     use RefreshDatabase;
 
     protected PlanService $planService;
+
     protected WalletService $walletService;
 
     protected function setUp(): void
@@ -213,18 +216,18 @@ class PlanVisibilityAndPaymentSeparationTest extends TestCase
         $response->assertJson(['success' => true]);
         $paymentId = $response->json('payment_id');
 
-        $payment = \App\Models\Payment::findOrFail($paymentId);
+        $payment = Payment::findOrFail($paymentId);
         $this->assertEquals(PaymentPurpose::DIRECT_SUBSCRIPTION, $payment->purpose);
         $this->assertEquals($plan->id, $payment->meta['plan_id']);
         $this->assertEquals($duration->id, $payment->meta['duration_id']);
 
         // 2. Simulate gateway success event
         $payment->update([
-            'status' => \App\Enums\PaymentStatus::SUCCESS,
+            'status' => PaymentStatus::SUCCESS,
             'gateway_payment_id' => 'pay_mock_123',
             'verified_at' => now(),
         ]);
-        event(new \App\Events\PaymentSuccessEvent($payment, 'pay_mock_123'));
+        event(new PaymentSuccessEvent($payment, 'pay_mock_123'));
 
         // 3. Assert subscription active in database
         $this->assertDatabaseHas('agent_subscriptions', [
@@ -271,12 +274,12 @@ class PlanVisibilityAndPaymentSeparationTest extends TestCase
 
         $response->assertRedirect(route('payments.index'));
 
-        $payment = \App\Models\Payment::where('utr_number', '423987654321')->firstOrFail();
-        $this->assertEquals(\App\Enums\PaymentStatus::PENDING_VERIFICATION, $payment->status);
+        $payment = Payment::where('utr_number', '423987654321')->firstOrFail();
+        $this->assertEquals(PaymentStatus::PENDING_VERIFICATION, $payment->status);
         $this->assertEquals($plan->id, $payment->meta['plan_id']);
 
         // 2. Admin approves payment
-        $verificationService = app(\App\Services\Payment\PaymentVerificationService::class);
+        $verificationService = app(PaymentVerificationService::class);
         $verificationService->approve($payment, $admin, 'Verified in bank account');
 
         // 3. Assert subscription active
@@ -324,11 +327,11 @@ class PlanVisibilityAndPaymentSeparationTest extends TestCase
 
         $response->assertRedirect(route('payments.index'));
 
-        $payment = \App\Models\Payment::where('bank_reference', 'NEFT-SBIN-998877')->firstOrFail();
-        $this->assertEquals(\App\Enums\PaymentStatus::PENDING_VERIFICATION, $payment->status);
+        $payment = Payment::where('bank_reference', 'NEFT-SBIN-998877')->firstOrFail();
+        $this->assertEquals(PaymentStatus::PENDING_VERIFICATION, $payment->status);
 
         // 2. Admin approves payment
-        $verificationService = app(\App\Services\Payment\PaymentVerificationService::class);
+        $verificationService = app(PaymentVerificationService::class);
         $verificationService->approve($payment, $admin, 'Bank credit confirmed');
 
         // 3. Assert subscription active

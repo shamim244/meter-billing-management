@@ -16,7 +16,7 @@ class BackupListCommand extends Command
     {
         $stats = $backupService->getSystemStorageStats();
 
-        $this->info("💾 NBPDCL SaaS Backup System Status");
+        $this->info('💾 NBPDCL SaaS Backup System Status');
         $this->table(
             ['Metric', 'Value'],
             [
@@ -32,12 +32,13 @@ class BackupListCommand extends Command
         $backups = SystemBackup::latest()->limit(25)->get();
 
         if ($backups->isEmpty()) {
-            $this->warn("No backups found in database.");
+            $this->warn('No backups found in database.');
+
             return self::SUCCESS;
         }
 
         $this->newLine();
-        $this->info("Latest 25 Backups:");
+        $this->info('Latest 25 Backups:');
 
         $rows = $backups->map(function ($b) {
             return [
@@ -47,7 +48,7 @@ class BackupListCommand extends Command
                 $b->filename,
                 $b->human_size,
                 strtoupper($b->status),
-                $b->duration_seconds . 's',
+                $b->duration_seconds.'s',
                 $b->created_at->toDateTimeString(),
             ];
         });

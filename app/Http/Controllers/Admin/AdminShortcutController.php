@@ -23,8 +23,8 @@ class AdminShortcutController extends Controller
             'submit_ok' => 'Enter',
             'mark_doubt' => '2',
             'mark_critical' => '3',
-            'next_card' => 'ArrowDown',
-            'prev_card' => 'ArrowUp',
+            'next_card' => 'ArrowRight',
+            'prev_card' => 'ArrowLeft',
             'open_remark' => 'm',
             'exit_box' => 'Escape',
         ]);
@@ -79,8 +79,8 @@ class AdminShortcutController extends Controller
             'submit_ok' => 'Enter',
             'mark_doubt' => '2',
             'mark_critical' => '3',
-            'next_card' => 'ArrowDown',
-            'prev_card' => 'ArrowUp',
+            'next_card' => 'ArrowRight',
+            'prev_card' => 'ArrowLeft',
             'open_remark' => 'm',
             'exit_box' => 'Escape',
         ]);

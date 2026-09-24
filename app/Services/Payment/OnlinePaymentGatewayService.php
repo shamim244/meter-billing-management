@@ -28,7 +28,7 @@ class OnlinePaymentGatewayService
      */
     public function createOrder(User $user, float $amount, PaymentPurpose $purpose, ?string $mandateId = null, array $meta = []): array
     {
-        if (!$this->settings->isModeEnabled(PaymentMode::PG)) {
+        if (! $this->settings->isModeEnabled(PaymentMode::PG)) {
             throw new \InvalidArgumentException('Online Payment Gateway is currently disabled by administrator.');
         }
 
@@ -55,7 +55,7 @@ class OnlinePaymentGatewayService
         $keySecret = $this->settings->getRazorpayKeySecret();
         $amountPaise = (int) round($amount * 100);
 
-        $gatewayOrderId = 'order_' . Str::random(14);
+        $gatewayOrderId = 'order_'.Str::random(14);
 
         $payment = Payment::create([
             'user_id' => $user->id,
@@ -69,10 +69,10 @@ class OnlinePaymentGatewayService
         ]);
 
         try {
-            if (class_exists(RazorpayApi::class) && !empty($keyId) && !empty($keySecret) && $keyId !== 'rzp_test_nbpdcl_saas') {
+            if (class_exists(RazorpayApi::class) && ! empty($keyId) && ! empty($keySecret) && $keyId !== 'rzp_test_nbpdcl_saas') {
                 $api = new RazorpayApi($keyId, $keySecret);
                 $razorpayOrder = $api->order->create([
-                    'receipt' => 'rcpt_' . $payment->id,
+                    'receipt' => 'rcpt_'.$payment->id,
                     'amount' => $amountPaise,
                     'currency' => 'INR',
                     'notes' => [
@@ -88,8 +88,8 @@ class OnlinePaymentGatewayService
                 }
             }
         } catch (\Throwable $e) {
-            if (app()->isProduction() && config('services.razorpay.key_id') && !str_starts_with(config('services.razorpay.key_id'), 'rzp_test_')) {
-                throw new \RuntimeException("Razorpay order creation failed in production: " . $e->getMessage(), 0, $e);
+            if (app()->isProduction() && config('services.razorpay.key_id') && ! str_starts_with(config('services.razorpay.key_id'), 'rzp_test_')) {
+                throw new \RuntimeException('Razorpay order creation failed in production: '.$e->getMessage(), 0, $e);
             }
             Log::warning('Razorpay API create order error (falling back to mock ID for test/sandbox)', [
                 'message' => $e->getMessage(),
@@ -131,7 +131,7 @@ class OnlinePaymentGatewayService
      */
     protected function createCashfreeOrder(User $user, float $amount, PaymentPurpose $purpose, array $meta = []): array
     {
-        $gatewayOrderId = 'cf_ord_' . Str::lower(Str::random(16));
+        $gatewayOrderId = 'cf_ord_'.Str::lower(Str::random(16));
 
         $payment = Payment::create([
             'user_id' => $user->id,
@@ -150,7 +150,7 @@ class OnlinePaymentGatewayService
         $apiVersion = $this->settings->getCashfreeApiVersion();
         $environment = $this->settings->getCashfreeEnvironment();
 
-        $returnUrl = url('/payments/verify') . '?order_id={order_id}';
+        $returnUrl = url('/payments/verify').'?order_id={order_id}';
         $notifyUrl = url('/webhooks/payments/cashfree');
 
         $phone = preg_replace('/[^0-9]/', '', (string) ($user->phone ?? '9999999999'));
@@ -163,7 +163,7 @@ class OnlinePaymentGatewayService
             'order_amount' => round($amount, 2),
             'order_currency' => 'INR',
             'customer_details' => [
-                'customer_id' => 'user_' . $user->id,
+                'customer_id' => 'user_'.$user->id,
                 'customer_name' => $user->name,
                 'customer_email' => $user->email,
                 'customer_phone' => substr($phone, -10),
@@ -172,7 +172,7 @@ class OnlinePaymentGatewayService
                 'return_url' => $returnUrl,
                 'notify_url' => $notifyUrl,
             ],
-            'order_note' => $purpose->label() . ' - User #' . $user->id,
+            'order_note' => $purpose->label().' - User #'.$user->id,
             'order_tags' => [
                 'payment_id' => (string) $payment->id,
                 'user_id' => (string) $user->id,
@@ -207,7 +207,7 @@ class OnlinePaymentGatewayService
             }
         } catch (\Throwable $e) {
             if (app()->isProduction() || $environment === 'production') {
-                throw new \RuntimeException("Cashfree API connection error in production: " . $e->getMessage(), 0, $e);
+                throw new \RuntimeException('Cashfree API connection error in production: '.$e->getMessage(), 0, $e);
             }
             Log::warning('Cashfree API connection error (falling back to mock session for test/sandbox)', [
                 'message' => $e->getMessage(),
@@ -215,7 +215,7 @@ class OnlinePaymentGatewayService
         }
 
         if (empty($paymentSessionId)) {
-            $paymentSessionId = 'session_' . Str::random(32);
+            $paymentSessionId = 'session_'.Str::random(32);
         }
 
         $checkoutConfig = [
@@ -246,9 +246,9 @@ class OnlinePaymentGatewayService
     {
         // 1. Cashfree Signature verification (timestamp + rawPayload base64)
         $cfSecret = $this->settings->getCashfreeSecretKey();
-        if (!empty($cfSecret)) {
+        if (! empty($cfSecret)) {
             if ($timestamp !== null) {
-                $expectedCf = base64_encode(hash_hmac('sha256', $timestamp . $rawPayload, $cfSecret, true));
+                $expectedCf = base64_encode(hash_hmac('sha256', $timestamp.$rawPayload, $cfSecret, true));
                 if (hash_equals($expectedCf, $signature)) {
                     return true;
                 }
@@ -267,7 +267,7 @@ class OnlinePaymentGatewayService
 
         // 2. Razorpay Signature verification (rawPayload HMAC SHA256 hex)
         $rzpSecret = $this->settings->getRazorpayWebhookSecret();
-        if (!empty($rzpSecret)) {
+        if (! empty($rzpSecret)) {
             $expectedRzp = hash_hmac('sha256', $rawPayload, $rzpSecret);
             if (hash_equals($expectedRzp, $signature)) {
                 return true;
@@ -278,6 +278,7 @@ class OnlinePaymentGatewayService
                 if (class_exists(RazorpayApi::class)) {
                     $api = new RazorpayApi($this->settings->getRazorpayKeyId(), $this->settings->getRazorpayKeySecret());
                     $api->utility->verifyWebhookSignature($rawPayload, $signature, $rzpSecret);
+
                     return true;
                 }
             } catch (\Throwable $e) {
@@ -293,10 +294,10 @@ class OnlinePaymentGatewayService
      */
     public function hasConfiguredWebhookSecret(): bool
     {
-        return !empty($this->settings->getCashfreeSecretKey()) 
-            || !empty($this->settings->getRazorpayWebhookSecret())
-            || !empty(config('services.cashfree.secret_key'))
-            || !empty(config('services.razorpay.webhook_secret'));
+        return ! empty($this->settings->getCashfreeSecretKey())
+            || ! empty($this->settings->getRazorpayWebhookSecret())
+            || ! empty(config('services.cashfree.secret_key'))
+            || ! empty(config('services.razorpay.webhook_secret'));
     }
 
     /**
@@ -309,7 +310,7 @@ class OnlinePaymentGatewayService
             return false;
         }
 
-        $expectedSignature = hash_hmac('sha256', $orderId . '|' . $paymentId, $keySecret);
+        $expectedSignature = hash_hmac('sha256', $orderId.'|'.$paymentId, $keySecret);
         if (hash_equals($expectedSignature, $signature)) {
             return true;
         }
@@ -322,6 +323,7 @@ class OnlinePaymentGatewayService
                     'razorpay_payment_id' => $paymentId,
                     'razorpay_signature' => $signature,
                 ]);
+
                 return true;
             }
         } catch (\Throwable $e) {
@@ -352,13 +354,13 @@ class OnlinePaymentGatewayService
         if ($gatewayOrderId) {
             $payment = Payment::where('gateway_order_id', $gatewayOrderId)->first();
         }
-        if (!$payment && $gatewayPaymentId) {
+        if (! $payment && $gatewayPaymentId) {
             $payment = Payment::where('gateway_payment_id', (string) $gatewayPaymentId)->first();
         }
-        if (!$payment && isset($orderData['order_tags']['payment_id'])) {
+        if (! $payment && isset($orderData['order_tags']['payment_id'])) {
             $payment = Payment::find($orderData['order_tags']['payment_id']);
         }
-        if (!$payment && isset($paymentData['notes']['payment_id'])) {
+        if (! $payment && isset($paymentData['notes']['payment_id'])) {
             $payment = Payment::find($paymentData['notes']['payment_id']);
         }
 
@@ -371,19 +373,22 @@ class OnlinePaymentGatewayService
                     $mandate->update(['status' => MandateStatus::FAILED]);
                     $desc = $paymentData['error_description'] ?? ($payload['error_description'] ?? 'Auto-debit mandate failed');
                     event(new PaymentMandateFailedEvent($mandate, $desc));
+
                     return ['status' => 'mandate_failed_processed', 'mandate_id' => $mandate->id];
                 }
             }
         }
 
-        if (!$payment) {
+        if (! $payment) {
             Log::warning('Payment webhook received for unknown payment record', ['payload' => $payload]);
+
             return ['status' => 'payment_not_found'];
         }
 
         // 5. Idempotency Check: If already SUCCESS, return immediately without re-firing
         if ($payment->status === PaymentStatus::SUCCESS) {
             Log::info("Payment #{$payment->id} already processed successfully. Idempotent skip.");
+
             return ['status' => 'already_processed', 'payment_id' => $payment->id];
         }
 
@@ -403,7 +408,7 @@ class OnlinePaymentGatewayService
         // 7. Handle FAILED Event
         if ($event === 'PAYMENT_FAILED_WEBHOOK' || $event === 'PAYMENT_USER_DROPPED_WEBHOOK' || $paymentStatus === 'FAILED' || in_array($event, ['payment.failed'], true)) {
             $reason = $paymentData['payment_message'] ?? ($paymentData['error_description'] ?? ($paymentData['error_reason'] ?? 'Payment failed or was dropped at gateway.'));
-            
+
             $payment->update([
                 'status' => PaymentStatus::FAILED,
                 'gateway_payment_id' => $gatewayPaymentId ? (string) $gatewayPaymentId : $payment->gateway_payment_id,
@@ -424,7 +429,7 @@ class OnlinePaymentGatewayService
     public function verifyOrderWithCashfree(string $orderId): ?Payment
     {
         $payment = Payment::where('gateway_order_id', $orderId)->first();
-        if (!$payment) {
+        if (! $payment) {
             return null;
         }
 
@@ -461,14 +466,14 @@ class OnlinePaymentGatewayService
 
                         if ($paymentsRes->successful()) {
                             $paymentsList = $paymentsRes->json();
-                            if (is_array($paymentsList) && !empty($paymentsList)) {
+                            if (is_array($paymentsList) && ! empty($paymentsList)) {
                                 foreach ($paymentsList as $pItem) {
                                     if (strtoupper($pItem['payment_status'] ?? '') === 'SUCCESS') {
                                         $cfPaymentId = (string) ($pItem['cf_payment_id'] ?? $pItem['payment_id'] ?? null);
                                         break;
                                     }
                                 }
-                                if (!$cfPaymentId && isset($paymentsList[0]['cf_payment_id'])) {
+                                if (! $cfPaymentId && isset($paymentsList[0]['cf_payment_id'])) {
                                     $cfPaymentId = (string) $paymentsList[0]['cf_payment_id'];
                                 }
                             }

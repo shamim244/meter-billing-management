@@ -47,12 +47,12 @@ class StatusTagReportService
 
         foreach ($bills as $b) {
             $st = $userStatuses[$b->ca_number] ?? null;
-            $status = !empty($b->review_status) && $b->review_status !== 'pending' 
-                ? $b->review_status 
+            $status = ! empty($b->review_status) && $b->review_status !== 'pending'
+                ? $b->review_status
                 : ($st ? $st->status : ($b->review_status ?: 'pending'));
 
             $normalizedStatus = strtolower(trim($status));
-            if (!isset($counts[$normalizedStatus])) {
+            if (! isset($counts[$normalizedStatus])) {
                 $normalizedStatus = 'pending';
             }
 
@@ -91,7 +91,7 @@ class StatusTagReportService
 
         foreach ($bills as $b) {
             $st = $userStatuses[$b->ca_number] ?? null;
-            $rawTag = !empty($b->tag) ? $b->tag : ($st ? ($st->tag ?? 'OK') : 'OK');
+            $rawTag = ! empty($b->tag) ? $b->tag : ($st ? ($st->tag ?? 'OK') : 'OK');
             $tagCode = strtoupper(trim($rawTag ?: 'OK'));
 
             $tagCounts[$tagCode] = ($tagCounts[$tagCode] ?? 0) + 1;
@@ -123,7 +123,7 @@ class StatusTagReportService
 
         // 2. Add any historical tag codes found in the database that are no longer in active config (deleted/inactive)
         foreach ($tagCounts as $code => $count) {
-            if (!isset($seenCodes[$code])) {
+            if (! isset($seenCodes[$code])) {
                 $tagDef = $this->billTagService->getTagByCode($code);
                 $label = $tagDef['label'] ?? $code;
                 $shortLabel = $tagDef['short_label'] ?? $label;
@@ -132,7 +132,7 @@ class StatusTagReportService
 
                 $breakdown[] = [
                     'code' => $code,
-                    'label' => $label . ' (Archived)',
+                    'label' => $label.' (Archived)',
                     'short_label' => $shortLabel,
                     'color' => $color,
                     'is_active' => false,
@@ -181,23 +181,24 @@ class StatusTagReportService
         // Apply status and tag filters with status overlay
         $filtered = $allBills->filter(function ($b) use ($userStatuses, $status, $tag) {
             $st = $userStatuses[$b->ca_number] ?? null;
-            $currentStatus = !empty($b->review_status) && $b->review_status !== 'pending'
+            $currentStatus = ! empty($b->review_status) && $b->review_status !== 'pending'
                 ? $b->review_status
                 : ($st ? $st->status : ($b->review_status ?: 'pending'));
 
-            $currentTag = !empty($b->tag) ? $b->tag : ($st ? ($st->tag ?? 'OK') : 'OK');
+            $currentTag = ! empty($b->tag) ? $b->tag : ($st ? ($st->tag ?? 'OK') : 'OK');
 
-            if (!empty($status) && $status !== 'all' && strtolower($currentStatus) !== strtolower($status)) {
+            if (! empty($status) && $status !== 'all' && strtolower($currentStatus) !== strtolower($status)) {
                 return false;
             }
 
-            if (!empty($tag) && $tag !== 'all' && strtoupper($currentTag) !== strtoupper($tag)) {
+            if (! empty($tag) && $tag !== 'all' && strtoupper($currentTag) !== strtoupper($tag)) {
                 return false;
             }
 
             $b->resolved_status = $currentStatus;
             $b->resolved_tag = $currentTag;
             $b->resolved_remark = $st ? ($st->remark ?? '') : ($b->remark ?? '');
+
             return true;
         })->values();
 
@@ -234,7 +235,7 @@ class StatusTagReportService
         );
 
         $items = $paginator->items();
-        $fileName = "status_tag_report_{$year}_{$month}_" . date('Ymd_His') . ".csv";
+        $fileName = "status_tag_report_{$year}_{$month}_".date('Ymd_His').'.csv';
 
         return response()->streamDownload(function () use ($items) {
             $output = fopen('php://output', 'w');
@@ -252,7 +253,7 @@ class StatusTagReportService
                 'Billing Basis',
                 'Review Status',
                 'Tag',
-                'Remark'
+                'Remark',
             ]);
 
             foreach ($items as $bill) {

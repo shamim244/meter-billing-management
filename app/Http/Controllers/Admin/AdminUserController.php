@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AgentSubscription;
+use App\Models\BillingCycle;
 use App\Models\BillRecord;
+use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\Notification;
 use App\Models\NotificationDelivery;
@@ -13,13 +15,13 @@ use App\Models\PlanDuration;
 use App\Models\PlanUpgradeLog;
 use App\Models\User;
 use App\Services\Plan\PlanService;
-use Bavix\Wallet\Models\Transaction;
+use App\Services\Referral\ReferralService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
@@ -44,12 +46,12 @@ class AdminUserController extends Controller
         $query = User::with(['roles', 'activeSubscription.plan', 'wallet'])
             ->withCount(['consumerAccounts', 'billRecords', 'mrus']);
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $escaped = addcslashes($search, '%_\\');
             $query->where(function ($q) use ($escaped) {
                 $q->where('name', 'like', "%{$escaped}%")
-                  ->orWhere('email', 'like', "%{$escaped}%")
-                  ->orWhere('phone', 'like', "%{$escaped}%");
+                    ->orWhere('email', 'like', "%{$escaped}%")
+                    ->orWhere('phone', 'like', "%{$escaped}%");
             });
         }
 
@@ -88,12 +90,12 @@ class AdminUserController extends Controller
         $query = User::with(['roles', 'activeSubscription.plan', 'wallet'])
             ->withCount(['consumerAccounts', 'billRecords', 'mrus']);
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $escaped = addcslashes($search, '%_\\');
             $query->where(function ($q) use ($escaped) {
                 $q->where('name', 'like', "%{$escaped}%")
-                  ->orWhere('email', 'like', "%{$escaped}%")
-                  ->orWhere('phone', 'like', "%{$escaped}%");
+                    ->orWhere('email', 'like', "%{$escaped}%")
+                    ->orWhere('phone', 'like', "%{$escaped}%");
             });
         }
 
@@ -109,7 +111,7 @@ class AdminUserController extends Controller
 
         $headers = [
             'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="users_export_' . now()->format('Y_m_d_His') . '.csv"',
+            'Content-Disposition' => 'attachment; filename="users_export_'.now()->format('Y_m_d_His').'.csv"',
             'Pragma' => 'no-cache',
             'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
             'Expires' => '0',
@@ -118,7 +120,7 @@ class AdminUserController extends Controller
         $callback = function () use ($users) {
             $file = fopen('php://output', 'w');
             // Add UTF-8 BOM for Excel compatibility
-            fputs($file, "\xEF\xBB\xBF");
+            fwrite($file, "\xEF\xBB\xBF");
 
             // CSV Header Row
             fputcsv($file, [
@@ -184,7 +186,7 @@ class AdminUserController extends Controller
 
         $currentAdminId = auth()->id();
         // Remove current admin from target ids to prevent accidental self-lockout or self-deletion
-        $targetIds = array_values(array_filter($request->user_ids, fn($id) => (int)$id !== $currentAdminId));
+        $targetIds = array_values(array_filter($request->user_ids, fn ($id) => (int) $id !== $currentAdminId));
 
         if (empty($targetIds)) {
             return back()->with('error', 'Cannot perform bulk action on your own administrator account.');
@@ -195,23 +197,26 @@ class AdminUserController extends Controller
         switch ($request->bulk_action) {
             case 'activate':
                 User::whereIn('id', $targetIds)->update(['status' => 'active']);
+
                 return back()->with('success', "Successfully activated {$count} user account(s).");
 
             case 'suspend':
                 User::whereIn('id', $targetIds)->update(['status' => 'suspended']);
+
                 return back()->with('success', "Successfully suspended {$count} user account(s).");
 
             case 'change_plan_tier':
-                if (!$request->plan_tier) {
+                if (! $request->plan_tier) {
                     return back()->with('error', 'Please select a plan tier for the bulk change.');
                 }
                 User::whereIn('id', $targetIds)->update(['plan_tier' => $request->plan_tier]);
+
                 return back()->with('success', "Successfully updated plan tier to '{$request->plan_tier}' for {$count} user(s).");
 
             case 'delete':
                 foreach ($targetIds as $id) {
                     $u = User::find($id);
-                    if ($u && !$u->hasRole('admin')) {
+                    if ($u && ! $u->hasRole('admin')) {
                         // Purge private storage directory
                         $userStoragePath = "users/{$u->id}";
                         if (Storage::disk('private')->exists($userStoragePath)) {
@@ -220,6 +225,7 @@ class AdminUserController extends Controller
                         $u->delete();
                     }
                 }
+
                 return back()->with('success', "Successfully purged {$count} selected user account(s) and their storage files.");
         }
 
@@ -232,6 +238,7 @@ class AdminUserController extends Controller
     public function create(): View
     {
         $roles = Role::all();
+
         return view('admin.users.create', compact('roles'));
     }
 
@@ -415,7 +422,7 @@ class AdminUserController extends Controller
         ]);
 
         $sub = $user->activeSubscription;
-        if (!$sub) {
+        if (! $sub) {
             return back()->with('error', 'User has no active subscription to override quotas for. Please grant a plan first.');
         }
 
@@ -426,7 +433,7 @@ class AdminUserController extends Controller
             'extra_consumer_rate_locked' => $request->extra_consumer_rate_locked ?? $sub->extra_consumer_rate_locked,
         ]);
 
-        return back()->with('success', "Quotas updated for {$user->name}: {$request->included_mrus_locked} MRUs & " . number_format($request->included_consumers_locked) . " Consumers included.");
+        return back()->with('success', "Quotas updated for {$user->name}: {$request->included_mrus_locked} MRUs & ".number_format($request->included_consumers_locked).' Consumers included.');
     }
 
     /**
@@ -526,13 +533,13 @@ class AdminUserController extends Controller
             $query->where('mru_id', $request->mru_id);
         } elseif ($scope === 'cycle') {
             $query->where('billing_month', $request->billing_month)
-                  ->where('billing_year', $request->billing_year);
+                ->where('billing_year', $request->billing_year);
         }
 
         $bills = $query->get();
 
         foreach ($bills as $bill) {
-            if (!empty($bill->pdf_path)) {
+            if (! empty($bill->pdf_path)) {
                 if (Storage::disk('local')->exists($bill->pdf_path)) {
                     $freedBytes += Storage::disk('local')->size($bill->pdf_path);
                     Storage::disk('local')->delete($bill->pdf_path);
@@ -609,7 +616,7 @@ class AdminUserController extends Controller
                 // 1. Delete associated PDFs on disk
                 $bills = BillRecord::where('user_id', $user->id)->where('mru_id', $mru->id)->get();
                 foreach ($bills as $bill) {
-                    if (!empty($bill->pdf_path)) {
+                    if (! empty($bill->pdf_path)) {
                         if (Storage::disk('local')->exists($bill->pdf_path)) {
                             $freedBytes += Storage::disk('local')->size($bill->pdf_path);
                             Storage::disk('local')->delete($bill->pdf_path);
@@ -636,8 +643,8 @@ class AdminUserController extends Controller
 
                 // 2. Delete bill records & consumer accounts for this MRU
                 $deletedBillsCount += BillRecord::where('user_id', $user->id)->where('mru_id', $mru->id)->delete();
-                \App\Models\ConsumerAccount::where('user_id', $user->id)->where('mru_id', $mru->id)->delete();
-                \App\Models\BillingCycle::where('mru_id', $mru->id)->delete();
+                ConsumerAccount::where('user_id', $user->id)->where('mru_id', $mru->id)->delete();
+                BillingCycle::where('mru_id', $mru->id)->delete();
 
                 // 3. Delete MRU record
                 $mru->delete();
@@ -694,7 +701,7 @@ class AdminUserController extends Controller
 
         DB::transaction(function () use ($bills, &$freedBytes, &$deletedCount) {
             foreach ($bills as $bill) {
-                if (!empty($bill->pdf_path)) {
+                if (! empty($bill->pdf_path)) {
                     if (Storage::disk('local')->exists($bill->pdf_path)) {
                         $freedBytes += Storage::disk('local')->size($bill->pdf_path);
                         Storage::disk('local')->delete($bill->pdf_path);
@@ -750,9 +757,9 @@ class AdminUserController extends Controller
 
             // 2. Refer & Earn: Cancel any pending referral payouts for this deleted referrer
             try {
-                app(\App\Services\Referral\ReferralService::class)->handleReferrerAccountDeleted($user->id);
+                app(ReferralService::class)->handleReferrerAccountDeleted($user->id);
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error("[UserPurge] Error cancelling referral payouts for user #{$user->id}: " . $e->getMessage());
+                Log::error("[UserPurge] Error cancelling referral payouts for user #{$user->id}: ".$e->getMessage());
             }
 
             // 3. Cascade delete records
@@ -768,10 +775,17 @@ class AdminUserController extends Controller
      */
     protected function formatBytes(int $bytes): string
     {
-        if ($bytes < 1024) return $bytes . ' B';
-        if ($bytes < 1048576) return round($bytes / 1024, 2) . ' KB';
-        if ($bytes < 1073741824) return round($bytes / 1048576, 2) . ' MB';
-        return round($bytes / 1073741824, 2) . ' GB';
+        if ($bytes < 1024) {
+            return $bytes.' B';
+        }
+        if ($bytes < 1048576) {
+            return round($bytes / 1024, 2).' KB';
+        }
+        if ($bytes < 1073741824) {
+            return round($bytes / 1048576, 2).' MB';
+        }
+
+        return round($bytes / 1073741824, 2).' GB';
     }
 
     /**
@@ -780,6 +794,7 @@ class AdminUserController extends Controller
     public function edit(User $user): View
     {
         $roles = Role::all();
+
         return view('admin.users.edit', compact('user', 'roles'));
     }
 
@@ -790,7 +805,7 @@ class AdminUserController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
+            'email' => 'required|string|email|max:255|unique:users,email,'.$user->id,
             'phone' => 'nullable|string|max:20',
             'role' => 'required|string|exists:roles,name',
             'status' => 'required|string|in:active,suspended',
@@ -806,9 +821,9 @@ class AdminUserController extends Controller
         $user->storage_limit_mb = $request->storage_limit_mb;
         $user->plan_tier = $request->plan_tier;
 
-        if ($request->boolean('email_verified') && !$user->email_verified_at) {
+        if ($request->boolean('email_verified') && ! $user->email_verified_at) {
             $user->email_verified_at = now();
-        } elseif (!$request->boolean('email_verified') && $user->email_verified_at) {
+        } elseif (! $request->boolean('email_verified') && $user->email_verified_at) {
             $user->email_verified_at = null;
         }
 
@@ -864,7 +879,7 @@ class AdminUserController extends Controller
      */
     public function leaveImpersonation(): RedirectResponse
     {
-        if (!session()->has('impersonated_by')) {
+        if (! session()->has('impersonated_by')) {
             return redirect()->route('dashboard');
         }
 
@@ -873,6 +888,7 @@ class AdminUserController extends Controller
 
         if ($admin) {
             Auth::login($admin);
+
             return redirect()->route('admin.users.index')
                 ->with('success', 'Exited impersonation. Returned to Administrator account.');
         }

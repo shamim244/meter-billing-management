@@ -15,7 +15,7 @@ class BackupCleanCommand extends Command
     {
         $dryRun = (bool) $this->option('dry-run');
 
-        $this->info($dryRun ? "🔍 Running Backup Retention Check (Dry Run)..." : "🧹 Pruning Expired Backups...");
+        $this->info($dryRun ? '🔍 Running Backup Retention Check (Dry Run)...' : '🧹 Pruning Expired Backups...');
 
         $result = $retentionService->prune($dryRun);
 
@@ -30,10 +30,10 @@ class BackupCleanCommand extends Command
 
         if (! empty($result['pruned_items'])) {
             $this->newLine();
-            $this->warn("Pruned Backups:");
+            $this->warn('Pruned Backups:');
             $this->table(['ID', 'Code', 'Filename', 'Size', 'Created At'], $result['pruned_items']);
         } else {
-            $this->info("✓ No expired backups required pruning.");
+            $this->info('✓ No expired backups required pruning.');
         }
 
         return self::SUCCESS;

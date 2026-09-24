@@ -129,9 +129,10 @@ class AdminEmailProviderController extends Controller
             }
         }
 
-        $provider->update(['is_enabled' => !$provider->is_enabled]);
+        $provider->update(['is_enabled' => ! $provider->is_enabled]);
 
         $state = $provider->is_enabled ? 'enabled' : 'disabled';
+
         return redirect()->route('admin.notifications.email_providers.index')
             ->with('success', "Provider [{$provider->label}] is now {$state}.");
     }
@@ -187,22 +188,22 @@ class AdminEmailProviderController extends Controller
     {
         if ($driverType === 'smtp') {
             return [
-                'host' => !empty($input['smtp_host']) ? $input['smtp_host'] : ($existing['host'] ?? '127.0.0.1'),
-                'port' => !empty($input['smtp_port']) ? (int) $input['smtp_port'] : ($existing['port'] ?? 587),
-                'encryption' => !empty($input['smtp_encryption']) ? $input['smtp_encryption'] : ($existing['encryption'] ?? 'tls'),
+                'host' => ! empty($input['smtp_host']) ? $input['smtp_host'] : ($existing['host'] ?? '127.0.0.1'),
+                'port' => ! empty($input['smtp_port']) ? (int) $input['smtp_port'] : ($existing['port'] ?? 587),
+                'encryption' => ! empty($input['smtp_encryption']) ? $input['smtp_encryption'] : ($existing['encryption'] ?? 'tls'),
                 'username' => array_key_exists('smtp_username', $input) && $input['smtp_username'] !== null ? $input['smtp_username'] : ($existing['username'] ?? ''),
-                'password' => !empty($input['smtp_password']) ? $input['smtp_password'] : ($existing['password'] ?? ''),
-                'from_address' => !empty($input['from_address']) ? $input['from_address'] : ($existing['from_address'] ?? 'notifications@nexgenhub.site'),
-                'from_name' => !empty($input['from_name']) ? $input['from_name'] : ($existing['from_name'] ?? 'NBPDCL Billing Platform'),
+                'password' => ! empty($input['smtp_password']) ? $input['smtp_password'] : ($existing['password'] ?? ''),
+                'from_address' => ! empty($input['from_address']) ? $input['from_address'] : ($existing['from_address'] ?? 'notifications@nexgenhub.site'),
+                'from_name' => ! empty($input['from_name']) ? $input['from_name'] : ($existing['from_name'] ?? 'NBPDCL Billing Platform'),
             ];
         }
 
         // Hostinger, Resend or Brevo
         return [
-            'api_key' => !empty($input['api_key']) ? $input['api_key'] : ($existing['api_key'] ?? ''),
-            'mailbox_resource_id' => !empty($input['mailbox_resource_id']) ? $input['mailbox_resource_id'] : ($existing['mailbox_resource_id'] ?? null),
-            'from_address' => !empty($input['from_address']) ? $input['from_address'] : ($existing['from_address'] ?? 'agent@nexgenhub.site'),
-            'from_name' => !empty($input['from_name']) ? $input['from_name'] : ($existing['from_name'] ?? 'NBPDCL Billing Platform'),
+            'api_key' => ! empty($input['api_key']) ? $input['api_key'] : ($existing['api_key'] ?? ''),
+            'mailbox_resource_id' => ! empty($input['mailbox_resource_id']) ? $input['mailbox_resource_id'] : ($existing['mailbox_resource_id'] ?? null),
+            'from_address' => ! empty($input['from_address']) ? $input['from_address'] : ($existing['from_address'] ?? 'agent@nexgenhub.site'),
+            'from_name' => ! empty($input['from_name']) ? $input['from_name'] : ($existing['from_name'] ?? 'NBPDCL Billing Platform'),
         ];
     }
 }

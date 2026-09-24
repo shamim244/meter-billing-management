@@ -8,9 +8,9 @@ use App\Models\NotificationDelivery;
 use App\Models\User;
 use App\Services\Notifications\Drivers\Email\HostingerDriver;
 use App\Services\Notifications\EmailProviderRegistryService;
-use App\Services\Notifications\HostingerMailService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class HostingerMailIntegrationTest extends TestCase
@@ -18,6 +18,7 @@ class HostingerMailIntegrationTest extends TestCase
     use RefreshDatabase;
 
     protected User $adminUser;
+
     protected User $agentUser;
 
     protected function setUp(): void
@@ -28,14 +29,14 @@ class HostingerMailIntegrationTest extends TestCase
             'email' => 'admin@nbpdcl-saas.com',
             'status' => 'active',
         ]);
-        $this->adminUser->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin']));
+        $this->adminUser->assignRole(Role::firstOrCreate(['name' => 'admin']));
 
         $this->agentUser = User::factory()->create([
             'email' => 'agent@nexgenhub.site',
             'name' => 'Hostinger Test Agent',
             'status' => 'active',
         ]);
-        $this->agentUser->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'user']));
+        $this->agentUser->assignRole(Role::firstOrCreate(['name' => 'user']));
     }
 
     public function test_hostinger_driver_sends_email_successfully(): void
@@ -54,7 +55,7 @@ class HostingerMailIntegrationTest extends TestCase
             'https://api.mail.hostinger.com/api/v1/mailboxes/AC68cd60bbe0df5cf1432bb84e625e/send' => Http::response('', 204),
         ]);
 
-        $driver = new HostingerDriver();
+        $driver = new HostingerDriver;
         $result = $driver->send(
             'agent@nexgenhub.site',
             'Welcome to NBPDCL SaaS',

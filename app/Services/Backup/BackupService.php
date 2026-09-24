@@ -18,10 +18,9 @@ class BackupService
     /**
      * Create a system backup of the requested type.
      *
-     * @param string $type db_only, storage_only, full
-     * @param int|null $triggeredBy User ID of admin or null for cron
-     * @param string|null $disk Destination storage disk (defaults to config or 'local')
-     * @return SystemBackup
+     * @param  string  $type  db_only, storage_only, full
+     * @param  int|null  $triggeredBy  User ID of admin or null for cron
+     * @param  string|null  $disk  Destination storage disk (defaults to config or 'local')
      */
     public function createBackup(string $type = 'db_only', ?int $triggeredBy = null, ?string $disk = null): SystemBackup
     {
@@ -31,7 +30,7 @@ class BackupService
         $startTime = microtime(true);
 
         // Ensure backups directory exists on local disk
-        $tempDir = storage_path('app/backups/_temp_' . uniqid());
+        $tempDir = storage_path('app/backups/_temp_'.uniqid());
         File::ensureDirectoryExists($tempDir);
         File::ensureDirectoryExists(storage_path('app/backups'));
 
@@ -52,30 +51,30 @@ class BackupService
 
             if ($type === 'db_only') {
                 $finalFilename = "nbpdcl_backup_{$timestamp}_db.sql.gz";
-                $tempFinalFile = $tempDir . DIRECTORY_SEPARATOR . $finalFilename;
+                $tempFinalFile = $tempDir.DIRECTORY_SEPARATOR.$finalFilename;
 
                 $meta['database'] = $this->dbDumper->dump($tempFinalFile);
             } elseif ($type === 'storage_only') {
                 $finalFilename = "nbpdcl_backup_{$timestamp}_storage.zip";
-                $tempFinalFile = $tempDir . DIRECTORY_SEPARATOR . $finalFilename;
+                $tempFinalFile = $tempDir.DIRECTORY_SEPARATOR.$finalFilename;
 
                 $meta['storage'] = $this->storageDumper->archive($tempFinalFile);
             } elseif ($type === 'full') {
                 $finalFilename = "nbpdcl_backup_{$timestamp}_full.zip";
-                $tempFinalFile = $tempDir . DIRECTORY_SEPARATOR . $finalFilename;
+                $tempFinalFile = $tempDir.DIRECTORY_SEPARATOR.$finalFilename;
 
                 // 1. Dump database inside temp
-                $dbFile = $tempDir . DIRECTORY_SEPARATOR . 'database.sql.gz';
+                $dbFile = $tempDir.DIRECTORY_SEPARATOR.'database.sql.gz';
                 $meta['database'] = $this->dbDumper->dump($dbFile);
 
                 // 2. Dump storage inside temp
-                $storageFile = $tempDir . DIRECTORY_SEPARATOR . 'storage.zip';
+                $storageFile = $tempDir.DIRECTORY_SEPARATOR.'storage.zip';
                 $meta['storage'] = $this->storageDumper->archive($storageFile);
 
                 // 3. Create full master ZIP bundling both + manifest
-                $masterZip = new ZipArchive();
+                $masterZip = new ZipArchive;
                 if ($masterZip->open($tempFinalFile, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-                    throw new \RuntimeException("Failed to create master full backup ZIP archive.");
+                    throw new \RuntimeException('Failed to create master full backup ZIP archive.');
                 }
 
                 $masterZip->addFile($dbFile, 'database.sql.gz');
@@ -108,7 +107,7 @@ class BackupService
             $duration = round(microtime(true) - $startTime, 2);
 
             // Move / Stream file to target storage disk under 'backups/'
-            $targetStoragePath = 'backups/' . $finalFilename;
+            $targetStoragePath = 'backups/'.$finalFilename;
             $stream = fopen($tempFinalFile, 'r');
             Storage::disk($disk)->put($targetStoragePath, $stream);
             if (is_resource($stream)) {
@@ -140,7 +139,7 @@ class BackupService
             $backup->update([
                 'status' => 'failed',
                 'duration_seconds' => $duration,
-                'error_message' => $e->getMessage() . "\n" . $e->getTraceAsString(),
+                'error_message' => $e->getMessage()."\n".$e->getTraceAsString(),
             ]);
 
             throw $e;
@@ -208,9 +207,12 @@ class BackupService
 
     protected function formatBytes(int|float $bytes): string
     {
-        if ($bytes <= 0) return '0 B';
+        if ($bytes <= 0) {
+            return '0 B';
+        }
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
         $i = (int) floor(log($bytes, 1024));
-        return round($bytes / pow(1024, $i), 2) . ' ' . ($units[$i] ?? 'B');
+
+        return round($bytes / pow(1024, $i), 2).' '.($units[$i] ?? 'B');
     }
 }

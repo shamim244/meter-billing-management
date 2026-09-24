@@ -41,7 +41,7 @@ class AdminMailboxController extends Controller
         $address = $request->get('address', 'agent@nexgenhub.site');
         $content = $this->mailService->getMessageText($address, $uid);
 
-        if (!$content) {
+        if (! $content) {
             return response()->json(['error' => 'Message not found or could not be loaded.'], 404);
         }
 
@@ -72,7 +72,7 @@ class AdminMailboxController extends Controller
 
             return back()->with('success', "Email sent successfully to {$validated['to']} via Hostinger Mail API.");
         } catch (\Throwable $e) {
-            return back()->with('error', "Failed to send email: " . $e->getMessage());
+            return back()->with('error', 'Failed to send email: '.$e->getMessage());
         }
     }
 }

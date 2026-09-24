@@ -11,7 +11,7 @@ class BackupRetentionService
     /**
      * Run the backup retention policy and prune expired archives.
      *
-     * @param bool $dryRun If true, returns list of candidates without deleting
+     * @param  bool  $dryRun  If true, returns list of candidates without deleting
      * @return array Summary of kept and pruned backups
      */
     public function prune(bool $dryRun = false): array
@@ -40,6 +40,7 @@ class BackupRetentionService
             // 1. Keep everything within the last 7 days
             if ($created->greaterThanOrEqualTo($sevenDaysAgo)) {
                 $keepIds[] = $backup->id;
+
                 continue;
             }
 
@@ -49,6 +50,7 @@ class BackupRetentionService
                 if (! isset($weeklyBuckets[$weekKey])) {
                     $weeklyBuckets[$weekKey] = $backup->id;
                     $keepIds[] = $backup->id;
+
                     continue;
                 }
             }
@@ -59,6 +61,7 @@ class BackupRetentionService
                 if (! isset($monthlyBuckets[$monthKey])) {
                     $monthlyBuckets[$monthKey] = $backup->id;
                     $keepIds[] = $backup->id;
+
                     continue;
                 }
             }

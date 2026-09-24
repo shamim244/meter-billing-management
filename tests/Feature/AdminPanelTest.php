@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\PaymentStatus;
 use App\Models\Payment;
 use App\Models\User;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -15,7 +16,7 @@ class AdminPanelTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
     }
 
     public function test_non_admin_cannot_access_admin_panel(): void

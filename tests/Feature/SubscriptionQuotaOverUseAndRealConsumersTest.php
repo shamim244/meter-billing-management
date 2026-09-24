@@ -2,16 +2,14 @@
 
 namespace Tests\Feature;
 
-use App\Enums\DebitResult;
 use App\Events\ConsumerOverageChargedEvent;
 use App\Events\MruOverageChargedEvent;
-use App\Models\AgentSubscription;
-use App\Models\BillingCycle;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\Plan;
 use App\Models\PlanOverageCharge;
 use App\Models\User;
+use App\Services\Billing\PlanChangeService;
 use App\Services\Plan\ConsumerQuotaService;
 use App\Services\Plan\MruQuotaService;
 use App\Services\Plan\PlanService;
@@ -26,8 +24,11 @@ class SubscriptionQuotaOverUseAndRealConsumersTest extends TestCase
     use RefreshDatabase;
 
     protected PlanService $planService;
+
     protected WalletService $walletService;
+
     protected MruQuotaService $mruQuotaService;
+
     protected ConsumerQuotaService $consumerQuotaService;
 
     protected function setUp(): void
@@ -49,7 +50,7 @@ class SubscriptionQuotaOverUseAndRealConsumersTest extends TestCase
     protected function loadRealMruDataset(): array
     {
         $filePath = base_path('.agent/docs/consumer-list-with-mru.txt');
-        if (!file_exists($filePath)) {
+        if (! file_exists($filePath)) {
             $mrus = [];
             $counts = [152, 214, 186, 76, 125, 108, 240];
             for ($m = 1; $m <= 7; $m++) {
@@ -60,6 +61,7 @@ class SubscriptionQuotaOverUseAndRealConsumersTest extends TestCase
                     $mrus[$code][] = sprintf('102300%02d%04d', $m, $c);
                 }
             }
+
             return $mrus;
         }
 
@@ -73,7 +75,7 @@ class SubscriptionQuotaOverUseAndRealConsumersTest extends TestCase
             if (empty($line) || str_starts_with($line, '---')) {
                 continue;
             }
-            if (preg_match('/^[A-Za-z0-9_\-]+$/', $line) && !is_numeric($line)) {
+            if (preg_match('/^[A-Za-z0-9_\-]+$/', $line) && ! is_numeric($line)) {
                 $currentMru = $line;
                 $mrus[$currentMru] = [];
             } elseif (is_numeric($line) && $currentMru) {
@@ -378,7 +380,7 @@ class SubscriptionQuotaOverUseAndRealConsumersTest extends TestCase
         $this->assertEquals(0, $this->mruQuotaService->checkMruQuotaAvailable($agent));
 
         // Upgrade to Pro Plan via PlanChangeService
-        $planChangeService = app(\App\Services\Billing\PlanChangeService::class);
+        $planChangeService = app(PlanChangeService::class);
         $planChangeService->upgradePlan($agent->fresh()->activeSubscription, $proPlan, $proPlan->durations->first());
 
         // Quota immediately expands: 10 - 2 = 8 available MRU slots!

@@ -25,28 +25,28 @@ class AdminBillController extends Controller
         $query = BillRecord::withoutGlobalScope('belongs_to_user')
             ->with(['user', 'mru']);
 
-        if (!empty($userId)) {
+        if (! empty($userId)) {
             $query->where('user_id', $userId);
         }
 
-        if (!empty($mruId)) {
+        if (! empty($mruId)) {
             $query->where('mru_id', $mruId);
         }
 
-        if (!empty($month)) {
-            $query->where('billing_month', (int)$month);
+        if (! empty($month)) {
+            $query->where('billing_month', (int) $month);
         }
 
-        if (!empty($year)) {
-            $query->where('billing_year', (int)$year);
+        if (! empty($year)) {
+            $query->where('billing_year', (int) $year);
         }
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $escaped = addcslashes($search, '%_\\');
             $query->where(function ($q) use ($escaped) {
                 $q->where('ca_number', 'like', "%{$escaped}%")
-                  ->orWhere('consumer_name', 'like', "%{$escaped}%")
-                  ->orWhere('meter_no', 'like', "%{$escaped}%");
+                    ->orWhere('consumer_name', 'like', "%{$escaped}%")
+                    ->orWhere('meter_no', 'like', "%{$escaped}%");
             });
         }
 

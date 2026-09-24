@@ -15,7 +15,6 @@ use App\Services\Wallet\WalletService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use InvalidArgumentException;
 
 class ReferralService
 {
@@ -39,15 +38,15 @@ class ReferralService
         $code = null;
         $maxAttempts = 10;
         for ($i = 0; $i < $maxAttempts; $i++) {
-            $candidate = 'REF-' . strtoupper(Str::random(6));
-            if (!CouponCode::where('code', $candidate)->exists()) {
+            $candidate = 'REF-'.strtoupper(Str::random(6));
+            if (! CouponCode::where('code', $candidate)->exists()) {
                 $code = $candidate;
                 break;
             }
         }
 
-        if (!$code) {
-            $code = 'REF-' . $userId . '-' . strtoupper(Str::random(4));
+        if (! $code) {
+            $code = 'REF-'.$userId.'-'.strtoupper(Str::random(4));
         }
 
         return $this->couponService->createCoupon([
@@ -113,7 +112,7 @@ class ReferralService
         }
 
         $coupon = CouponCode::where('code', $cleanCode)->first();
-        if (!$coupon) {
+        if (! $coupon) {
             return ['valid' => false, 'message' => 'Invalid referral code.', 'coupon' => null];
         }
 
@@ -121,7 +120,7 @@ class ReferralService
             return ['valid' => false, 'message' => 'The provided code is not a referral code.', 'coupon' => null];
         }
 
-        if (!$coupon->is_active) {
+        if (! $coupon->is_active) {
             return ['valid' => false, 'message' => 'This referral code is inactive or has expired.', 'coupon' => null];
         }
 
@@ -136,7 +135,7 @@ class ReferralService
             // Platform-wide one-time referral rule: has this user ever redeemed a referral code or signed up via referral?
             $hasPriorSignup = ReferralSignup::where('referee_user_id', $userId)->exists();
             $hasPriorRedemption = CouponRedemption::where('user_id', $userId)
-                ->whereHas('couponCode', fn($q) => $q->where('type', 'referral'))
+                ->whereHas('couponCode', fn ($q) => $q->where('type', 'referral'))
                 ->exists();
 
             if ($hasPriorSignup || $hasPriorRedemption) {
@@ -162,13 +161,14 @@ class ReferralService
             ? $codeOrCoupon
             : CouponCode::where('code', strtoupper(trim($codeOrCoupon)))->first();
 
-        if (!$coupon || $coupon->type !== 'referral') {
+        if (! $coupon || $coupon->type !== 'referral') {
             return null;
         }
 
         $validation = $this->validateReferralCode($coupon->code, $userId);
-        if (!$validation['valid']) {
+        if (! $validation['valid']) {
             Log::warning("[ReferralSignup] Validation failed for User #{$userId} with code {$coupon->code}: {$validation['message']}");
+
             return null;
         }
 
@@ -202,7 +202,7 @@ class ReferralService
 
         // 1. Check if user was referred
         $signup = ReferralSignup::where('referee_user_id', $userId)->first();
-        if (!$signup || !$signup->referrer_user_id) {
+        if (! $signup || ! $signup->referrer_user_id) {
             return null;
         }
 
@@ -210,17 +210,19 @@ class ReferralService
         $existingPayout = ReferralPayout::where('referee_user_id', $userId)->first();
         if ($existingPayout) {
             Log::info("[ReferralPayout] Referee #{$userId} already generated payout #{$existingPayout->id}. Skipping duplicate.");
+
             return null;
         }
 
         $settings = $this->settingsService->getSettings();
-        if (!$settings['is_enabled']) {
+        if (! $settings['is_enabled']) {
             return null;
         }
 
         // 3. Minimum qualifying amount check
         if ($paymentAmount < (float) $settings['minimum_qualifying_amount']) {
             Log::info("[ReferralPayout] Payment ₹{$paymentAmount} below minimum qualifying threshold ₹{$settings['minimum_qualifying_amount']}. No payout generated.");
+
             return null;
         }
 
@@ -228,6 +230,7 @@ class ReferralService
         $normalizedType = str_contains($paymentReferenceType, 'subscription') ? 'subscription' : 'topup';
         if ($normalizedType !== $settings['reward_trigger']) {
             Log::info("[ReferralPayout] Payment type '{$paymentReferenceType}' does not match current reward trigger '{$settings['reward_trigger']}'.");
+
             return null;
         }
 
@@ -293,7 +296,7 @@ class ReferralService
                         'hold_days' => $holdDays,
                     ]);
                 } catch (\Throwable $e) {
-                    Log::error("[ReferralPayout] Failed to dispatch referral.reward_pending: " . $e->getMessage());
+                    Log::error('[ReferralPayout] Failed to dispatch referral.reward_pending: '.$e->getMessage());
                 }
             }
 
@@ -316,16 +319,17 @@ class ReferralService
         foreach ($maturedPayouts as $payout) {
             DB::transaction(function () use ($payout, &$processedCount) {
                 $locked = ReferralPayout::where('id', $payout->id)->lockForUpdate()->first();
-                if (!$locked || $locked->status !== 'pending') {
+                if (! $locked || $locked->status !== 'pending') {
                     return;
                 }
 
                 $referrer = $locked->referrer;
-                if (!$referrer) {
+                if (! $referrer) {
                     $locked->update([
                         'status' => 'cancelled',
                         'clawback_reason' => 'referrer_account_deleted',
                     ]);
+
                     return;
                 }
 
@@ -355,7 +359,7 @@ class ReferralService
                         'reward_amount' => number_format($locked->reward_amount, 2),
                     ]);
                 } catch (\Throwable $e) {
-                    Log::error("[ReferralPayout] Failed to dispatch referral.reward_paid: " . $e->getMessage());
+                    Log::error('[ReferralPayout] Failed to dispatch referral.reward_paid: '.$e->getMessage());
                 }
             });
         }
@@ -377,7 +381,7 @@ class ReferralService
         foreach ($payouts as $payout) {
             DB::transaction(function () use ($payout, $reason, &$clawbackCount) {
                 $locked = ReferralPayout::where('id', $payout->id)->lockForUpdate()->first();
-                if (!$locked) {
+                if (! $locked) {
                     return;
                 }
 
@@ -401,7 +405,7 @@ class ReferralService
                                 'reason' => $reason,
                             ]);
                         } catch (\Throwable $e) {
-                            Log::error("[ReferralClawback] Failed to dispatch referral.reward_cancelled: " . $e->getMessage());
+                            Log::error('[ReferralClawback] Failed to dispatch referral.reward_cancelled: '.$e->getMessage());
                         }
                     }
                 } elseif ($locked->status === 'paid') {
@@ -446,7 +450,7 @@ class ReferralService
                                 'reason' => $reason,
                             ]);
                         } catch (\Throwable $e) {
-                            Log::error("[ReferralClawback] Failed to dispatch referral.reward_clawed_back: " . $e->getMessage());
+                            Log::error('[ReferralClawback] Failed to dispatch referral.reward_clawed_back: '.$e->getMessage());
                         }
                     }
                 }
@@ -500,7 +504,7 @@ class ReferralService
         return [
             'referral_code' => $activeCoupon->code,
             'is_active' => $activeCoupon->is_active,
-            'share_url' => url('/register?ref=' . $activeCoupon->code),
+            'share_url' => url('/register?ref='.$activeCoupon->code),
             'total_referred' => $totalReferred,
             'pending_rewards' => $pendingRewards,
             'paid_rewards' => $paidRewards,

@@ -23,6 +23,7 @@ class BackupCommand extends Command
 
         if (! in_array($type, ['db_only', 'storage_only', 'full'])) {
             $this->error("Invalid backup type: {$type}. Must be one of: db_only, storage_only, full");
+
             return self::FAILURE;
         }
 
@@ -30,14 +31,15 @@ class BackupCommand extends Command
 
         if ($isAsync) {
             CreateBackupJob::dispatch($type, null, $disk);
-            $this->info("✓ Backup job dispatched to queue.");
+            $this->info('✓ Backup job dispatched to queue.');
+
             return self::SUCCESS;
         }
 
         try {
             $backup = $backupService->createBackup($type, null, $disk);
             $this->newLine();
-            $this->info("🎉 Backup Created Successfully!");
+            $this->info('🎉 Backup Created Successfully!');
             $this->table(
                 ['Property', 'Value'],
                 [
@@ -47,13 +49,15 @@ class BackupCommand extends Command
                     ['Disk', $backup->disk],
                     ['Size', $backup->human_size],
                     ['SHA-256 Hash', $backup->sha256_hash],
-                    ['Duration', $backup->duration_seconds . 's'],
+                    ['Duration', $backup->duration_seconds.'s'],
                     ['Created At', $backup->created_at->toDateTimeString()],
                 ]
             );
+
             return self::SUCCESS;
         } catch (\Throwable $e) {
-            $this->error("❌ Backup failed: " . $e->getMessage());
+            $this->error('❌ Backup failed: '.$e->getMessage());
+
             return self::FAILURE;
         }
     }

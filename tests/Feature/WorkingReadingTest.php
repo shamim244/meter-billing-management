@@ -6,6 +6,7 @@ use App\Models\BillRecord;
 use App\Models\BillStatus;
 use App\Models\Mru;
 use App\Models\User;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -16,7 +17,7 @@ class WorkingReadingTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
     }
 
     public function test_dashboard_data_includes_4_box_reading_metrics(): void
@@ -223,7 +224,7 @@ class WorkingReadingTest extends TestCase
         $item = $response->json('data')[0];
 
         // Invariant: Working Reading MUST NEVER be < PDF Reading (475)!
-        $this->assertGreaterThanOrEqual(475, (int)$item['working_reading']);
+        $this->assertGreaterThanOrEqual(475, (int) $item['working_reading']);
         $this->assertEquals('matched', $item['pdf_sync_status']); // Exact match or ahead
     }
 
@@ -704,5 +705,104 @@ class WorkingReadingTest extends TestCase
         $this->assertEquals(0, $bulkResponse->json('count'));
         $this->assertEquals('190', $bill->fresh()->working_reading);
         $this->assertEquals('manual', $bill->fresh()->reading_source);
+    }
+
+    public function test_bulk_project_supports_percentage_tuning_increase_and_decrease(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $mru = Mru::create(['user_id' => $user->id, 'code' => '0244', 'name' => 'NISARBHATI', 'status' => 'active']);
+
+        // Account 1: Test +20% adjustment (Summer / Peak)
+        BillRecord::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '102300999111',
+            'billing_month' => 8,
+            'billing_year' => 2026,
+            'current_reading' => '200',
+            'previous_reading' => '150',
+            'units_consumed' => 50,
+            'billing_basis' => 'OK',
+        ]);
+
+        $sepBillPlus = BillRecord::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '102300999111',
+            'billing_month' => 9,
+            'billing_year' => 2026,
+            'previous_reading' => '200',
+            'working_reading' => null,
+            'reading_source' => 'auto',
+            'review_status' => 'pending',
+            'billing_basis' => 'OK',
+        ]);
+
+        // Account 2: Test -20% adjustment (Winter / Low)
+        BillRecord::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '102300999222',
+            'billing_month' => 8,
+            'billing_year' => 2026,
+            'current_reading' => '300',
+            'previous_reading' => '250',
+            'units_consumed' => 50,
+            'billing_basis' => 'OK',
+        ]);
+
+        $sepBillMinus = BillRecord::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '102300999222',
+            'billing_month' => 9,
+            'billing_year' => 2026,
+            'previous_reading' => '300',
+            'working_reading' => null,
+            'reading_source' => 'auto',
+            'review_status' => 'pending',
+            'billing_basis' => 'OK',
+        ]);
+
+        // 1. Bulk project with +20% adjustment -> 50 * 1.2 = 60 units => 200 + 60 = 260
+        $resp = $this->actingAs($user)->postJson('/bills/bulk-project-readings', [
+            'mru_id' => $mru->id,
+            'month' => 9,
+            'year' => 2026,
+            'adjustment_percent' => 20,
+        ]);
+
+        $resp->assertStatus(200);
+        $sepBillPlus->refresh();
+        $this->assertEquals(60, $sepBillPlus->units_consumed);
+        $this->assertEquals('260', $sepBillPlus->working_reading);
+
+        // Reset Account 2 and test with -20%
+        $sepBillMinus->update(['working_reading' => null, 'units_consumed' => null]);
+        $respMinus = $this->actingAs($user)->postJson('/bills/bulk-project-readings', [
+            'mru_id' => $mru->id,
+            'month' => 9,
+            'year' => 2026,
+            'adjustment_percent' => -20,
+        ]);
+
+        $respMinus->assertStatus(200);
+        $sepBillMinus->refresh();
+        $this->assertEquals(40, $sepBillMinus->units_consumed);
+        $this->assertEquals('340', $sepBillMinus->working_reading);
+
+        // 3. User switches directly from -20% to +10% (WITHOUT manual reset)
+        // Must calculate from normal 50 kWh base -> 50 * 1.1 = 55 units (reading = 355), NEVER 40 * 1.1 = 44!
+        $respSwitch = $this->actingAs($user)->postJson('/bills/bulk-project-readings', [
+            'mru_id' => $mru->id,
+            'month' => 9,
+            'year' => 2026,
+            'adjustment_percent' => 10,
+        ]);
+
+        $respSwitch->assertStatus(200);
+        $sepBillMinus->refresh();
+        $this->assertEquals(55, $sepBillMinus->units_consumed);
+        $this->assertEquals('355', $sepBillMinus->working_reading);
     }
 }

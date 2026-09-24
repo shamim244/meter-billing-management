@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AgentSubscription extends Model
 {
-    use HasFactory, BelongsToUser;
+    use BelongsToUser, HasFactory;
 
     protected $fillable = [
         'user_id',
@@ -87,7 +87,7 @@ class AgentSubscription extends Model
         $val = $this->duration_value ?: $this->duration_months ?: 1;
         $unit = $this->duration_unit === 'day' ? 'Day' : 'Month';
 
-        return "{$val} {$unit}" . ($val > 1 ? 's' : '');
+        return "{$val} {$unit}".($val > 1 ? 's' : '');
     }
 
     /**
@@ -112,7 +112,7 @@ class AgentSubscription extends Model
     {
         return ($this->lifecycle_status === 'active' || $this->status === 'active')
             && $this->billing_end > now()
-            && !$this->isSuspended();
+            && ! $this->isSuspended();
     }
 
     /**
@@ -153,6 +153,6 @@ class AgentSubscription extends Model
      */
     public function canWrite(): bool
     {
-        return !$this->isSuspended();
+        return ! $this->isSuspended();
     }
 }

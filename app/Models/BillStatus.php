@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class BillStatus extends Model
 {
-    use HasFactory, BelongsToUser;
+    use BelongsToUser, HasFactory;
 
     protected $fillable = [
         'user_id',
@@ -32,7 +32,7 @@ class BillStatus extends Model
     public function consumerAccount(): BelongsTo
     {
         return $this->belongsTo(ConsumerAccount::class, 'ca_number', 'ca_number')
-                    ->where('consumer_accounts.user_id', $this->user_id);
+            ->where('consumer_accounts.user_id', $this->user_id);
     }
 
     /**

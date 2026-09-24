@@ -27,3 +27,12 @@ Homestead.yaml
 Thumbs.db
 /.agent
 /.gemini
+
+**/caddy
+frankenphp
+frankenphp-worker.php
+rr
+.rr.yaml
+rr.exe
+apk/
+public/VHOST-TEST.txt

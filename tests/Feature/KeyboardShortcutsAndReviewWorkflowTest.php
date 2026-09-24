@@ -14,6 +14,7 @@ class KeyboardShortcutsAndReviewWorkflowTest extends TestCase
     use RefreshDatabase;
 
     protected User $user;
+
     protected Mru $mru;
 
     protected function setUp(): void
@@ -40,8 +41,8 @@ class KeyboardShortcutsAndReviewWorkflowTest extends TestCase
         $this->assertEquals('Enter', $shortcuts['submit_ok']);
         $this->assertEquals('2', $shortcuts['mark_doubt']);
         $this->assertEquals('3', $shortcuts['mark_critical']);
-        $this->assertEquals('ArrowDown', $shortcuts['next_card']);
-        $this->assertEquals('ArrowUp', $shortcuts['prev_card']);
+        $this->assertEquals('ArrowRight', $shortcuts['next_card']);
+        $this->assertEquals('ArrowLeft', $shortcuts['prev_card']);
         $this->assertEquals('r', $shortcuts['focus_reading']);
         $this->assertEquals('a', $shortcuts['auto_fill_reading']);
         $this->assertEquals('m', $shortcuts['open_remark']);
@@ -141,6 +142,19 @@ class KeyboardShortcutsAndReviewWorkflowTest extends TestCase
         $this->assertEquals('c', $this->user->getShortcutMap()['copy_ca']);
     }
 
+    public function test_legacy_arrow_down_up_shortcuts_are_migrated_to_arrow_right_left(): void
+    {
+        $this->user->shortcuts = [
+            'next_card' => 'ArrowDown',
+            'prev_card' => 'ArrowUp',
+        ];
+        $this->user->save();
+
+        $shortcuts = $this->user->getShortcutMap();
+        $this->assertEquals('ArrowRight', $shortcuts['next_card']);
+        $this->assertEquals('ArrowLeft', $shortcuts['prev_card']);
+    }
+
     public function test_user_can_update_bill_review_status(): void
     {
         $bill = BillRecord::create([
@@ -215,7 +229,7 @@ class KeyboardShortcutsAndReviewWorkflowTest extends TestCase
             'units_consumed' => 60,
         ]);
 
-        $response = $this->actingAs($this->user)->getJson('/dashboard/data?mru_id=' . $this->mru->id . '&month=8&year=2026');
+        $response = $this->actingAs($this->user)->getJson('/dashboard/data?mru_id='.$this->mru->id.'&month=8&year=2026');
 
         $response->assertOk()
             ->assertJsonStructure([

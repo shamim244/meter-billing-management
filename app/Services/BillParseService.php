@@ -6,6 +6,7 @@ use App\Models\BillRecord;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Smalot\PdfParser\Parser;
 
@@ -17,8 +18,9 @@ class BillParseService
     {
         if ($this->pdfParser === null) {
             require_once base_path('../vendor/autoload.php');
-            $this->pdfParser = new Parser();
+            $this->pdfParser = new Parser;
         }
+
         return $this->pdfParser;
     }
 
@@ -27,8 +29,8 @@ class BillParseService
      */
     public function parse(int $userId, int $month, int $year, ?int $mruId = null, bool $pendingOnly = false): array
     {
-        $this->appendLog($userId, "==================================================");
-        $this->appendLog($userId, sprintf("Initiating task: Bill Parser & Extractor (Period: %02d/%04d)...", $month, $year));
+        $this->appendLog($userId, '==================================================');
+        $this->appendLog($userId, sprintf('Initiating task: Bill Parser & Extractor (Period: %02d/%04d)...', $month, $year));
 
         $query = BillRecord::where('user_id', $userId)
             ->where('billing_month', $month)
@@ -36,7 +38,7 @@ class BillParseService
             ->where('download_status', 'downloaded')
             ->whereNotNull('pdf_path');
 
-        if (!empty($mruId)) {
+        if (! empty($mruId)) {
             $query->where('mru_id', $mruId);
         }
 
@@ -56,7 +58,8 @@ class BillParseService
         ];
 
         if ($records->isEmpty()) {
-            $this->appendLog($userId, "No downloaded PDF bills found matching the selection to parse.");
+            $this->appendLog($userId, 'No downloaded PDF bills found matching the selection to parse.');
+
             return $results;
         }
 
@@ -65,7 +68,7 @@ class BillParseService
             $ca = $record->ca_number;
             $pdfFullPath = Storage::disk('local')->path($record->pdf_path);
 
-            if (!File::exists($pdfFullPath) || File::size($pdfFullPath) === 0) {
+            if (! File::exists($pdfFullPath) || File::size($pdfFullPath) === 0) {
                 $results['failed']++;
                 $record->update([
                     'parse_status' => 'failed',
@@ -73,6 +76,7 @@ class BillParseService
                     'processing_date' => now(),
                 ]);
                 $this->appendLog($userId, "[{$num}/{$results['total']}] ❌ CA: {$ca} — PDF file missing on disk");
+
                 continue;
             }
 
@@ -84,7 +88,7 @@ class BillParseService
                     ->where('ca_number', $ca)
                     ->first();
 
-                if (!$masterAccount) {
+                if (! $masterAccount) {
                     // 1. First Time: Auto-Register into Master List
                     $masterAccount = ConsumerAccount::create([
                         'user_id' => $userId,
@@ -103,37 +107,37 @@ class BillParseService
                     $changed = false;
 
                     // Update name if valid, clean, and not generic
-                    if (!empty($extracted['consumer_name']) && 
-                        strlen($extracted['consumer_name']) >= 3 && 
-                        !str_starts_with($extracted['consumer_name'], 'Consumer ') && 
+                    if (! empty($extracted['consumer_name']) &&
+                        strlen($extracted['consumer_name']) >= 3 &&
+                        ! str_starts_with($extracted['consumer_name'], 'Consumer ') &&
                         $masterAccount->consumer_name !== $extracted['consumer_name']) {
                         $masterAccount->consumer_name = $extracted['consumer_name'];
                         $changed = true;
                     }
 
-                    if (!empty($extracted['father_name']) && $masterAccount->father_name !== $extracted['father_name']) {
+                    if (! empty($extracted['father_name']) && $masterAccount->father_name !== $extracted['father_name']) {
                         $masterAccount->father_name = $extracted['father_name'];
                         $changed = true;
                     }
 
                     // Update meter number if changed (e.g. Smart Meter replacement)
-                    if (!empty($extracted['meter_no']) && $masterAccount->meter_no !== $extracted['meter_no']) {
+                    if (! empty($extracted['meter_no']) && $masterAccount->meter_no !== $extracted['meter_no']) {
                         $masterAccount->meter_no = $extracted['meter_no'];
                         $changed = true;
                     }
 
                     // Update tariff category if found
-                    if (!empty($extracted['tariff_category']) && $masterAccount->tariff_category !== $extracted['tariff_category']) {
+                    if (! empty($extracted['tariff_category']) && $masterAccount->tariff_category !== $extracted['tariff_category']) {
                         $masterAccount->tariff_category = $extracted['tariff_category'];
                         $changed = true;
                     }
 
-                    if (!empty($extracted['billing_basis']) && (empty($masterAccount->billing_basis) || $masterAccount->billing_basis === 'OK')) {
+                    if (! empty($extracted['billing_basis']) && (empty($masterAccount->billing_basis) || $masterAccount->billing_basis === 'OK')) {
                         $masterAccount->billing_basis = $extracted['billing_basis'];
                         $changed = true;
                     }
 
-                    if (!empty($extracted['total_amount']) && ((float)$masterAccount->baseline_amount == 0.0 || empty($masterAccount->baseline_amount))) {
+                    if (! empty($extracted['total_amount']) && ((float) $masterAccount->baseline_amount == 0.0 || empty($masterAccount->baseline_amount))) {
                         $masterAccount->baseline_amount = (float) $extracted['total_amount'];
                         $changed = true;
                     }
@@ -144,11 +148,11 @@ class BillParseService
                     }
 
                     // Sync initial baseline and reading ledger
-                    if (empty($masterAccount->baseline_previous_reading) && !empty($extracted['previous_reading'])) {
+                    if (empty($masterAccount->baseline_previous_reading) && ! empty($extracted['previous_reading'])) {
                         $masterAccount->baseline_previous_reading = (string) $extracted['previous_reading'];
                         $changed = true;
                     }
-                    if (empty($masterAccount->last_working_reading) && !empty($extracted['current_reading'])) {
+                    if (empty($masterAccount->last_working_reading) && ! empty($extracted['current_reading'])) {
                         $masterAccount->last_working_reading = (string) $extracted['current_reading'];
                         $masterAccount->last_working_month = $record->billing_month;
                         $masterAccount->last_working_year = $record->billing_year;
@@ -161,20 +165,20 @@ class BillParseService
                 }
 
                 // Final resolved identity: Master takes precedence over raw extraction
-                $finalConsumerName = (!empty($masterAccount->consumer_name) && !str_starts_with($masterAccount->consumer_name, 'Consumer '))
+                $finalConsumerName = (! empty($masterAccount->consumer_name) && ! str_starts_with($masterAccount->consumer_name, 'Consumer '))
                     ? $masterAccount->consumer_name
                     : ($extracted['consumer_name'] ?: ($record->consumer_name ?: "Consumer {$ca}"));
 
-                $finalMeterNo = !empty($masterAccount->meter_no)
+                $finalMeterNo = ! empty($masterAccount->meter_no)
                     ? $masterAccount->meter_no
                     : ($extracted['meter_no'] ?: $record->meter_no);
 
-                $finalTariff = !empty($masterAccount->tariff_category)
+                $finalTariff = ! empty($masterAccount->tariff_category)
                     ? $masterAccount->tariff_category
                     : ($extracted['tariff_category'] ?? $record->tariff_category);
 
                 $initialWorking = $record->working_reading;
-                if (empty($initialWorking) && !empty($extracted['current_reading'])) {
+                if (empty($initialWorking) && ! empty($extracted['current_reading'])) {
                     $initialWorking = (string) $extracted['current_reading'];
                 }
 
@@ -198,9 +202,16 @@ class BillParseService
 
                 // Hook into Usage Tracking System for billing basis and consecutive estimate detection
                 try {
-                    app(\App\Services\BillingBasisTrackingService::class)->recordFromBillRecord($record);
+                    app(BillingBasisTrackingService::class)->recordFromBillRecord($record);
                 } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::warning("BillingBasisTrackingService hook failed for CA {$ca}: " . $e->getMessage());
+                    Log::warning("BillingBasisTrackingService hook failed for CA {$ca}: ".$e->getMessage());
+                }
+
+                // Hook into Dedicated Meter Reading History System
+                try {
+                    app(MeterReadingHistoryService::class)->recordFromPdf($record, $extracted['consumption_history'] ?? []);
+                } catch (\Throwable $e) {
+                    Log::warning("MeterReadingHistoryService hook failed for CA {$ca}: ".$e->getMessage());
                 }
 
                 $results['success']++;
@@ -215,11 +226,11 @@ class BillParseService
                     'error_message' => $e->getMessage(),
                     'processing_date' => now(),
                 ]);
-                $this->appendLog($userId, "[{$num}/{$results['total']}] ❌ CA: {$ca} — Parse error: " . $e->getMessage());
+                $this->appendLog($userId, "[{$num}/{$results['total']}] ❌ CA: {$ca} — Parse error: ".$e->getMessage());
             }
         }
 
-        $this->appendLog($userId, "==================================================");
+        $this->appendLog($userId, '==================================================');
         $this->appendLog($userId, "Task Completed: {$results['success']} parsed successfully, {$results['failed']} failed.");
 
         return $results;
@@ -230,8 +241,8 @@ class BillParseService
      */
     public function parseSpecificBills(int $userId, array $billIds): array
     {
-        $this->appendLog($userId, "==================================================");
-        $this->appendLog($userId, sprintf("Initiating batch re-parse for %d specific bills...", count($billIds)));
+        $this->appendLog($userId, '==================================================');
+        $this->appendLog($userId, sprintf('Initiating batch re-parse for %d specific bills...', count($billIds)));
 
         $records = BillRecord::where('user_id', $userId)
             ->whereIn('id', $billIds)
@@ -247,7 +258,8 @@ class BillParseService
         ];
 
         if ($records->isEmpty()) {
-            $this->appendLog($userId, "No valid downloaded bills found matching the selected IDs.");
+            $this->appendLog($userId, 'No valid downloaded bills found matching the selected IDs.');
+
             return $results;
         }
 
@@ -256,7 +268,7 @@ class BillParseService
             $ca = $record->ca_number;
             $pdfFullPath = Storage::disk('local')->path($record->pdf_path);
 
-            if (!File::exists($pdfFullPath) || File::size($pdfFullPath) === 0) {
+            if (! File::exists($pdfFullPath) || File::size($pdfFullPath) === 0) {
                 $results['failed']++;
                 $record->update([
                     'parse_status' => 'failed',
@@ -264,6 +276,7 @@ class BillParseService
                     'processing_date' => now(),
                 ]);
                 $this->appendLog($userId, "[{$num}/{$results['total']}] ❌ CA: {$ca} — PDF file missing on disk");
+
                 continue;
             }
 
@@ -274,7 +287,7 @@ class BillParseService
                     ->where('ca_number', $ca)
                     ->first();
 
-                if (!$masterAccount) {
+                if (! $masterAccount) {
                     $masterAccount = ConsumerAccount::create([
                         'user_id' => $userId,
                         'ca_number' => $ca,
@@ -289,30 +302,30 @@ class BillParseService
                     ]);
                 } else {
                     $changed = false;
-                    if (!empty($extracted['consumer_name']) && 
-                        strlen($extracted['consumer_name']) >= 3 && 
-                        !str_starts_with($extracted['consumer_name'], 'Consumer ') && 
+                    if (! empty($extracted['consumer_name']) &&
+                        strlen($extracted['consumer_name']) >= 3 &&
+                        ! str_starts_with($extracted['consumer_name'], 'Consumer ') &&
                         $masterAccount->consumer_name !== $extracted['consumer_name']) {
                         $masterAccount->consumer_name = $extracted['consumer_name'];
                         $changed = true;
                     }
-                    if (!empty($extracted['father_name']) && $masterAccount->father_name !== $extracted['father_name']) {
+                    if (! empty($extracted['father_name']) && $masterAccount->father_name !== $extracted['father_name']) {
                         $masterAccount->father_name = $extracted['father_name'];
                         $changed = true;
                     }
-                    if (!empty($extracted['meter_no']) && $masterAccount->meter_no !== $extracted['meter_no']) {
+                    if (! empty($extracted['meter_no']) && $masterAccount->meter_no !== $extracted['meter_no']) {
                         $masterAccount->meter_no = $extracted['meter_no'];
                         $changed = true;
                     }
-                    if (!empty($extracted['tariff_category']) && $masterAccount->tariff_category !== $extracted['tariff_category']) {
+                    if (! empty($extracted['tariff_category']) && $masterAccount->tariff_category !== $extracted['tariff_category']) {
                         $masterAccount->tariff_category = $extracted['tariff_category'];
                         $changed = true;
                     }
-                    if (!empty($extracted['billing_basis']) && (empty($masterAccount->billing_basis) || $masterAccount->billing_basis === 'OK')) {
+                    if (! empty($extracted['billing_basis']) && (empty($masterAccount->billing_basis) || $masterAccount->billing_basis === 'OK')) {
                         $masterAccount->billing_basis = $extracted['billing_basis'];
                         $changed = true;
                     }
-                    if (!empty($extracted['total_amount']) && ((float)$masterAccount->baseline_amount == 0.0 || empty($masterAccount->baseline_amount))) {
+                    if (! empty($extracted['total_amount']) && ((float) $masterAccount->baseline_amount == 0.0 || empty($masterAccount->baseline_amount))) {
                         $masterAccount->baseline_amount = (float) $extracted['total_amount'];
                         $changed = true;
                     }
@@ -325,20 +338,20 @@ class BillParseService
                     }
                 }
 
-                $finalConsumerName = (!empty($masterAccount->consumer_name) && !str_starts_with($masterAccount->consumer_name, 'Consumer '))
+                $finalConsumerName = (! empty($masterAccount->consumer_name) && ! str_starts_with($masterAccount->consumer_name, 'Consumer '))
                     ? $masterAccount->consumer_name
                     : ($extracted['consumer_name'] ?: ($record->consumer_name ?: "Consumer {$ca}"));
 
-                $finalMeterNo = !empty($masterAccount->meter_no)
+                $finalMeterNo = ! empty($masterAccount->meter_no)
                     ? $masterAccount->meter_no
                     : ($extracted['meter_no'] ?: $record->meter_no);
 
-                $finalTariff = !empty($masterAccount->tariff_category)
+                $finalTariff = ! empty($masterAccount->tariff_category)
                     ? $masterAccount->tariff_category
                     : ($extracted['tariff_category'] ?? $record->tariff_category);
 
                 $initialWorking = $record->working_reading;
-                if (empty($initialWorking) && !empty($extracted['current_reading'])) {
+                if (empty($initialWorking) && ! empty($extracted['current_reading'])) {
                     $initialWorking = (string) $extracted['current_reading'];
                 }
 
@@ -362,9 +375,16 @@ class BillParseService
 
                 // Hook into Usage Tracking System for billing basis and consecutive estimate detection
                 try {
-                    app(\App\Services\BillingBasisTrackingService::class)->recordFromBillRecord($record);
+                    app(BillingBasisTrackingService::class)->recordFromBillRecord($record);
                 } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::warning("BillingBasisTrackingService hook failed for CA {$ca}: " . $e->getMessage());
+                    Log::warning("BillingBasisTrackingService hook failed for CA {$ca}: ".$e->getMessage());
+                }
+
+                // Hook into Dedicated Meter Reading History System
+                try {
+                    app(MeterReadingHistoryService::class)->recordFromPdf($record, $extracted['consumption_history'] ?? []);
+                } catch (\Throwable $e) {
+                    Log::warning("MeterReadingHistoryService hook failed for CA {$ca}: ".$e->getMessage());
                 }
 
                 $results['success']++;
@@ -379,11 +399,11 @@ class BillParseService
                     'error_message' => $e->getMessage(),
                     'processing_date' => now(),
                 ]);
-                $this->appendLog($userId, "[{$num}/{$results['total']}] ❌ CA: {$ca} — Parse error: " . $e->getMessage());
+                $this->appendLog($userId, "[{$num}/{$results['total']}] ❌ CA: {$ca} — Parse error: ".$e->getMessage());
             }
         }
 
-        $this->appendLog($userId, "==================================================");
+        $this->appendLog($userId, '==================================================');
         $this->appendLog($userId, "Batch Re-parse Completed: {$results['success']} parsed successfully, {$results['failed']} failed.");
 
         return $results;
@@ -396,8 +416,23 @@ class BillParseService
     {
         $parser = $this->getParser();
         $pdf = $parser->parseFile($pdfPath);
-        $text = $pdf->getText();
 
+        return $this->extractFromText($pdf->getText());
+    }
+
+    /**
+     * Alias for extracting structured fields from raw OCR/bill text.
+     */
+    public function extractBillData(string $text): array
+    {
+        return $this->extractFromText($text);
+    }
+
+    /**
+     * Extract structured fields from raw bill text.
+     */
+    public function extractFromText(string $text): array
+    {
         $data = [
             'consumer_name' => null,
             'father_name' => null,
@@ -425,7 +460,7 @@ class BillParseService
         // 2. Father / Relative Name:
         if (preg_match('/\n([A-Z0-9\s\.\,\/\-]+?)\s*[\t\s]+,e vkj ;q/u', $text, $mFather)) {
             $rawFather = trim(preg_replace('/[^A-Za-z0-9\s\.\,\/\-\&\(\)]/u', '', $mFather[1]));
-            if (!empty($rawFather) && !str_contains($rawFather, 'VILL') && strlen($rawFather) >= 3) {
+            if (! empty($rawFather) && ! str_contains($rawFather, 'VILL') && strlen($rawFather) >= 3) {
                 $data['father_name'] = preg_replace('/\s+/', ' ', $rawFather);
             }
         }
@@ -490,7 +525,37 @@ class BillParseService
 
         // 10. MRU:
         if (preg_match('/,e vkj ;q\s*\n\s*([A-Za-z0-9_\-\s]+?)(?=\n\d|\n[A-Z]|\nrd)/u', $text, $m)) {
-            $data['mru'] = trim(str_replace(["\r", "\n", " "], "", $m[1]));
+            $data['mru'] = trim(str_replace(["\r", "\n", ' '], '', $m[1]));
+        } elseif (preg_match('/,e vkj ;q\s+([A-Za-z0-9_\-]+)/u', $text, $m)) {
+            $data['mru'] = trim($m[1]);
+        }
+
+        // 11. Historical Monthly Consumption Table ([kir fooj.kh):
+        $data['consumption_history'] = [];
+        if (preg_match('/\[kir fooj\.kh(.*?)(?:lHkh|\z)/us', $text, $sec)) {
+            if (preg_match_all('/([A-Z]{3})\/(\d{2})\s+(\d+)(?:\(([A-Za-z0-9]+)(?:,\s*[A-Za-z0-9]+)?\))?/i', $sec[1], $histMatches, PREG_SET_ORDER)) {
+                $monthMap = [
+                    'JAN' => 1, 'FEB' => 2, 'MAR' => 3, 'APR' => 4, 'MAY' => 5, 'JUN' => 6,
+                    'JUL' => 7, 'AUG' => 8, 'SEP' => 9, 'OCT' => 10, 'NOV' => 11, 'DEC' => 12,
+                ];
+                foreach ($histMatches as $hm) {
+                    $mShort = strtoupper($hm[1]);
+                    $mNum = $monthMap[$mShort] ?? null;
+                    $yNum = 2000 + (int) $hm[2];
+                    $units = (int) $hm[3];
+                    $basis = ! empty($hm[4]) ? strtoupper($hm[4]) : 'OK';
+
+                    if ($mNum && $units >= 0) {
+                        $data['consumption_history'][] = [
+                            'month' => $mNum,
+                            'year' => $yNum,
+                            'month_label' => "{$mShort}, {$yNum}",
+                            'units' => $units,
+                            'basis' => $basis,
+                        ];
+                    }
+                }
+            }
         }
 
         return $data;

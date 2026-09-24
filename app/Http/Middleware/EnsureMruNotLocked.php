@@ -19,7 +19,7 @@ class EnsureMruNotLocked
     {
         $mru = $request->route('mru') ?? $request->route('mru_id') ?? $request->input('mru_id');
 
-        if (!$mru) {
+        if (! $mru) {
             return $next($request);
         }
 
@@ -33,7 +33,7 @@ class EnsureMruNotLocked
 
             $allowedActions = ['view', 'read', 'rename', 'delete', 'add_consumer', 'remove_consumer'];
 
-            if (!in_array(strtolower($actionName), $allowedActions, true)) {
+            if (! in_array(strtolower($actionName), $allowedActions, true)) {
                 if ($request->wantsJson() || $request->ajax()) {
                     return response()->json([
                         'error' => 'mru_locked',
@@ -68,7 +68,7 @@ class EnsureMruNotLocked
         }
 
         if ($method === 'PUT' || $method === 'PATCH') {
-            if (str_contains($routeName, 'consumer') && !str_contains($routeName, 'add') && !str_contains($routeName, 'remove')) {
+            if (str_contains($routeName, 'consumer') && ! str_contains($routeName, 'add') && ! str_contains($routeName, 'remove')) {
                 return 'modify_consumer_details';
             }
             if (str_contains($routeName, 'rename') || str_contains($routeName, 'update')) {

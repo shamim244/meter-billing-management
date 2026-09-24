@@ -2,22 +2,13 @@
 
 namespace Tests\Feature;
 
-use App\Enums\DebitResult;
 use App\Events\PlanDowngradedEvent;
 use App\Events\PlanUpgradedEvent;
 use App\Events\RenewalFailedInsufficientBalanceEvent;
-use App\Events\SubscriptionEnteredGracePeriodEvent;
-use App\Events\SubscriptionReactivatedEvent;
 use App\Events\SubscriptionRenewalDueEvent;
 use App\Events\SubscriptionSuspendedEvent;
-use App\Models\AgentSubscription;
-use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\Plan;
-use App\Models\PlanDuration;
-use App\Models\PlanUpgradeLog;
-use App\Models\RenewalAttempt;
-use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\Billing\PlanChangeService;
 use App\Services\Billing\SubscriptionLifecycleService;
@@ -25,6 +16,7 @@ use App\Services\Plan\MruQuotaService;
 use App\Services\Plan\PlanService;
 use App\Services\Plan\RenewalService;
 use App\Services\Wallet\WalletService;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use InvalidArgumentException;
@@ -35,18 +27,25 @@ class BillingSubscriptionSystemTest extends TestCase
     use RefreshDatabase;
 
     protected User $admin;
+
     protected User $agent;
+
     protected PlanService $planService;
+
     protected SubscriptionLifecycleService $lifecycleService;
+
     protected PlanChangeService $planChangeService;
+
     protected RenewalService $renewalService;
+
     protected MruQuotaService $mruQuotaService;
+
     protected WalletService $walletService;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
 
         $this->admin = User::where('email', 'admin@nbpdcl-saas.com')->first();
         $this->agent = User::where('email', 'test@example.com')->first();

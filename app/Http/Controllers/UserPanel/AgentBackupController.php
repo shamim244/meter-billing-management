@@ -8,7 +8,6 @@ use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Services\Backup\AgentWorkspaceExportService;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class AgentBackupController extends Controller
 {
@@ -39,12 +38,12 @@ class AgentBackupController extends Controller
     public function download(Request $request)
     {
         $user = $request->user();
-        $tempZip = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'workspace_export_' . $user->id . '_' . time() . '.zip';
+        $tempZip = sys_get_temp_dir().DIRECTORY_SEPARATOR.'workspace_export_'.$user->id.'_'.time().'.zip';
 
         try {
             $this->exportService->export($user, $tempZip);
 
-            $filename = 'nbpdcl_workspace_' . preg_replace('/[^a-zA-Z0-9_-]/', '_', $user->name) . '_' . date('Ymd_His') . '.zip';
+            $filename = 'nbpdcl_workspace_'.preg_replace('/[^a-zA-Z0-9_-]/', '_', $user->name).'_'.date('Ymd_His').'.zip';
 
             return response()->download($tempZip, $filename, [
                 'Content-Type' => 'application/zip',
@@ -52,7 +51,8 @@ class AgentBackupController extends Controller
             ])->deleteFileAfterSend(true);
         } catch (\Throwable $e) {
             @unlink($tempZip);
-            return back()->with('error', 'Export generation failed: ' . $e->getMessage());
+
+            return back()->with('error', 'Export generation failed: '.$e->getMessage());
         }
     }
 }

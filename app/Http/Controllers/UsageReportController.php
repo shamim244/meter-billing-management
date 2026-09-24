@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Services;
+
 namespace App\Http\Controllers;
 
 use App\Models\Mru;
@@ -16,8 +17,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class UsageReportController extends Controller
 {
     protected UsageSummaryService $summaryService;
+
     protected StatusTagReportService $statusTagService;
+
     protected QuotaUsageReportService $quotaService;
+
     protected BillingBasisTrackingService $basisService;
 
     public function __construct(

@@ -18,7 +18,9 @@ use Illuminate\View\View;
 class ProcessingController extends Controller
 {
     protected BillDownloadService $downloadService;
+
     protected BillParseService $parseService;
+
     protected ConsumerQuotaService $consumerQuotaService;
 
     public function __construct(
@@ -59,16 +61,16 @@ class ProcessingController extends Controller
                     'key' => "{$p->billing_month}_{$p->billing_year}",
                     'month' => (int) $p->billing_month,
                     'year' => (int) $p->billing_year,
-                    'label' => date('M, Y', mktime(0, 0, 0, (int)$p->billing_month, 1, (int)$p->billing_year)),
+                    'label' => date('M, Y', mktime(0, 0, 0, (int) $p->billing_month, 1, (int) $p->billing_year)),
                 ];
             })->values()->toArray();
 
-            $mruPeriodsMap[(string)$m->id] = $periodsForMru;
+            $mruPeriodsMap[(string) $m->id] = $periodsForMru;
         }
 
         // Auto-select latest existing cycle for selected MRU if not specified in request
-        if (!$request->has('month') && !empty($mruPeriodsMap[(string)$selectedMruId])) {
-            $latestPeriod = $mruPeriodsMap[(string)$selectedMruId][0];
+        if (! $request->has('month') && ! empty($mruPeriodsMap[(string) $selectedMruId])) {
+            $latestPeriod = $mruPeriodsMap[(string) $selectedMruId][0];
             $selectedMonth = $latestPeriod['month'];
             $selectedYear = $latestPeriod['year'];
         }
@@ -93,7 +95,7 @@ class ProcessingController extends Controller
         $year = (int) $request->get('year', now()->year);
 
         $consumerQuery = ConsumerAccount::where('user_id', $userId)->where('status', 'active');
-        if (!empty($mruId)) {
+        if (! empty($mruId)) {
             $consumerQuery->where('mru_id', $mruId);
         }
         $totalCas = $consumerQuery->count();
@@ -101,7 +103,7 @@ class ProcessingController extends Controller
         $billQuery = BillRecord::where('user_id', $userId)
             ->where('billing_month', $month)
             ->where('billing_year', $year);
-        if (!empty($mruId)) {
+        if (! empty($mruId)) {
             $billQuery->where('mru_id', $mruId);
         }
 
@@ -114,12 +116,12 @@ class ProcessingController extends Controller
         $pendingParse = max(0, $downloadedCount - $parsedCount);
 
         $failedBills = $records->filter(function ($r) {
-            return $r->download_status === 'failed' || (!empty($r->error_message) && $r->download_status !== 'downloaded');
+            return $r->download_status === 'failed' || (! empty($r->error_message) && $r->download_status !== 'downloaded');
         })->map(function ($r) {
             return [
                 'id' => $r->id,
                 'ca_number' => $r->ca_number,
-                'consumer_name' => $r->consumer_name ?: 'Consumer ' . $r->ca_number,
+                'consumer_name' => $r->consumer_name ?: 'Consumer '.$r->ca_number,
                 'error_message' => $r->error_message ?: 'Download failed or connection timeout',
                 'download_status' => $r->download_status,
             ];
@@ -141,7 +143,7 @@ class ProcessingController extends Controller
                 'download_percent' => $downloadPercent,
                 'parse_percent' => $parsePercent,
                 'failed_bills' => $failedBills,
-            ]
+            ],
         ]);
     }
 
@@ -166,11 +168,11 @@ class ProcessingController extends Controller
         $mode = $request->input('mode', 'all');
         $explicitCas = $request->input('ca_numbers');
 
-        if (!empty($explicitCas) && is_array($explicitCas)) {
+        if (! empty($explicitCas) && is_array($explicitCas)) {
             $targetCas = array_values(array_unique(array_filter($explicitCas)));
         } else {
             $query = ConsumerAccount::where('user_id', $userId)->where('status', 'active');
-            if (!empty($mruId)) {
+            if (! empty($mruId)) {
                 $query->where('mru_id', $mruId);
             }
             $allCas = $query->pluck('ca_number')->toArray();
@@ -276,7 +278,7 @@ class ProcessingController extends Controller
         $logPath = storage_path("app/users/{$userId}/process.log");
 
         if (File::exists($logPath)) {
-            File::put($logPath, "");
+            File::put($logPath, '');
         }
 
         return response()->json([
@@ -317,7 +319,7 @@ class ProcessingController extends Controller
             payOverage: $payOverage
         );
 
-        if (!$result['allowed']) {
+        if (! $result['allowed']) {
             return response()->json([
                 'success' => false,
                 'requires_overage' => $result['requires_payment'] ?? false,
@@ -347,7 +349,7 @@ class ProcessingController extends Controller
         $payOverage = $request->boolean('pay_overage', false);
         $result = $this->consumerQuotaService->syncCycleConsumerCount($cycle, $payOverage);
 
-        if (!$result['synced']) {
+        if (! $result['synced']) {
             return response()->json([
                 'success' => false,
                 'requires_overage' => $result['requires_payment'] ?? false,

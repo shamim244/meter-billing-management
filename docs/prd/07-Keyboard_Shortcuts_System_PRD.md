@@ -47,8 +47,8 @@ The system governs 10 standard audit and navigation actions:
 | `submit_ok` | `Enter` | `Ctrl+Enter` | Saves bill as Submit / OK and auto-advances | Card Review |
 | `mark_doubt` | `2` | `Alt+2` | Flags bill as Doubt / Re-check | Card Review |
 | `mark_critical` | `3` | `Alt+3` | Flags bill as Critical / Issue | Card Review |
-| `next_card` | `ArrowDown` | `Alt+Down` | Navigates to the next consumer card | Card Review |
-| `prev_card` | `ArrowUp` | `Alt+Up` | Navigates to the previous consumer card | Card Review |
+| `next_card` | `ArrowRight` | `Alt+Right` | Navigates to the next consumer card | Card Review |
+| `prev_card` | `ArrowLeft` | `Alt+Left` | Navigates to the previous consumer card | Card Review |
 | `open_remark` | `m` | `Alt+M` | Opens and focuses the Remark note textarea | Card Review |
 | `exit_box` | `Escape` | `Escape` | Unfocuses input box, returning to review navigation | Input Editing |
 
@@ -141,8 +141,8 @@ Stored in `users.shortcuts` as JSON:
   "submit_ok": "Ctrl+Enter",
   "mark_doubt": "2",
   "mark_critical": "3",
-  "next_card": "ArrowDown",
-  "prev_card": "ArrowUp",
+  "next_card": "ArrowRight",
+  "prev_card": "ArrowLeft",
   "open_remark": "Shift+M",
   "exit_box": "Escape"
 }

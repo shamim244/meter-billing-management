@@ -14,7 +14,9 @@ use Illuminate\View\View;
 class AdminUsageReportController extends Controller
 {
     protected UsageSummaryService $summaryService;
+
     protected StatusTagReportService $statusTagService;
+
     protected QuotaUsageReportService $quotaService;
 
     public function __construct(
@@ -49,7 +51,7 @@ class AdminUsageReportController extends Controller
         $year = (int) $request->get('year', now()->year);
         $agentId = $request->filled('agent_id') ? (int) $request->get('agent_id') : null;
 
-        $agents = User::whereDoesntHave('roles', fn($q) => $q->where('name', 'admin'))
+        $agents = User::whereDoesntHave('roles', fn ($q) => $q->where('name', 'admin'))
             ->orderBy('name')
             ->get();
 
@@ -73,7 +75,7 @@ class AdminUsageReportController extends Controller
                 $tb = $this->statusTagService->getMonthlyTagBreakdown($agent->id, $month, $year);
                 foreach ($tb['tags'] as $tagItem) {
                     $c = $tagItem['code'];
-                    if (!isset($tagMap[$c])) {
+                    if (! isset($tagMap[$c])) {
                         $tagMap[$c] = $tagItem;
                         $tagMap[$c]['count'] = 0;
                     }
@@ -138,7 +140,7 @@ class AdminUsageReportController extends Controller
 
         $flagged = $query->orderBy('consecutive_count', 'desc')->paginate(30);
 
-        $agents = User::whereDoesntHave('roles', fn($q) => $q->where('name', 'admin'))
+        $agents = User::whereDoesntHave('roles', fn ($q) => $q->where('name', 'admin'))
             ->orderBy('name')
             ->get();
 

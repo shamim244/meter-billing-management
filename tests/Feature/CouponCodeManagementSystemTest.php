@@ -7,13 +7,10 @@ use App\Enums\PaymentPurpose;
 use App\Enums\PaymentStatus;
 use App\Events\PaymentSuccessEvent;
 use App\Models\CouponCode;
-use App\Models\CouponRedemption;
 use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\PlanDuration;
 use App\Models\User;
-use App\Services\Coupon\CouponRedemptionService;
-use App\Services\Coupon\CouponService;
 use App\Services\Wallet\WalletService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
@@ -24,9 +21,13 @@ class CouponCodeManagementSystemTest extends TestCase
     use RefreshDatabase;
 
     protected User $admin;
+
     protected User $agent;
+
     protected Plan $plan;
+
     protected PlanDuration $duration;
+
     protected WalletService $walletService;
 
     protected function setUp(): void
@@ -174,16 +175,16 @@ class CouponCodeManagementSystemTest extends TestCase
         ]);
 
         $response = $this->actingAs($this->agent)->get(
-            route('subscription.quote', ['plan' => $this->plan->id, 'duration' => $this->duration->id]) . '?coupon_code=EXTRA10'
+            route('subscription.quote', ['plan' => $this->plan->id, 'duration' => $this->duration->id]).'?coupon_code=EXTRA10'
         );
 
         $response->assertStatus(200);
         $data = $response->json();
 
         $this->assertTrue($data['success']);
-        $this->assertEquals(2700.0, (float)$data['duration']['final_price']);
-        $this->assertEquals(270.0, (float)$data['coupon']['discount_amount']);
-        $this->assertEquals(2430.0, (float)$data['final_amount']);
+        $this->assertEquals(2700.0, (float) $data['duration']['final_price']);
+        $this->assertEquals(270.0, (float) $data['coupon']['discount_amount']);
+        $this->assertEquals(2430.0, (float) $data['final_amount']);
     }
 
     public function test_coupon_plan_restriction_rejects_other_plans(): void
@@ -217,7 +218,7 @@ class CouponCodeManagementSystemTest extends TestCase
         ]);
 
         $response = $this->actingAs($this->agent)->get(
-            route('subscription.quote', ['plan' => $otherPlan->id, 'duration' => $otherDuration->id]) . '?coupon_code=PROONLY'
+            route('subscription.quote', ['plan' => $otherPlan->id, 'duration' => $otherDuration->id]).'?coupon_code=PROONLY'
         );
 
         $response->assertStatus(200);

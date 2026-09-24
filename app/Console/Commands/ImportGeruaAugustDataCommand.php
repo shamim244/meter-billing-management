@@ -6,7 +6,6 @@ use App\Models\BillRecord;
 use App\Models\BillStatus;
 use App\Models\ConsumerAccount;
 use App\Models\User;
-use App\Models\Mru;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -39,22 +38,25 @@ class ImportGeruaAugustDataCommand extends Command
         $year = (int) $this->option('year');
 
         $user = User::where('email', $email)->first();
-        if (!$user) {
+        if (! $user) {
             $this->error("User not found for email: {$email}");
+
             return Command::FAILURE;
         }
 
         $baseDir = base_path('.agents/docs/Migrate/Gerua-0477');
-        $billDataPath = $baseDir . '/bill_data.json';
-        $statusesPath = $baseDir . '/statuses.json';
+        $billDataPath = $baseDir.'/bill_data.json';
+        $statusesPath = $baseDir.'/statuses.json';
 
-        if (!file_exists($billDataPath)) {
+        if (! file_exists($billDataPath)) {
             $this->error("bill_data.json not found at: {$billDataPath}");
+
             return Command::FAILURE;
         }
 
-        if (!file_exists($statusesPath)) {
+        if (! file_exists($statusesPath)) {
             $this->error("statuses.json not found at: {$statusesPath}");
+
             return Command::FAILURE;
         }
 
@@ -62,8 +64,8 @@ class ImportGeruaAugustDataCommand extends Command
         $statusesData = json_decode(file_get_contents($statusesPath), true);
 
         $this->info("Starting Gerua August migration for User #{$user->id} ({$user->email})...");
-        $this->info("  • bill_data.json records: " . count($billData));
-        $this->info("  • statuses.json records: " . count($statusesData));
+        $this->info('  • bill_data.json records: '.count($billData));
+        $this->info('  • statuses.json records: '.count($statusesData));
 
         $workingReadingsUpdated = 0;
         $statusesUpdated = 0;
@@ -88,7 +90,7 @@ class ImportGeruaAugustDataCommand extends Command
                     $bills = BillRecord::where('user_id', $user->id)
                         ->where('ca_number', $caStr)
                         ->where('billing_month', $month)
-                        ->when($year > 0, fn($q) => $q->where('billing_year', $year))
+                        ->when($year > 0, fn ($q) => $q->where('billing_year', $year))
                         ->get();
 
                     foreach ($bills as $bill) {
@@ -120,7 +122,7 @@ class ImportGeruaAugustDataCommand extends Command
                 $bills = BillRecord::where('user_id', $user->id)
                     ->where('ca_number', $caStr)
                     ->where('billing_month', $month)
-                    ->when($year > 0, fn($q) => $q->where('billing_year', $year))
+                    ->when($year > 0, fn ($q) => $q->where('billing_year', $year))
                     ->get();
 
                 foreach ($bills as $bill) {

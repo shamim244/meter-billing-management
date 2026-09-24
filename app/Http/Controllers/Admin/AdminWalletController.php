@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\WalletAdminAdjustmentType;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\Referral\ReferralService;
 use App\Services\Wallet\WalletService;
 use Bavix\Wallet\Models\Transaction;
 use Bavix\Wallet\Models\Wallet;
@@ -27,11 +28,11 @@ class AdminWalletController extends Controller
         $query = User::role('user')->latest('id');
 
         if ($request->filled('search')) {
-            $search = '%' . $request->query('search') . '%';
+            $search = '%'.$request->query('search').'%';
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', $search)
-                  ->orWhere('email', 'like', $search)
-                  ->orWhere('phone', 'like', $search);
+                    ->orWhere('email', 'like', $search)
+                    ->orWhere('phone', 'like', $search);
             });
         }
 
@@ -88,7 +89,7 @@ class AdminWalletController extends Controller
             'adjustment_count' => $user->transactions()->where('meta->source', 'admin_adjustment')->count(),
         ];
 
-        $referralOverride = app(\App\Services\Referral\ReferralService::class)->getAdminOverride($user);
+        $referralOverride = app(ReferralService::class)->getAdminOverride($user);
 
         return view('admin.wallets.show', compact(
             'user',
@@ -129,12 +130,13 @@ class AdminWalletController extends Controller
 
             $newBalance = $this->walletService->getBalance($user);
             $actionWord = $type === WalletAdminAdjustmentType::ADD ? 'credited to' : 'deducted from';
+
             return redirect()->route('admin.wallets.show', $user->id)->with(
                 'success',
-                "Successfully {$actionWord} {$user->name}'s wallet by ₹" . number_format($amount, 2) . ". New balance: ₹" . number_format($newBalance, 2)
+                "Successfully {$actionWord} {$user->name}'s wallet by ₹".number_format($amount, 2).'. New balance: ₹'.number_format($newBalance, 2)
             );
         } catch (\Throwable $e) {
-            return redirect()->route('admin.wallets.show', $user->id)->withInput()->with('error', "Adjustment failed: " . $e->getMessage());
+            return redirect()->route('admin.wallets.show', $user->id)->withInput()->with('error', 'Adjustment failed: '.$e->getMessage());
         }
     }
 
@@ -147,12 +149,14 @@ class AdminWalletController extends Controller
 
         if ($user->isWalletFrozen()) {
             $this->walletService->unfreeze($user, $admin, $request->input('reason', 'Unfrozen by Admin.'));
+
             return redirect()->route('admin.wallets.show', $user->id)->with('success', "Wallet for {$user->name} has been unfrozen successfully.");
         } else {
             $request->validate([
                 'reason' => 'required|string|min:3|max:1000',
             ]);
             $this->walletService->freeze($user, $admin, trim($request->input('reason')));
+
             return redirect()->route('admin.wallets.show', $user->id)->with('success', "Wallet for {$user->name} has been frozen. Debits are now blocked.");
         }
     }
@@ -166,7 +170,7 @@ class AdminWalletController extends Controller
 
         $headers = [
             'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="agent_' . $user->id . '_wallet_ledger_' . date('Y-m-d_His') . '.csv"',
+            'Content-Disposition' => 'attachment; filename="agent_'.$user->id.'_wallet_ledger_'.date('Y-m-d_His').'.csv"',
             'Pragma' => 'no-cache',
             'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
             'Expires' => '0',

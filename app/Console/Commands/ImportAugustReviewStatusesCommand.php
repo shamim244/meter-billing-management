@@ -35,20 +35,22 @@ class ImportAugustReviewStatusesCommand extends Command
         $month = (int) $this->option('month');
         $year = (int) $this->option('year');
 
-        if (!file_exists($filePath)) {
+        if (! file_exists($filePath)) {
             $this->error("JSON status file not found at: {$filePath}");
+
             return Command::FAILURE;
         }
 
         $rawJson = file_get_contents($filePath);
         $data = json_decode($rawJson, true);
 
-        if (!is_array($data) || empty($data)) {
+        if (! is_array($data) || empty($data)) {
             $this->error("Invalid or empty JSON data in: {$filePath}");
+
             return Command::FAILURE;
         }
 
-        $this->info("Importing " . count($data) . " review statuses for Month: {$month}, Year: {$year}...");
+        $this->info('Importing '.count($data)." review statuses for Month: {$month}, Year: {$year}...");
 
         $billsUpdated = 0;
         $statusesUpdated = 0;
@@ -62,7 +64,7 @@ class ImportAugustReviewStatusesCommand extends Command
                 // 1. Find and update all matching BillRecords for this CA and month
                 $bills = BillRecord::where('ca_number', $caStr)
                     ->where('billing_month', $month)
-                    ->when($year > 0, fn($q) => $q->where('billing_year', $year))
+                    ->when($year > 0, fn ($q) => $q->where('billing_year', $year))
                     ->get();
 
                 if ($bills->isEmpty()) {
@@ -100,8 +102,8 @@ class ImportAugustReviewStatusesCommand extends Command
         $this->info("✅ Successfully updated {$billsUpdated} BillRecord(s) with August review statuses.");
         $this->info("✅ Successfully synchronized {$statusesUpdated} BillStatus table record(s).");
 
-        if (!empty($missingBills)) {
-            $this->warn("⚠️ " . count($missingBills) . " CAs had no August BillRecord: " . implode(', ', $missingBills));
+        if (! empty($missingBills)) {
+            $this->warn('⚠️ '.count($missingBills).' CAs had no August BillRecord: '.implode(', ', $missingBills));
         }
 
         return Command::SUCCESS;

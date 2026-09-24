@@ -5,11 +5,8 @@ namespace Tests\Feature;
 use App\Enums\PaymentMode;
 use App\Enums\PaymentPurpose;
 use App\Enums\PaymentStatus;
-use App\Models\AgentSubscription;
-use App\Models\BillingBasisHistory;
 use App\Models\BillingCycle;
 use App\Models\BillRecord;
-use App\Models\BillStatus;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\Notification;
@@ -23,7 +20,7 @@ use App\Services\Billing\SubscriptionLifecycleService;
 use App\Services\BillingBasisTrackingService;
 use App\Services\Notifications\NotificationDispatchService;
 use App\Services\Notifications\NotificationTemplateService;
-use App\Services\Payment\OnlinePaymentGatewayService;
+use App\Services\Payment\PaymentVerificationService;
 use App\Services\Plan\ConsumerQuotaService;
 use App\Services\Plan\MruQuotaService;
 use App\Services\Plan\PlanService;
@@ -33,8 +30,9 @@ use App\Services\StatusTagReportService;
 use App\Services\UsageSummaryService;
 use App\Services\Wallet\WalletService;
 use Carbon\Carbon;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class EndToEndCrossSystemIntegrationTest extends TestCase
@@ -42,22 +40,32 @@ class EndToEndCrossSystemIntegrationTest extends TestCase
     use RefreshDatabase;
 
     protected WalletService $walletService;
+
     protected PlanService $planService;
+
     protected MruQuotaService $mruQuotaService;
+
     protected ConsumerQuotaService $consumerQuotaService;
+
     protected SubscriptionLifecycleService $lifecycleService;
+
     protected PlanChangeService $planChangeService;
+
     protected RenewalService $renewalService;
+
     protected StatusTagReportService $statusTagService;
+
     protected QuotaUsageReportService $quotaReportService;
+
     protected UsageSummaryService $usageSummaryService;
+
     protected BillingBasisTrackingService $billingBasisService;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
         app(NotificationTemplateService::class)->resetToDefaults();
 
         $this->walletService = app(WalletService::class);
@@ -158,7 +166,7 @@ class EndToEndCrossSystemIntegrationTest extends TestCase
 
         // 2. Top up wallet via simulated payment gateway (₹2,000.00)
         $admin = User::factory()->create(['status' => 'active']);
-        $admin->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']));
+        $admin->assignRole(Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']));
 
         $payment = Payment::create([
             'user_id' => $user->id,
@@ -170,7 +178,7 @@ class EndToEndCrossSystemIntegrationTest extends TestCase
             'gateway_order_id' => 'order_123',
             'gateway_payment_id' => 'pay_123',
         ]);
-        app(\App\Services\Payment\PaymentVerificationService::class)->approve($payment, $admin);
+        app(PaymentVerificationService::class)->approve($payment, $admin);
 
         // Confirm wallet credited and notification fired
         $user->refresh();
@@ -250,7 +258,7 @@ class EndToEndCrossSystemIntegrationTest extends TestCase
             ConsumerAccount::create([
                 'user_id' => $user->id,
                 'mru_id' => $mru1->id,
-                'ca_number' => '102300' . str_pad((string)$i, 6, '0', STR_PAD_LEFT),
+                'ca_number' => '102300'.str_pad((string) $i, 6, '0', STR_PAD_LEFT),
                 'consumer_name' => "Consumer {$i}",
             ]);
         }

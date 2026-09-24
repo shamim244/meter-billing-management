@@ -2,14 +2,14 @@
 
 namespace Tests\Feature;
 
-use App\Models\AgentSubscription;
-use App\Models\Mru;
 use App\Models\Plan;
-use App\Models\PlanDuration;
 use App\Models\User;
+use App\Services\Plan\ConsumerQuotaService;
+use App\Services\Plan\MruQuotaService;
 use App\Services\Plan\PlanService;
 use App\Services\Wallet\WalletService;
-use Carbon\Carbon;
+use Database\Seeders\NotificationSystemSeeder;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -20,8 +20,8 @@ class SubscriptionLifecycleExtensionAndPlanChangeTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
-        $this->seed(\Database\Seeders\NotificationSystemSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
+        $this->seed(NotificationSystemSeeder::class);
     }
 
     public function test_purchasing_same_plan_again_extends_billing_end_without_wiping_remaining_days(): void
@@ -63,7 +63,7 @@ class SubscriptionLifecycleExtensionAndPlanChangeTest extends TestCase
         $activeSub = $user->fresh()->activeSubscription;
         $this->assertNotNull($activeSub);
         $this->assertEquals($sub1->id, $activeSub->id);
-        
+
         $expectedExtendedEnd = $duration->calculateBillingEnd($initialBillingEnd);
         $this->assertEquals($expectedExtendedEnd->timestamp, $activeSub->billing_end->timestamp);
 
@@ -113,7 +113,7 @@ class SubscriptionLifecycleExtensionAndPlanChangeTest extends TestCase
 
         // 1. User subscribes to 3-month Pro plan
         $proSub = app(PlanService::class)->subscribeAgent($user, $proPlan, $pro3mDuration);
-        
+
         // Simulate 30 days elapsed out of 90 days (60 days remaining: unused credit = 60/90 * 3000 = ₹2,000)
         $proSub->update([
             'billing_start' => now()->subDays(30),
@@ -247,8 +247,8 @@ class SubscriptionLifecycleExtensionAndPlanChangeTest extends TestCase
             'lifecycle_status' => 'renewal_due',
         ]);
 
-        $mruQuotaService = app(\App\Services\Plan\MruQuotaService::class);
-        $consumerQuotaService = app(\App\Services\Plan\ConsumerQuotaService::class);
+        $mruQuotaService = app(MruQuotaService::class);
+        $consumerQuotaService = app(ConsumerQuotaService::class);
 
         // Verify quota services still recognize the active subscription during renewal_due
         $activeSub = $mruQuotaService->getActiveSubscription($user);
@@ -484,7 +484,7 @@ class SubscriptionLifecycleExtensionAndPlanChangeTest extends TestCase
         $this->assertNotNull($activeSub);
         $this->assertEquals($sub1->id, $activeSub->id);
         $this->assertEquals('active', $activeSub->status);
-        
+
         $expectedNewEnd = $duration3m->calculateBillingEnd($existingEnd);
         $this->assertEquals($expectedNewEnd->timestamp, $activeSub->billing_end->timestamp);
 

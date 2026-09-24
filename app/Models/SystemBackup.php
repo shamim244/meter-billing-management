@@ -47,7 +47,8 @@ class SystemBackup extends Model
 
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
         $i = (int) floor(log($bytes, 1024));
-        return round($bytes / pow(1024, $i), 2) . ' ' . ($units[$i] ?? 'B');
+
+        return round($bytes / pow(1024, $i), 2).' '.($units[$i] ?? 'B');
     }
 
     public function existsOnDisk(): bool
@@ -61,7 +62,7 @@ class SystemBackup extends Model
 
     public function getStoragePath(): string
     {
-        return 'backups/' . $this->filename;
+        return 'backups/'.$this->filename;
     }
 
     public function isCompleted(): bool

@@ -86,7 +86,7 @@ class AdminSubscriptionController extends Controller
                 break;
         }
 
-        return back()->with('success', "Subscription state for agent '{$subscription->user?->name}' updated to " . strtoupper($targetStatus) . ".");
+        return back()->with('success', "Subscription state for agent '{$subscription->user?->name}' updated to ".strtoupper($targetStatus).'.');
     }
 
     /**

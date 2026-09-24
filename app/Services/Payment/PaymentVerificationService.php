@@ -3,6 +3,7 @@
 namespace App\Services\Payment;
 
 use App\Enums\PaymentAuditAction;
+use App\Enums\PaymentPurpose;
 use App\Enums\PaymentStatus;
 use App\Events\ManualPaymentApprovedEvent;
 use App\Events\ManualPaymentRejectedEvent;
@@ -10,7 +11,9 @@ use App\Events\PaymentSuccessEvent;
 use App\Models\Payment;
 use App\Models\PaymentAuditLog;
 use App\Models\User;
+use App\Services\Referral\ReferralService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class PaymentVerificationService
 {
@@ -88,7 +91,7 @@ class PaymentVerificationService
     public function refund(Payment $payment, User $admin, string $reason): Payment
     {
         if ($payment->status !== PaymentStatus::SUCCESS) {
-            throw new \InvalidArgumentException("Only successful payments can be refunded.");
+            throw new \InvalidArgumentException('Only successful payments can be refunded.');
         }
 
         $cleanReason = trim($reason);
@@ -107,15 +110,15 @@ class PaymentVerificationService
 
             // Refer & Earn: Clawback any pending or paid referral reward tied to this payment
             try {
-                $refType = $payment->purpose === \App\Enums\PaymentPurpose::WALLET_TOPUP ? 'topup' : 'subscription_payment';
-                $refId = $payment->purpose === \App\Enums\PaymentPurpose::WALLET_TOPUP ? (string) $payment->id : 'payment_' . $payment->id;
-                app(\App\Services\Referral\ReferralService::class)->handleClawback(
+                $refType = $payment->purpose === PaymentPurpose::WALLET_TOPUP ? 'topup' : 'subscription_payment';
+                $refId = $payment->purpose === PaymentPurpose::WALLET_TOPUP ? (string) $payment->id : 'payment_'.$payment->id;
+                app(ReferralService::class)->handleClawback(
                     paymentReferenceType: $refType,
                     paymentReferenceId: $refId,
                     reason: "Payment #{$payment->id} refunded: {$cleanReason}"
                 );
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error("[PaymentRefund] Referral clawback error for payment #{$payment->id}: " . $e->getMessage());
+                Log::error("[PaymentRefund] Referral clawback error for payment #{$payment->id}: ".$e->getMessage());
             }
 
             return $payment->fresh();

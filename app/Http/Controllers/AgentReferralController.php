@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use App\Services\Referral\ReferralService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,7 +20,7 @@ class AgentReferralController extends Controller
      */
     public function index(): View
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
         $stats = $this->referralService->getAgentReferralStats($user);
 
@@ -31,7 +32,7 @@ class AgentReferralController extends Controller
      */
     public function regenerate(Request $request): RedirectResponse
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
 
         $newCoupon = $this->referralService->regenerateCode($user);

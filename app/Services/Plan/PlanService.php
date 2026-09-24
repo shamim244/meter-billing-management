@@ -29,11 +29,11 @@ class PlanService
                 'included_consumers' => (int) ($data['included_consumers'] ?? 0),
                 'extra_mru_rate' => (float) ($data['extra_mru_rate'] ?? 0.0),
                 'extra_consumer_rate' => (float) ($data['extra_consumer_rate'] ?? 0.0),
-                'grace_period_days' => array_key_exists('grace_period_days', $data) ? ($data['grace_period_days'] !== null ? (int)$data['grace_period_days'] : null) : null,
-                'is_active' => array_key_exists('is_active', $data) ? (bool)$data['is_active'] : true,
+                'grace_period_days' => array_key_exists('grace_period_days', $data) ? ($data['grace_period_days'] !== null ? (int) $data['grace_period_days'] : null) : null,
+                'is_active' => array_key_exists('is_active', $data) ? (bool) $data['is_active'] : true,
             ]);
 
-            $this->syncDurations($plan, $durations, (float)($data['base_price'] ?? 0.0));
+            $this->syncDurations($plan, $durations, (float) ($data['base_price'] ?? 0.0));
 
             event(new PlanCreatedEvent($plan));
 
@@ -50,15 +50,15 @@ class PlanService
             $plan->update([
                 'name' => trim($data['name'] ?? $plan->name),
                 'description' => array_key_exists('description', $data) ? $data['description'] : $plan->description,
-                'included_mrus' => isset($data['included_mrus']) ? (int)$data['included_mrus'] : $plan->included_mrus,
-                'included_consumers' => isset($data['included_consumers']) ? (int)$data['included_consumers'] : $plan->included_consumers,
-                'extra_mru_rate' => isset($data['extra_mru_rate']) ? (float)$data['extra_mru_rate'] : $plan->extra_mru_rate,
-                'extra_consumer_rate' => isset($data['extra_consumer_rate']) ? (float)$data['extra_consumer_rate'] : $plan->extra_consumer_rate,
-                'grace_period_days' => array_key_exists('grace_period_days', $data) ? ($data['grace_period_days'] !== null ? (int)$data['grace_period_days'] : null) : $plan->grace_period_days,
-                'is_active' => array_key_exists('is_active', $data) ? (bool)$data['is_active'] : $plan->is_active,
+                'included_mrus' => isset($data['included_mrus']) ? (int) $data['included_mrus'] : $plan->included_mrus,
+                'included_consumers' => isset($data['included_consumers']) ? (int) $data['included_consumers'] : $plan->included_consumers,
+                'extra_mru_rate' => isset($data['extra_mru_rate']) ? (float) $data['extra_mru_rate'] : $plan->extra_mru_rate,
+                'extra_consumer_rate' => isset($data['extra_consumer_rate']) ? (float) $data['extra_consumer_rate'] : $plan->extra_consumer_rate,
+                'grace_period_days' => array_key_exists('grace_period_days', $data) ? ($data['grace_period_days'] !== null ? (int) $data['grace_period_days'] : null) : $plan->grace_period_days,
+                'is_active' => array_key_exists('is_active', $data) ? (bool) $data['is_active'] : $plan->is_active,
             ]);
 
-            if (!empty($durations)) {
+            if (! empty($durations)) {
                 $basePrice = (float) ($data['base_price'] ?? 0.0);
                 $this->syncDurations($plan, $durations, $basePrice);
             }
@@ -78,6 +78,7 @@ class PlanService
         if ($result) {
             event(new PlanDeletedEvent($plan, false));
         }
+
         return (bool) $result;
     }
 
@@ -105,7 +106,7 @@ class PlanService
                     foreach ($subscriptions as $sub) {
                         $this->migrateAgent($sub->user, $targetPlan, $sub->duration_months);
                     }
-                } elseif (!$force) {
+                } elseif (! $force) {
                     throw new InvalidArgumentException("Cannot force delete plan with {$activeSubscribersCount} active subscribers without a migration target plan or explicit force confirmation.");
                 }
             }
@@ -127,7 +128,7 @@ class PlanService
         return DB::transaction(function () use ($user, $plan, $duration) {
             $durationValue = $duration->duration_value ?: $duration->duration_months ?: 1;
             $durationUnit = $duration->duration_unit ?: 'month';
-            $durationMonths = $durationUnit === 'month' ? $durationValue : max(1, (int)ceil($durationValue / 30));
+            $durationMonths = $durationUnit === 'month' ? $durationValue : max(1, (int) ceil($durationValue / 30));
 
             // Check if user has an existing active subscription to the SAME plan (including renewal_due and grace_period)
             $existingActiveSub = $user->subscriptions()
@@ -155,6 +156,8 @@ class PlanService
                     'suspended_at' => null,
                     'grace_period_ends_at' => null,
                 ]);
+
+                $user->update(['plan_tier' => strtolower($plan->name)]);
 
                 event(new AgentSubscribedEvent($existingActiveSub->fresh()));
 
@@ -186,6 +189,8 @@ class PlanService
                 'lifecycle_status' => 'active',
             ]);
 
+            $user->update(['plan_tier' => strtolower($plan->name)]);
+
             event(new AgentSubscribedEvent($subscription));
 
             return $subscription;
@@ -206,7 +211,7 @@ class PlanService
                 ->where('duration_value', $durationValue)
                 ->first();
 
-            if (!$duration) {
+            if (! $duration) {
                 // Fallback search by duration_months or persist a valid default duration
                 $duration = $targetPlan->durations()
                     ->where('duration_months', $durationValue)
@@ -229,7 +234,7 @@ class PlanService
             $end = $duration->calculateBillingEnd($start);
             $val = $duration->duration_value ?: $duration->duration_months ?: 1;
             $unit = $duration->duration_unit ?: 'month';
-            $months = $unit === 'month' ? $val : max(1, (int)ceil($val / 30));
+            $months = $unit === 'month' ? $val : max(1, (int) ceil($val / 30));
 
             $newSubscription = AgentSubscription::create([
                 'user_id' => $user->id,
@@ -246,6 +251,8 @@ class PlanService
                 'billing_end' => $end,
                 'status' => 'active',
             ]);
+
+            $user->update(['plan_tier' => strtolower($targetPlan->name)]);
 
             event(new AgentPlanMigratedEvent($newSubscription, $oldPlan));
 
@@ -274,9 +281,11 @@ class PlanService
         foreach ($durations as $d) {
             $unit = in_array($d['duration_unit'] ?? '', ['day', 'month']) ? $d['duration_unit'] : 'month';
             $val = (int) ($d['duration_value'] ?? $d['duration_months'] ?? 1);
-            if ($val <= 0) $val = 1;
+            if ($val <= 0) {
+                $val = 1;
+            }
 
-            $months = $unit === 'month' ? $val : max(1, (int)ceil($val / 30));
+            $months = $unit === 'month' ? $val : max(1, (int) ceil($val / 30));
             $discount = (float) ($d['discount_percent'] ?? 0.0);
 
             if (isset($d['final_price']) && $d['final_price'] !== '') {
@@ -289,15 +298,15 @@ class PlanService
                 }
             }
 
-            $isActive = array_key_exists('is_active', $d) ? (bool)$d['is_active'] : true;
-            $name = !empty($d['name']) ? trim($d['name']) : null;
+            $isActive = array_key_exists('is_active', $d) ? (bool) $d['is_active'] : true;
+            $name = ! empty($d['name']) ? trim($d['name']) : null;
 
             // Search by id if passed, or by (plan_id, duration_unit, duration_value)
             $existing = null;
-            if (!empty($d['id'])) {
+            if (! empty($d['id'])) {
                 $existing = PlanDuration::where('plan_id', $plan->id)->where('id', $d['id'])->first();
             }
-            if (!$existing) {
+            if (! $existing) {
                 $existing = PlanDuration::where('plan_id', $plan->id)
                     ->where('duration_unit', $unit)
                     ->where('duration_value', $val)
@@ -312,8 +321,8 @@ class PlanService
                     'name' => $name,
                     'discount_percent' => $discount,
                     'final_price' => max(0.0, $finalPrice),
-                    'extra_mru_rate' => !empty($d['extra_mru_rate']) ? (float)$d['extra_mru_rate'] : null,
-                    'extra_consumer_rate' => !empty($d['extra_consumer_rate']) ? (float)$d['extra_consumer_rate'] : null,
+                    'extra_mru_rate' => ! empty($d['extra_mru_rate']) ? (float) $d['extra_mru_rate'] : null,
+                    'extra_consumer_rate' => ! empty($d['extra_consumer_rate']) ? (float) $d['extra_consumer_rate'] : null,
                     'is_active' => $isActive,
                 ]);
                 $processedIds[] = $existing->id;
@@ -326,8 +335,8 @@ class PlanService
                     'name' => $name,
                     'discount_percent' => $discount,
                     'final_price' => max(0.0, $finalPrice),
-                    'extra_mru_rate' => !empty($d['extra_mru_rate']) ? (float)$d['extra_mru_rate'] : null,
-                    'extra_consumer_rate' => !empty($d['extra_consumer_rate']) ? (float)$d['extra_consumer_rate'] : null,
+                    'extra_mru_rate' => ! empty($d['extra_mru_rate']) ? (float) $d['extra_mru_rate'] : null,
+                    'extra_consumer_rate' => ! empty($d['extra_consumer_rate']) ? (float) $d['extra_consumer_rate'] : null,
                     'is_active' => $isActive,
                 ]);
                 $processedIds[] = $created->id;
@@ -335,7 +344,7 @@ class PlanService
         }
 
         // Delete any duration rows that were explicitly removed by the admin
-        if (!empty($processedIds)) {
+        if (! empty($processedIds)) {
             PlanDuration::where('plan_id', $plan->id)->whereNotIn('id', $processedIds)->delete();
         }
     }

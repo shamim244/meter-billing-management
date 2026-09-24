@@ -4,7 +4,6 @@ namespace App\Services\Notifications;
 
 use App\Models\EmailProviderInstance;
 use App\Services\Notifications\Drivers\Email\HostingerDriver;
-use Illuminate\Support\Facades\Log;
 
 class HostingerMailService
 {

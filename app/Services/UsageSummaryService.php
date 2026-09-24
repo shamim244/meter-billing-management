@@ -2,9 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\BillRecord;
 use App\Models\BillingBasisHistory;
-use App\Models\BillingCycle;
+use App\Models\BillRecord;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\User;
@@ -12,7 +11,9 @@ use App\Models\User;
 class UsageSummaryService
 {
     protected BillingBasisTrackingService $basisService;
+
     protected StatusTagReportService $statusTagService;
+
     protected QuotaUsageReportService $quotaService;
 
     public function __construct(
@@ -51,15 +52,15 @@ class UsageSummaryService
 
         // 3. Data coverage %
         $totalConsumers = ConsumerAccount::where('user_id', $userId)
-            ->whereHas('mru', fn($q) => $q->where('status', 'active'))
+            ->whereHas('mru', fn ($q) => $q->where('status', 'active'))
             ->count();
 
         if ($totalConsumers === 0) {
             $totalConsumers = ConsumerAccount::where('user_id', $userId)->count();
         }
 
-        $dataCoverage = $totalConsumers > 0 
-            ? min(100.0, round(($billsProcessed / $totalConsumers) * 100, 1)) 
+        $dataCoverage = $totalConsumers > 0
+            ? min(100.0, round(($billsProcessed / $totalConsumers) * 100, 1))
             : ($billsProcessed > 0 ? 100.0 : 0.0);
 
         // 4. Flagged consumers (consecutive estimate LK/MD alerts)
@@ -112,7 +113,7 @@ class UsageSummaryService
             ->count();
 
         // Per-Agent breakdown
-        $agents = User::whereDoesntHave('roles', fn($q) => $q->where('name', 'admin'))->get();
+        $agents = User::whereDoesntHave('roles', fn ($q) => $q->where('name', 'admin'))->get();
 
         $agentRows = [];
         foreach ($agents as $agent) {

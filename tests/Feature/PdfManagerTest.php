@@ -3,9 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\BillRecord;
-use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\User;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -19,7 +19,7 @@ class PdfManagerTest extends TestCase
     {
         parent::setUp();
         Storage::fake('local');
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
     }
 
     public function test_pdf_manager_index_renders_with_storage_analytics_and_filters(): void

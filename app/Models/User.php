@@ -3,16 +3,22 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Hidden;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
-
+use App\Services\Notifications\NotificationDispatchService;
 use Bavix\Wallet\Interfaces\Wallet;
 use Bavix\Wallet\Interfaces\WalletFloat;
 use Bavix\Wallet\Traits\HasWalletFloat;
+use Database\Factories\UserFactory;
+use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
+use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
 #[Fillable(['name', 'email', 'password', 'phone', 'status', 'is_wallet_frozen', 'wallet_frozen_reason', 'wallet_frozen_at', 'wallet_frozen_by', 'shortcuts', 'storage_limit_mb', 'plan_tier'])]
@@ -20,7 +26,7 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable implements Wallet, WalletFloat
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, HasRoles, HasWalletFloat;
+    use HasApiTokens, HasFactory, HasRoles, HasWalletFloat, Notifiable;
 
     /**
      * Get the attributes that should be cast.
@@ -46,14 +52,15 @@ class User extends Authenticatable implements Wallet, WalletFloat
     {
         $dir = "users/{$this->id}/pdfs";
         $bytes = 0;
-        if (\Illuminate\Support\Facades\Storage::disk('local')->exists($dir)) {
-            $files = \Illuminate\Support\Facades\Storage::disk('local')->allFiles($dir);
+        if (Storage::disk('local')->exists($dir)) {
+            $files = Storage::disk('local')->allFiles($dir);
             foreach ($files as $f) {
                 if (str_ends_with(strtolower($f), '.pdf')) {
-                    $bytes += \Illuminate\Support\Facades\Storage::disk('local')->size($f);
+                    $bytes += Storage::disk('local')->size($f);
                 }
             }
         }
+
         return $bytes;
     }
 
@@ -63,6 +70,7 @@ class User extends Authenticatable implements Wallet, WalletFloat
     public function getStorageLimitBytes(): int
     {
         $mb = (int) ($this->storage_limit_mb ?? 100);
+
         return $mb * 1024 * 1024;
     }
 
@@ -72,8 +80,11 @@ class User extends Authenticatable implements Wallet, WalletFloat
     public function getStorageUsagePercent(): float
     {
         $limit = $this->getStorageLimitBytes();
-        if ($limit <= 0) return 0.0;
+        if ($limit <= 0) {
+            return 0.0;
+        }
         $used = $this->getStorageUsedBytes();
+
         return min(100.0, round(($used / $limit) * 100, 1));
     }
 
@@ -83,7 +94,10 @@ class User extends Authenticatable implements Wallet, WalletFloat
     public function isStorageLimitExceeded(): bool
     {
         $limit = $this->getStorageLimitBytes();
-        if ($limit <= 0) return false; // unlimited
+        if ($limit <= 0) {
+            return false;
+        } // unlimited
+
         return $this->getStorageUsedBytes() >= $limit;
     }
 
@@ -93,16 +107,17 @@ class User extends Authenticatable implements Wallet, WalletFloat
     public function getPdfCount(): int
     {
         $dir = "users/{$this->id}/pdfs";
-        if (!\Illuminate\Support\Facades\Storage::disk('local')->exists($dir)) {
+        if (! Storage::disk('local')->exists($dir)) {
             return 0;
         }
-        $files = \Illuminate\Support\Facades\Storage::disk('local')->allFiles($dir);
+        $files = Storage::disk('local')->allFiles($dir);
         $count = 0;
         foreach ($files as $f) {
             if (str_ends_with(strtolower($f), '.pdf')) {
                 $count++;
             }
         }
+
         return $count;
     }
 
@@ -118,15 +133,25 @@ class User extends Authenticatable implements Wallet, WalletFloat
             'submit_ok' => 'Enter',
             'mark_doubt' => '2',
             'mark_critical' => '3',
-            'next_card' => 'ArrowDown',
-            'prev_card' => 'ArrowUp',
+            'next_card' => 'ArrowRight',
+            'prev_card' => 'ArrowLeft',
             'open_remark' => 'm',
             'exit_box' => 'Escape',
         ]);
 
-        $systemDefaults = \App\Models\SystemSetting::get('shortcuts_default', $baseDefaults);
+        $systemDefaults = SystemSetting::get('shortcuts_default', $baseDefaults);
 
-        return array_merge($systemDefaults, $this->shortcuts ?? []);
+        $merged = array_merge($systemDefaults, $this->shortcuts ?? []);
+
+        // Gracefully migrate legacy card navigation defaults (ArrowDown/ArrowUp) so Up/Down scrolls
+        if (($merged['next_card'] ?? null) === 'ArrowDown') {
+            $merged['next_card'] = 'ArrowRight';
+        }
+        if (($merged['prev_card'] ?? null) === 'ArrowUp') {
+            $merged['prev_card'] = 'ArrowLeft';
+        }
+
+        return $merged;
     }
 
     /**
@@ -151,7 +176,7 @@ class User extends Authenticatable implements Wallet, WalletFloat
     /**
      * Get all MRU workspaces belonging to this user.
      */
-    public function mrus(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function mrus(): HasMany
     {
         return $this->hasMany(Mru::class);
     }
@@ -159,7 +184,7 @@ class User extends Authenticatable implements Wallet, WalletFloat
     /**
      * Get all consumer accounts belonging to this user.
      */
-    public function consumerAccounts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function consumerAccounts(): HasMany
     {
         return $this->hasMany(ConsumerAccount::class);
     }
@@ -167,7 +192,7 @@ class User extends Authenticatable implements Wallet, WalletFloat
     /**
      * Get all bill records belonging to this user.
      */
-    public function billRecords(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function billRecords(): HasMany
     {
         return $this->hasMany(BillRecord::class);
     }
@@ -175,7 +200,7 @@ class User extends Authenticatable implements Wallet, WalletFloat
     /**
      * Get all bill statuses belonging to this user.
      */
-    public function billStatuses(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function billStatuses(): HasMany
     {
         return $this->hasMany(BillStatus::class);
     }
@@ -183,7 +208,7 @@ class User extends Authenticatable implements Wallet, WalletFloat
     /**
      * Get all payments belonging to this billing agent/user.
      */
-    public function payments(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function payments(): HasMany
     {
         return $this->hasMany(Payment::class, 'user_id');
     }
@@ -191,7 +216,7 @@ class User extends Authenticatable implements Wallet, WalletFloat
     /**
      * Get all payment mandates belonging to this billing agent/user.
      */
-    public function paymentMandates(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function paymentMandates(): HasMany
     {
         return $this->hasMany(PaymentMandate::class, 'user_id');
     }
@@ -199,7 +224,7 @@ class User extends Authenticatable implements Wallet, WalletFloat
     /**
      * Admin who froze the wallet if applicable.
      */
-    public function walletFrozenBy(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function walletFrozenBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'wallet_frozen_by');
     }
@@ -215,7 +240,7 @@ class User extends Authenticatable implements Wallet, WalletFloat
     /**
      * All subscriptions for this user.
      */
-    public function subscriptions(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function subscriptions(): HasMany
     {
         return $this->hasMany(AgentSubscription::class);
     }
@@ -223,7 +248,7 @@ class User extends Authenticatable implements Wallet, WalletFloat
     /**
      * Current active subscription for this user (includes renewal_due and grace_period).
      */
-    public function activeSubscription(): \Illuminate\Database\Eloquent\Relations\HasOne
+    public function activeSubscription(): HasOne
     {
         return $this->hasOne(AgentSubscription::class)
             ->where('status', 'active')
@@ -234,7 +259,7 @@ class User extends Authenticatable implements Wallet, WalletFloat
     /**
      * Billing cycles generated by this user.
      */
-    public function billingCycles(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function billingCycles(): HasMany
     {
         return $this->hasMany(BillingCycle::class);
     }
@@ -242,7 +267,7 @@ class User extends Authenticatable implements Wallet, WalletFloat
     /**
      * Plan overage charges recorded for this user.
      */
-    public function planOverageCharges(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function planOverageCharges(): HasMany
     {
         return $this->hasMany(PlanOverageCharge::class);
     }
@@ -250,17 +275,41 @@ class User extends Authenticatable implements Wallet, WalletFloat
     /**
      * Renewal attempts history for this user.
      */
-    public function renewalAttempts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function renewalAttempts(): HasMany
     {
         return $this->hasMany(RenewalAttempt::class);
     }
 
     /**
+     * Issue reports submitted by this user.
+     */
+    public function issueReports(): HasMany
+    {
+        return $this->hasMany(IssueReport::class);
+    }
+
+    /**
+     * Meter reading history records for this user's consumers.
+     */
+    public function meterReadingHistories(): HasMany
+    {
+        return $this->hasMany(MeterReadingHistory::class);
+    }
+
+    /**
      * Plan upgrade/downgrade logs for this user.
      */
-    public function planUpgradeLogs(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function planUpgradeLogs(): HasMany
     {
         return $this->hasMany(PlanUpgradeLog::class);
+    }
+
+    /**
+     * API keys issued to this user.
+     */
+    public function apiKeys(): HasMany
+    {
+        return $this->hasMany(ApiKey::class);
     }
 
     /**
@@ -268,14 +317,14 @@ class User extends Authenticatable implements Wallet, WalletFloat
      */
     public function sendPasswordResetNotification($token): void
     {
-        $this->notify(new \Illuminate\Auth\Notifications\ResetPassword($token));
+        $this->notify(new ResetPassword($token));
 
         $url = url(route('password.reset', [
             'token' => $token,
             'email' => $this->getEmailForPasswordReset(),
         ], false));
 
-        app(\App\Services\Notifications\NotificationDispatchService::class)->dispatch(
+        app(NotificationDispatchService::class)->dispatch(
             'auth.password_reset',
             $this,
             [
@@ -285,5 +334,25 @@ class User extends Authenticatable implements Wallet, WalletFloat
             'critical'
         );
     }
-}
 
+    /**
+     * Get user's active plan display name (e.g. Starter, Business Pro, Free Starter).
+     */
+    public function getCurrentPlanName(): string
+    {
+        $sub = $this->relationLoaded('activeSubscription')
+            ? $this->activeSubscription
+            : $this->activeSubscription()->with('plan')->first();
+
+        if ($sub && $sub->plan) {
+            return $sub->plan->name;
+        }
+
+        return ! empty($this->plan_tier) ? ucfirst($this->plan_tier) : 'Free Starter';
+    }
+
+    public function getCurrentPlanNameAttribute(): string
+    {
+        return $this->getCurrentPlanName();
+    }
+}

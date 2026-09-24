@@ -5,10 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\BillRecord;
 use App\Models\BillStatus;
 use App\Models\ConsumerAccount;
+use App\Services\BillTagService;
 use App\Services\EngineService;
+use App\Services\MeterReadingHistoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -34,7 +37,7 @@ class BillController extends Controller
         ]);
 
         $rawInput = $request->input('ca_numbers');
-        
+
         // Handle array or newline/comma-delimited text
         if (is_array($rawInput)) {
             $caList = $rawInput;
@@ -44,7 +47,7 @@ class BillController extends Controller
 
         // Clean and filter valid CA numbers
         $caNumbers = array_values(array_unique(array_filter(array_map('trim', $caList), function ($val) {
-            return !empty($val) && preg_match('/^\d+$/', $val);
+            return ! empty($val) && preg_match('/^\d+$/', $val);
         })));
 
         if (empty($caNumbers)) {
@@ -77,8 +80,8 @@ class BillController extends Controller
         ]);
 
         $ca = trim($request->ca_number);
-        $month = (int)$request->input('billing_month', now()->month);
-        $year = (int)$request->input('billing_year', now()->year);
+        $month = (int) $request->input('billing_month', now()->month);
+        $year = (int) $request->input('billing_year', now()->year);
         $mruId = $request->input('mru_id');
 
         $userId = Auth::id();
@@ -100,7 +103,7 @@ class BillController extends Controller
                 ->first();
             $bill->review_status = $statusRecord ? $statusRecord->status : 'pending';
             $bill->remark = $statusRecord ? $statusRecord->remark : null;
-            $bill->has_pdf = !empty($bill->pdf_path);
+            $bill->has_pdf = ! empty($bill->pdf_path);
         }
 
         return response()->json([
@@ -123,13 +126,13 @@ class BillController extends Controller
         ]);
 
         $userId = Auth::id();
-        $month = (int)$request->input('billing_month');
-        $year = (int)$request->input('billing_year');
+        $month = (int) $request->input('billing_month');
+        $year = (int) $request->input('billing_year');
         $mruId = $request->input('mru_id');
 
         // Find consumer accounts in this MRU/user context
         $query = ConsumerAccount::where('user_id', $userId)->where('status', 'active');
-        if (!empty($mruId)) {
+        if (! empty($mruId)) {
             $query->where('mru_id', $mruId);
         }
         $allCAs = $query->pluck('ca_number')->toArray();
@@ -191,7 +194,7 @@ class BillController extends Controller
         $year = (int) $request->input('billing_year');
         $status = $request->input('status');
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($userId, $ca, $month, $year, $status) {
+        DB::transaction(function () use ($userId, $ca, $month, $year, $status) {
             $billStatus = BillStatus::firstOrNew([
                 'user_id' => $userId,
                 'ca_number' => $ca,
@@ -239,9 +242,9 @@ class BillController extends Controller
         $year = (int) $request->input('billing_year');
         $remark = trim((string) $request->input('remark'));
 
-        $finalRemark = !empty($remark) ? $remark : null;
+        $finalRemark = ! empty($remark) ? $remark : null;
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($userId, $ca, $month, $year, $finalRemark) {
+        DB::transaction(function () use ($userId, $ca, $month, $year, $finalRemark) {
             $billStatus = BillStatus::firstOrNew([
                 'user_id' => $userId,
                 'ca_number' => $ca,
@@ -250,7 +253,7 @@ class BillController extends Controller
             ]);
 
             $billStatus->remark = $finalRemark;
-            if (!$billStatus->exists && empty($billStatus->status)) {
+            if (! $billStatus->exists && empty($billStatus->status)) {
                 $billStatus->status = 'pending';
             }
             $billStatus->save();
@@ -288,7 +291,7 @@ class BillController extends Controller
         $year = (int) $request->input('billing_year');
         $tag = trim((string) $request->input('tag')) ?: 'OK';
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($userId, $ca, $month, $year, $tag) {
+        DB::transaction(function () use ($userId, $ca, $month, $year, $tag) {
             $billStatus = BillStatus::firstOrNew([
                 'user_id' => $userId,
                 'ca_number' => $ca,
@@ -297,7 +300,7 @@ class BillController extends Controller
             ]);
 
             $billStatus->tag = $tag;
-            if (!$billStatus->exists && empty($billStatus->status)) {
+            if (! $billStatus->exists && empty($billStatus->status)) {
                 $billStatus->status = 'pending';
             }
             $billStatus->save();
@@ -310,7 +313,7 @@ class BillController extends Controller
                 ->update(['tag' => $tag]);
         });
 
-        $tagService = app(\App\Services\BillTagService::class);
+        $tagService = app(BillTagService::class);
 
         return response()->json([
             'success' => true,
@@ -327,27 +330,28 @@ class BillController extends Controller
     public function viewPdf(BillRecord $bill): BinaryFileResponse|JsonResponse
     {
         $currentUser = Auth::user();
-        if (!$currentUser) {
+        if (! $currentUser) {
             return response()->json(['error' => 'Unauthenticated.'], 401);
         }
 
         // Strict user isolation guard
-        if ($bill->user_id !== $currentUser->id && !$currentUser->hasRole('admin')) {
+        if ($bill->user_id !== $currentUser->id && ! $currentUser->hasRole('admin')) {
             return response()->json(['error' => 'Unauthorized access to bill document.'], 403);
         }
 
-        if (empty($bill->pdf_path) || str_contains($bill->pdf_path, '..') || !str_ends_with(strtolower($bill->pdf_path), '.pdf')) {
+        if (empty($bill->pdf_path) || str_contains($bill->pdf_path, '..') || ! str_ends_with(strtolower($bill->pdf_path), '.pdf')) {
             return response()->json(['error' => 'Invalid or missing PDF path.'], 404);
         }
 
-        if (!Storage::disk('local')->exists($bill->pdf_path)) {
+        if (! Storage::disk('local')->exists($bill->pdf_path)) {
             return response()->json(['error' => 'PDF file not found in storage.'], 404);
         }
 
         $fullPath = Storage::disk('local')->path($bill->pdf_path);
+
         return response()->file($fullPath, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="' . basename($bill->pdf_path) . '"',
+            'Content-Disposition' => 'inline; filename="'.basename($bill->pdf_path).'"',
         ]);
     }
 
@@ -366,16 +370,16 @@ class BillController extends Controller
             ->where('billing_month', $month)
             ->where('billing_year', $year);
 
-        if (!empty($mruId)) {
+        if (! empty($mruId)) {
             $query->where('mru_id', $mruId);
         }
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $escapedSearch = addcslashes($search, '%_\\');
             $query->where(function ($q) use ($escapedSearch) {
                 $q->where('ca_number', 'like', "%{$escapedSearch}%")
-                  ->orWhere('consumer_name', 'like', "%{$escapedSearch}%")
-                  ->orWhere('meter_no', 'like', "%{$escapedSearch}%");
+                    ->orWhere('consumer_name', 'like', "%{$escapedSearch}%")
+                    ->orWhere('meter_no', 'like', "%{$escapedSearch}%");
             });
         }
 
@@ -391,23 +395,25 @@ class BillController extends Controller
 
         $tagFilter = $request->get('tag_filter', $request->get('tag', 'all'));
 
-        if (!empty($filter) && $filter !== 'all') {
+        if (! empty($filter) && $filter !== 'all') {
             $bills = $bills->filter(function ($b) use ($userStatuses, $filter) {
                 $st = $userStatuses[$b->ca_number] ?? null;
                 $currentStatus = $st ? $st->status : 'pending';
+
                 return $currentStatus === $filter;
             });
         }
 
-        if (!empty($tagFilter) && $tagFilter !== 'all') {
+        if (! empty($tagFilter) && $tagFilter !== 'all') {
             $bills = $bills->filter(function ($b) use ($userStatuses, $tagFilter) {
                 $st = $userStatuses[$b->ca_number] ?? null;
-                $currentTag = !empty($b->tag) ? $b->tag : ($st ? ($st->tag ?? 'OK') : 'OK');
+                $currentTag = ! empty($b->tag) ? $b->tag : ($st ? ($st->tag ?? 'OK') : 'OK');
+
                 return strtoupper($currentTag) === strtoupper($tagFilter);
             });
         }
 
-        $fileName = "nbpdcl_bills_{$year}_{$month}_" . date('Ymd_His') . ".csv";
+        $fileName = "nbpdcl_bills_{$year}_{$month}_".date('Ymd_His').'.csv';
 
         return response()->streamDownload(function () use ($bills, $userStatuses, $masterAccounts) {
             $output = fopen('php://output', 'w');
@@ -428,10 +434,10 @@ class BillController extends Controller
                 'Bill Month',
                 'Status',
                 'Tag',
-                'Remark'
+                'Remark',
             ]);
 
-            $tagService = app(\App\Services\BillTagService::class);
+            $tagService = app(BillTagService::class);
 
             foreach ($bills as $bill) {
                 $st = $userStatuses[$bill->ca_number] ?? null;
@@ -445,11 +451,11 @@ class BillController extends Controller
 
                 $amount = $bill->total_amount > 0
                     ? $bill->total_amount
-                    : ($master && (float)$master->baseline_amount > 0 ? $master->baseline_amount : 'N/A');
+                    : ($master && (float) $master->baseline_amount > 0 ? $master->baseline_amount : 'N/A');
 
                 $status = $st ? $st->status : 'pending';
                 $remark = $st ? ($st->remark ?? '') : '';
-                $rawTag = !empty($bill->tag) ? $bill->tag : ($st ? ($st->tag ?? 'OK') : 'OK');
+                $rawTag = ! empty($bill->tag) ? $bill->tag : ($st ? ($st->tag ?? 'OK') : 'OK');
                 $tagLabel = $tagService->getFullLabel($rawTag);
 
                 fputcsv($output, [
@@ -493,22 +499,22 @@ class BillController extends Controller
             ->where('billing_year', $year)
             ->whereNotNull('pdf_path');
 
-        if (!empty($mruId)) {
+        if (! empty($mruId)) {
             $query->where('mru_id', $mruId);
         }
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $escapedSearch = addcslashes($search, '%_\\');
             $query->where(function ($q) use ($escapedSearch) {
                 $q->where('ca_number', 'like', "%{$escapedSearch}%")
-                  ->orWhere('consumer_name', 'like', "%{$escapedSearch}%")
-                  ->orWhere('meter_no', 'like', "%{$escapedSearch}%");
+                    ->orWhere('consumer_name', 'like', "%{$escapedSearch}%")
+                    ->orWhere('meter_no', 'like', "%{$escapedSearch}%");
             });
         }
 
         $bills = $query->get();
 
-        if (!empty($filter) && $filter !== 'all') {
+        if (! empty($filter) && $filter !== 'all') {
             $userStatuses = BillStatus::where('billing_month', $month)
                 ->where('billing_year', $year)
                 ->pluck('status', 'ca_number')
@@ -516,6 +522,7 @@ class BillController extends Controller
 
             $bills = $bills->filter(function ($b) use ($userStatuses, $filter) {
                 $st = $userStatuses[$b->ca_number] ?? 'pending';
+
                 return $st === $filter;
             });
         }
@@ -524,20 +531,21 @@ class BillController extends Controller
             if ($request->expectsJson()) {
                 return response()->json(['error' => 'No bills with downloadable PDFs matched the filter.'], 404);
             }
+
             return redirect()->back()->with('error', 'No bills with downloadable PDFs matched the current filter.');
         }
 
-        $zipFileName = "NBPDCL_Bills_{$year}_{$month}_" . time() . ".zip";
+        $zipFileName = "NBPDCL_Bills_{$year}_{$month}_".time().'.zip';
         $zipTempPath = tempnam(sys_get_temp_dir(), 'zip_');
 
         try {
-            $zip = new ZipArchive();
+            $zip = new ZipArchive;
             if ($zip->open($zipTempPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
                 return response()->json(['error' => 'Failed to create zip archive.'], 500);
             }
 
             foreach ($bills as $bill) {
-                if (!empty($bill->pdf_path) && Storage::disk('local')->exists($bill->pdf_path)) {
+                if (! empty($bill->pdf_path) && Storage::disk('local')->exists($bill->pdf_path)) {
                     $fileContent = Storage::disk('local')->get($bill->pdf_path);
                     $mruFolder = $bill->mru ? $bill->mru->code : 'GENERAL';
                     $zipInternalPath = "{$year}/{$month}/{$mruFolder}/{$bill->ca_number}.pdf";
@@ -578,7 +586,7 @@ class BillController extends Controller
             ->where('user_id', $userId)
             ->where('ca_number', $caNumber)
             ->firstOrFail();
-        
+
         $bills = BillRecord::with('mru')
             ->where('user_id', $userId)
             ->where('ca_number', $caNumber)
@@ -589,9 +597,11 @@ class BillController extends Controller
         $statuses = BillStatus::where('user_id', $userId)
             ->where('ca_number', $caNumber)
             ->get()
-            ->keyBy(fn($s) => "{$s->billing_year}_{$s->billing_month}");
+            ->keyBy(fn ($s) => "{$s->billing_year}_{$s->billing_month}");
 
-        return view('bills.history', compact('account', 'bills', 'statuses'));
+        $meterMatrix = app(MeterReadingHistoryService::class)->getConsumerMonthlyMatrix($userId, $caNumber);
+
+        return view('bills.history', compact('account', 'bills', 'statuses', 'meterMatrix'));
     }
 
     /**
@@ -609,7 +619,7 @@ class BillController extends Controller
             ->firstOrFail();
 
         // Remove from physical disk if exists
-        if (!empty($bill->pdf_path) && Storage::disk('local')->exists($bill->pdf_path)) {
+        if (! empty($bill->pdf_path) && Storage::disk('local')->exists($bill->pdf_path)) {
             Storage::disk('local')->delete($bill->pdf_path);
         }
 

@@ -92,8 +92,8 @@
                     submit_ok: 'Enter',
                     mark_doubt: '2',
                     mark_critical: '3',
-                    next_card: 'ArrowDown',
-                    prev_card: 'ArrowUp',
+                    next_card: 'ArrowRight',
+                    prev_card: 'ArrowLeft',
                     open_remark: 'm',
                     exit_box: 'Escape'
                 };
@@ -105,8 +105,8 @@
                     submit_ok: 'Ctrl+Enter',
                     mark_doubt: 'Alt+2',
                     mark_critical: 'Alt+3',
-                    next_card: 'Alt+ArrowDown',
-                    prev_card: 'Alt+ArrowUp',
+                    next_card: 'Alt+ArrowRight',
+                    prev_card: 'Alt+ArrowLeft',
                     open_remark: 'Shift+M',
                     exit_box: 'Escape'
                 };

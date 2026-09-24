@@ -22,12 +22,9 @@ class CouponRedemptionService
      * Validate a coupon code in real-time for an Agent action (subscription or wallet top-up).
      * Returns calculation details without applying yet.
      *
-     * @param string $code
-     * @param User $user
-     * @param string $actionType 'subscription_discount' | 'topup_bonus'
-     * @param float $amount The amount to apply coupon against (e.g. discounted duration price or topup amount)
-     * @param int|null $planId Optional plan ID for plan restriction verification
-     * @return array
+     * @param  string  $actionType  'subscription_discount' | 'topup_bonus'
+     * @param  float  $amount  The amount to apply coupon against (e.g. discounted duration price or topup amount)
+     * @param  int|null  $planId  Optional plan ID for plan restriction verification
      */
     public function validateCode(
         string $code,
@@ -49,7 +46,7 @@ class CouponRedemptionService
             ->where('code', $cleanCode)
             ->first();
 
-        if (!$coupon) {
+        if (! $coupon) {
             return [
                 'valid' => false,
                 'message' => "Coupon code '{$cleanCode}' is invalid.",
@@ -57,7 +54,7 @@ class CouponRedemptionService
             ];
         }
 
-        if (!$coupon->is_active) {
+        if (! $coupon->is_active) {
             return [
                 'valid' => false,
                 'message' => "Coupon code '{$cleanCode}' is currently inactive.",
@@ -68,7 +65,7 @@ class CouponRedemptionService
         if ($coupon->starts_at && $coupon->starts_at->isFuture()) {
             return [
                 'valid' => false,
-                'message' => "Coupon code '{$cleanCode}' will be active from " . $coupon->starts_at->format('M d, Y') . '.',
+                'message' => "Coupon code '{$cleanCode}' will be active from ".$coupon->starts_at->format('M d, Y').'.',
                 'coupon' => null,
             ];
         }
@@ -76,7 +73,7 @@ class CouponRedemptionService
         if ($coupon->expires_at && $coupon->expires_at->isPast()) {
             return [
                 'valid' => false,
-                'message' => "Coupon code '{$cleanCode}' expired on " . $coupon->expires_at->format('M d, Y') . '.',
+                'message' => "Coupon code '{$cleanCode}' expired on ".$coupon->expires_at->format('M d, Y').'.',
                 'coupon' => null,
             ];
         }
@@ -84,6 +81,7 @@ class CouponRedemptionService
         // Action type check
         if ($coupon->type !== $actionType) {
             $expected = $actionType === 'subscription_discount' ? 'Subscription purchases' : 'Wallet Top-ups';
+
             return [
                 'valid' => false,
                 'message' => "This coupon is only valid for {$expected}.",
@@ -115,8 +113,9 @@ class CouponRedemptionService
 
         // Plan restriction check (for subscription_discount)
         if ($coupon->type === 'subscription_discount' && $coupon->plan_restriction_id !== null) {
-            if ($planId === null || (int)$coupon->plan_restriction_id !== (int)$planId) {
+            if ($planId === null || (int) $coupon->plan_restriction_id !== (int) $planId) {
                 $planName = $coupon->restrictedPlan->name ?? 'a specific plan';
+
                 return [
                     'valid' => false,
                     'message' => "Coupon code '{$cleanCode}' is only applicable to the {$planName}.",
@@ -126,10 +125,10 @@ class CouponRedemptionService
         }
 
         // Minimum amount check
-        if ($coupon->minimum_amount !== null && $amount < (float)$coupon->minimum_amount) {
+        if ($coupon->minimum_amount !== null && $amount < (float) $coupon->minimum_amount) {
             return [
                 'valid' => false,
-                'message' => "Minimum purchase of ₹" . number_format((float)$coupon->minimum_amount, 2) . " required to apply coupon '{$cleanCode}'.",
+                'message' => 'Minimum purchase of ₹'.number_format((float) $coupon->minimum_amount, 2)." required to apply coupon '{$cleanCode}'.",
                 'coupon' => null,
             ];
         }
@@ -145,13 +144,13 @@ class CouponRedemptionService
                 'code' => $coupon->code,
                 'type' => $coupon->type,
                 'discount_kind' => $coupon->discount_kind,
-                'discount_value' => (float)$coupon->discount_value,
+                'discount_value' => (float) $coupon->discount_value,
                 'original_amount' => $amount,
                 'discount_or_bonus_amount' => $discountAmount,
                 'final_amount' => $finalAmount,
                 'message' => $coupon->discount_kind === 'percentage'
-                    ? "Coupon '{$coupon->code}' applied: {$coupon->discount_value}% OFF (Save ₹" . number_format($discountAmount, 2) . ")!"
-                    : "Coupon '{$coupon->code}' applied: Flat ₹" . number_format($discountAmount, 2) . " OFF!",
+                    ? "Coupon '{$coupon->code}' applied: {$coupon->discount_value}% OFF (Save ₹".number_format($discountAmount, 2).')!'
+                    : "Coupon '{$coupon->code}' applied: Flat ₹".number_format($discountAmount, 2).' OFF!',
             ];
         }
 
@@ -164,7 +163,7 @@ class CouponRedemptionService
             if ($bonusAmount <= 0) {
                 return [
                     'valid' => false,
-                    'message' => "Top-up amount of ₹" . number_format($amount, 2) . " does not meet any bonus slab for coupon '{$coupon->code}'.",
+                    'message' => 'Top-up amount of ₹'.number_format($amount, 2)." does not meet any bonus slab for coupon '{$coupon->code}'.",
                     'coupon' => $coupon,
                 ];
             }
@@ -178,7 +177,7 @@ class CouponRedemptionService
                 'original_amount' => $amount,
                 'discount_or_bonus_amount' => $bonusAmount,
                 'final_amount' => $totalCredited,
-                'message' => "Coupon '{$coupon->code}' applied: {$bonusPercent}% Bonus (+₹" . number_format($bonusAmount, 2) . ")! You will receive ₹" . number_format($totalCredited, 2) . " total in your wallet.",
+                'message' => "Coupon '{$coupon->code}' applied: {$bonusPercent}% Bonus (+₹".number_format($bonusAmount, 2).')! You will receive ₹'.number_format($totalCredited, 2).' total in your wallet.',
             ];
         }
 
@@ -195,7 +194,7 @@ class CouponRedemptionService
         float $originalAmount,
         ?string $referenceId = null
     ): CouponRedemption {
-        $referenceId = (string)($referenceId ?? 'sub_' . uniqid());
+        $referenceId = (string) ($referenceId ?? 'sub_'.uniqid());
 
         // Fast-path idempotency check
         $existing = CouponRedemption::where('coupon_code_id', $coupon->id)
@@ -204,13 +203,14 @@ class CouponRedemptionService
 
         if ($existing) {
             Log::info("[CouponRedemption] Reference '{$referenceId}' already redeemed subscription coupon #{$coupon->code}. Idempotent return.");
+
             return $existing;
         }
 
         return DB::transaction(function () use ($coupon, $user, $originalAmount, $referenceId) {
             // Pessimistic row-level lock
             $lockedCoupon = CouponCode::where('id', $coupon->id)->lockForUpdate()->first();
-            if (!$lockedCoupon || !$lockedCoupon->isValidNow()) {
+            if (! $lockedCoupon || ! $lockedCoupon->isValidNow()) {
                 throw new RuntimeException("Coupon '{$coupon->code}' is no longer active or valid.");
             }
 
@@ -266,7 +266,7 @@ class CouponRedemptionService
         float $topupAmount,
         ?Payment $payment = null
     ): array {
-        $referenceId = $payment ? (string)$payment->id : null;
+        $referenceId = $payment ? (string) $payment->id : null;
 
         // Fast-path idempotency check
         if ($referenceId !== null) {
@@ -276,9 +276,10 @@ class CouponRedemptionService
 
             if ($existing) {
                 Log::info("[CouponRedemption] Payment #{$referenceId} already redeemed topup coupon #{$coupon->code}. Idempotent return without duplicate credit.");
+
                 return [
                     'redemption' => $existing,
-                    'bonus_amount' => (float)$existing->discount_or_bonus_amount,
+                    'bonus_amount' => (float) $existing->discount_or_bonus_amount,
                     'wallet_transaction' => null,
                     'already_redeemed' => true,
                 ];
@@ -288,7 +289,7 @@ class CouponRedemptionService
         return DB::transaction(function () use ($coupon, $user, $topupAmount, $payment, $referenceId) {
             // Pessimistic row-level lock
             $lockedCoupon = CouponCode::where('id', $coupon->id)->lockForUpdate()->first();
-            if (!$lockedCoupon || !$lockedCoupon->isValidNow()) {
+            if (! $lockedCoupon || ! $lockedCoupon->isValidNow()) {
                 throw new RuntimeException("Coupon '{$coupon->code}' is no longer active or valid.");
             }
 
@@ -313,7 +314,7 @@ class CouponRedemptionService
                 if ($existingUnderLock) {
                     return [
                         'redemption' => $existingUnderLock,
-                        'bonus_amount' => (float)$existingUnderLock->discount_or_bonus_amount,
+                        'bonus_amount' => (float) $existingUnderLock->discount_or_bonus_amount,
                         'wallet_transaction' => null,
                         'already_redeemed' => true,
                     ];
@@ -334,7 +335,7 @@ class CouponRedemptionService
                 source: 'coupon_topup_bonus',
                 referenceType: $payment ? Payment::class : null,
                 referenceId: $referenceId,
-                description: "Bonus credit for promo {$lockedCoupon->code} on Payment #" . ($referenceId ?? 'N/A')
+                description: "Bonus credit for promo {$lockedCoupon->code} on Payment #".($referenceId ?? 'N/A')
             );
 
             $redemption = CouponRedemption::create([

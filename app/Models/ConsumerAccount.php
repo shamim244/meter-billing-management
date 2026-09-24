@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ConsumerAccount extends Model
 {
-    use HasFactory, BelongsToUser;
+    use BelongsToUser, HasFactory;
 
     protected $fillable = [
         'user_id',
@@ -83,7 +83,7 @@ class ConsumerAccount extends Model
      */
     public function setAmountAttribute($value): void
     {
-        $this->attributes['baseline_amount'] = is_numeric($value) ? (float)$value : 0.00;
+        $this->attributes['baseline_amount'] = is_numeric($value) ? (float) $value : 0.00;
     }
 
     /**
@@ -100,7 +100,7 @@ class ConsumerAccount extends Model
     public function billRecords(): HasMany
     {
         return $this->hasMany(BillRecord::class, 'ca_number', 'ca_number')
-                    ->where('bill_records.user_id', $this->user_id);
+            ->where('bill_records.user_id', $this->user_id);
     }
 
     /**
@@ -109,7 +109,16 @@ class ConsumerAccount extends Model
     public function billStatuses(): HasMany
     {
         return $this->hasMany(BillStatus::class, 'ca_number', 'ca_number')
-                    ->where('bill_statuses.user_id', $this->user_id);
+            ->where('bill_statuses.user_id', $this->user_id);
+    }
+
+    /**
+     * Get all monthly meter reading history records for this consumer account.
+     */
+    public function meterReadingHistories(): HasMany
+    {
+        return $this->hasMany(MeterReadingHistory::class, 'ca_number', 'ca_number')
+            ->where('meter_reading_histories.user_id', $this->user_id);
     }
 
     /**
@@ -126,12 +135,13 @@ class ConsumerAccount extends Model
     public function scopeSearch($query, string $search)
     {
         $escaped = addcslashes($search, '%_\\');
+
         return $query->where(function ($q) use ($escaped) {
             $q->where('ca_number', 'like', "%{$escaped}%")
-              ->orWhere('consumer_name', 'like', "%{$escaped}%")
-              ->orWhere('meter_no', 'like', "%{$escaped}%")
-              ->orWhere('tariff_category', 'like', "%{$escaped}%")
-              ->orWhere('billing_basis', 'like', "%{$escaped}%");
+                ->orWhere('consumer_name', 'like', "%{$escaped}%")
+                ->orWhere('meter_no', 'like', "%{$escaped}%")
+                ->orWhere('tariff_category', 'like', "%{$escaped}%")
+                ->orWhere('billing_basis', 'like', "%{$escaped}%");
         });
     }
 }

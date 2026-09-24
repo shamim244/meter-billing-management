@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 
 class CreateBackupJob implements ShouldQueue
 {
-    use Queueable, InteractsWithQueue, SerializesModels;
+    use InteractsWithQueue, Queueable, SerializesModels;
 
     public int $timeout = 1800; // 30 minutes timeout for large datasets
 
@@ -29,7 +29,7 @@ class CreateBackupJob implements ShouldQueue
             $backup = $backupService->createBackup($this->type, $this->triggeredBy, $this->disk);
             Log::info("Backup completed successfully: {$backup->filename} ({$backup->human_size}) in {$backup->duration_seconds}s");
         } catch (\Throwable $e) {
-            Log::error("Backup failed: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            Log::error('Backup failed: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
             throw $e;
         }
     }

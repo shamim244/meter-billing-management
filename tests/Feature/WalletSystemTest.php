@@ -8,8 +8,8 @@ use App\Enums\PaymentPurpose;
 use App\Enums\PaymentStatus;
 use App\Enums\WalletAdminAdjustmentType;
 use App\Events\PaymentSuccessEvent;
-use App\Events\WalletCriticalBalanceEvent;
 use App\Events\WalletCreditedEvent;
+use App\Events\WalletCriticalBalanceEvent;
 use App\Events\WalletDebitedEvent;
 use App\Events\WalletFrozenEvent;
 use App\Events\WalletInsufficientForRenewalEvent;
@@ -20,6 +20,7 @@ use App\Models\User;
 use App\Services\Wallet\WalletService;
 use Bavix\Wallet\Models\Transaction;
 use Carbon\Carbon;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use InvalidArgumentException;
@@ -30,14 +31,17 @@ class WalletSystemTest extends TestCase
     use RefreshDatabase;
 
     protected User $agent;
+
     protected User $otherAgent;
+
     protected User $admin;
+
     protected WalletService $walletService;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
 
         $this->admin = User::where('email', 'admin@nbpdcl-saas.com')->first();
         $this->agent = User::where('email', 'test@example.com')->first();
@@ -73,7 +77,7 @@ class WalletSystemTest extends TestCase
         );
 
         $this->assertInstanceOf(Transaction::class, $tx);
-        $this->assertEquals(500.00, (float)$tx->amountFloat);
+        $this->assertEquals(500.00, (float) $tx->amountFloat);
         $this->assertEquals('deposit', $tx->type instanceof \BackedEnum ? $tx->type->value : $tx->type);
 
         $meta = (array) $tx->meta;
@@ -114,7 +118,7 @@ class WalletSystemTest extends TestCase
 
         $tx = $this->agent->transactions()->latest('id')->first();
         $this->assertEquals('withdraw', $tx->type instanceof \BackedEnum ? $tx->type->value : $tx->type);
-        $this->assertEquals(120.00, (float)abs($tx->amountFloat));
+        $this->assertEquals(120.00, (float) abs($tx->amountFloat));
 
         $meta = (array) $tx->meta;
         $this->assertEquals('bill_download_fee', $meta['source']);

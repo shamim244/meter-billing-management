@@ -4,13 +4,14 @@ namespace App\Services\Wallet;
 
 use App\Enums\DebitResult;
 use App\Enums\WalletAdminAdjustmentType;
-use App\Events\WalletCriticalBalanceEvent;
 use App\Events\WalletCreditedEvent;
+use App\Events\WalletCriticalBalanceEvent;
 use App\Events\WalletDebitedEvent;
 use App\Events\WalletFrozenEvent;
 use App\Events\WalletInsufficientForRenewalEvent;
 use App\Events\WalletLowBalanceEvent;
 use App\Events\WalletUnfrozenEvent;
+use App\Models\SystemSetting;
 use App\Models\User;
 use Bavix\Wallet\Exceptions\BalanceIsEmpty;
 use Bavix\Wallet\Exceptions\InsufficientFunds;
@@ -18,6 +19,7 @@ use Bavix\Wallet\Models\Transaction;
 use Bavix\Wallet\Models\Wallet;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
 
 /**
@@ -40,6 +42,7 @@ class WalletService
     public function getWallet(User|int $user): Wallet
     {
         $userModel = $this->resolveUser($user);
+
         return $userModel->wallet;
     }
 
@@ -49,6 +52,7 @@ class WalletService
     public function getBalance(User|int $user): float
     {
         $userModel = $this->resolveUser($user);
+
         return (float) $userModel->balanceFloat;
     }
 
@@ -65,7 +69,7 @@ class WalletService
         ?string $description = null
     ): Transaction {
         if ($amount <= 0) {
-            throw new InvalidArgumentException("Credit amount must be greater than zero.");
+            throw new InvalidArgumentException('Credit amount must be greater than zero.');
         }
 
         $userModel = $this->resolveUser($user);
@@ -81,8 +85,8 @@ class WalletService
         $transaction = $userModel->depositFloat($amount, $meta);
 
         // Reset balance alert throttle cache keys on credit
-        \Illuminate\Support\Facades\Cache::forget("wallet_alert_critical_{$userModel->id}");
-        \Illuminate\Support\Facades\Cache::forget("wallet_alert_low_{$userModel->id}");
+        Cache::forget("wallet_alert_critical_{$userModel->id}");
+        Cache::forget("wallet_alert_low_{$userModel->id}");
 
         // Dispatch domain events
         event(new WalletCreditedEvent($userModel, $transaction));
@@ -104,7 +108,7 @@ class WalletService
         ?string $description = null
     ): DebitResult {
         if ($amount <= 0) {
-            throw new InvalidArgumentException("Debit amount must be greater than zero.");
+            throw new InvalidArgumentException('Debit amount must be greater than zero.');
         }
 
         $userModel = $this->resolveUser($user);
@@ -132,7 +136,7 @@ class WalletService
             $this->checkBalanceAlerts($userModel);
 
             return DebitResult::SUCCESS;
-        } catch (InsufficientFunds | BalanceIsEmpty $e) {
+        } catch (InsufficientFunds|BalanceIsEmpty $e) {
             // Graceful non-throwing return for insufficient funds
             return DebitResult::INSUFFICIENT_BALANCE;
         }
@@ -150,11 +154,11 @@ class WalletService
         string $reason
     ): Transaction {
         if ($amount <= 0) {
-            throw new InvalidArgumentException("Adjustment amount must be greater than zero.");
+            throw new InvalidArgumentException('Adjustment amount must be greater than zero.');
         }
 
         if (trim($reason) === '') {
-            throw new InvalidArgumentException("Adjustment reason is mandatory.");
+            throw new InvalidArgumentException('Adjustment reason is mandatory.');
         }
 
         $userModel = $this->resolveUser($user);
@@ -167,7 +171,7 @@ class WalletService
             'admin_id' => $adminModel->id,
             'admin_name' => $adminModel->name,
             'reason' => $reason,
-            'description' => "[Admin: {$adminModel->name}] " . $reason,
+            'description' => "[Admin: {$adminModel->name}] ".$reason,
         ];
 
         if ($adjType === WalletAdminAdjustmentType::ADD) {
@@ -232,7 +236,7 @@ class WalletService
 
         $query = $userModel->transactions()->latest('id');
 
-        if (!empty($filters['type'])) {
+        if (! empty($filters['type'])) {
             // bavix type is 'deposit' for credit or 'withdraw' for debit
             $type = match ($filters['type']) {
                 'credit' => 'deposit',
@@ -242,24 +246,24 @@ class WalletService
             $query->where('type', $type);
         }
 
-        if (!empty($filters['source'])) {
+        if (! empty($filters['source'])) {
             $query->where('meta->source', $filters['source']);
         }
 
-        if (!empty($filters['from_date'])) {
+        if (! empty($filters['from_date'])) {
             $query->whereDate('created_at', '>=', $filters['from_date']);
         }
 
-        if (!empty($filters['to_date'])) {
+        if (! empty($filters['to_date'])) {
             $query->whereDate('created_at', '<=', $filters['to_date']);
         }
 
-        if (!empty($filters['search'])) {
-            $search = '%' . $filters['search'] . '%';
+        if (! empty($filters['search'])) {
+            $search = '%'.$filters['search'].'%';
             $query->where(function ($q) use ($search) {
                 $q->where('meta->description', 'like', $search)
-                  ->orWhere('meta->reference_id', 'like', $search)
-                  ->orWhere('meta->source', 'like', $search);
+                    ->orWhere('meta->reference_id', 'like', $search)
+                    ->orWhere('meta->source', 'like', $search);
             });
         }
 
@@ -285,18 +289,18 @@ class WalletService
         // 1. Critical Balance Event (< 1 month base subscription)
         if ($balance < $baseSubscriptionAmount) {
             $critCacheKey = "wallet_alert_critical_{$user->id}";
-            if (!\Illuminate\Support\Facades\Cache::has($critCacheKey)) {
-                \Illuminate\Support\Facades\Cache::put($critCacheKey, true, now()->addHours(24));
+            if (! Cache::has($critCacheKey)) {
+                Cache::put($critCacheKey, true, now()->addHours(24));
                 event(new WalletCriticalBalanceEvent($user, $balance, $baseSubscriptionAmount));
             }
         }
 
         // 2. Low Balance Event (< configured threshold e.g. from Admin settings or config, default ₹200)
-        $lowThreshold = (float) \App\Models\SystemSetting::get('wallet_low_balance_threshold', config('wallet.low_balance_threshold', 200.00));
+        $lowThreshold = (float) SystemSetting::get('wallet_low_balance_threshold', config('wallet.low_balance_threshold', 200.00));
         if ($balance < $lowThreshold) {
             $lowCacheKey = "wallet_alert_low_{$user->id}";
-            if (!\Illuminate\Support\Facades\Cache::has($lowCacheKey)) {
-                \Illuminate\Support\Facades\Cache::put($lowCacheKey, true, now()->addHours(24));
+            if (! Cache::has($lowCacheKey)) {
+                Cache::put($lowCacheKey, true, now()->addHours(24));
                 event(new WalletLowBalanceEvent($user, $balance, $lowThreshold));
             }
         }

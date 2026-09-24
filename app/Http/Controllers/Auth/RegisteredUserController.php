@@ -3,15 +3,20 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\Plan;
 use App\Models\User;
+use App\Services\Plan\PlanService;
+use App\Services\Referral\ReferralService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Spatie\Permission\Models\Role;
 
 class RegisteredUserController extends Controller
 {
@@ -45,29 +50,29 @@ class RegisteredUserController extends Controller
             'status' => 'active',
         ]);
 
-        $userRole = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'user', 'guard_name' => 'web']);
+        $userRole = Role::firstOrCreate(['name' => 'user', 'guard_name' => 'web']);
         $user->assignRole($userRole);
 
         // Refer & Earn: Auto-generate agent's referral code and link referee if ref code provided
-        $referralService = app(\App\Services\Referral\ReferralService::class);
+        $referralService = app(ReferralService::class);
         try {
             $referralService->generateCodeForNewAgent($user->id);
 
             $refCode = $request->input('referral_code') ?? $request->input('ref');
-            if (!empty($refCode)) {
+            if (! empty($refCode)) {
                 $referralService->recordReferralSignup($refCode, $user->id);
             }
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error("[Registration] Referral processing error for user #{$user->id}: " . $e->getMessage());
+            Log::error("[Registration] Referral processing error for user #{$user->id}: ".$e->getMessage());
         }
 
         // Auto-subscribe new user to default Free Starter Plan if available
         try {
-            $freePlan = \App\Models\Plan::where('is_active', true)
+            $freePlan = Plan::where('is_active', true)
                 ->where(function ($q) {
                     $q->where('is_free', true)
-                      ->orWhere('name', 'like', '%Free%')
-                      ->orWhereHas('durations', fn($dq) => $dq->where('final_price', '<=', 0));
+                        ->orWhere('name', 'like', '%Free%')
+                        ->orWhereHas('durations', fn ($dq) => $dq->where('final_price', '<=', 0));
                 })
                 ->first();
 
@@ -78,11 +83,11 @@ class RegisteredUserController extends Controller
                     ->first();
 
                 if ($duration) {
-                    app(\App\Services\Plan\PlanService::class)->subscribeAgent($user, $freePlan, $duration);
+                    app(PlanService::class)->subscribeAgent($user, $freePlan, $duration);
                 }
             }
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning("[Registration] Auto-subscribe to Free Plan failed for user #{$user->id}: " . $e->getMessage());
+            Log::warning("[Registration] Auto-subscribe to Free Plan failed for user #{$user->id}: ".$e->getMessage());
         }
 
         event(new Registered($user));

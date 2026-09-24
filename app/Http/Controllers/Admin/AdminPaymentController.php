@@ -11,18 +11,20 @@ use App\Events\PaymentSuccessEvent;
 use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use App\Models\PaymentAuditLog;
+use App\Models\Plan;
 use App\Models\User;
 use App\Services\Payment\OnlinePaymentGatewayService;
 use App\Services\Payment\PaymentSettingsService;
 use App\Services\Payment\PaymentVerificationService;
 use Carbon\Carbon;
+use Cashfree\Cashfree;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Razorpay\Api\Api;
 
 class AdminPaymentController extends Controller
 {
@@ -61,15 +63,15 @@ class AdminPaymentController extends Controller
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('utr_number', 'like', "%{$search}%")
-                  ->orWhere('bank_reference', 'like', "%{$search}%")
-                  ->orWhere('gateway_order_id', 'like', "%{$search}%")
-                  ->orWhere('gateway_payment_id', 'like', "%{$search}%")
-                  ->orWhere('id', 'like', "%{$search}%")
-                  ->orWhereHas('user', function ($t) use ($search) {
-                      $t->where('name', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%")
-                        ->orWhere('phone', 'like', "%{$search}%");
-                  });
+                    ->orWhere('bank_reference', 'like', "%{$search}%")
+                    ->orWhere('gateway_order_id', 'like', "%{$search}%")
+                    ->orWhere('gateway_payment_id', 'like', "%{$search}%")
+                    ->orWhere('id', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($t) use ($search) {
+                        $t->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('phone', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -115,13 +117,13 @@ class AdminPaymentController extends Controller
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('utr_number', 'like', "%{$search}%")
-                  ->orWhere('bank_reference', 'like', "%{$search}%")
-                  ->orWhere('id', 'like', "%{$search}%")
-                  ->orWhereHas('user', function ($t) use ($search) {
-                      $t->where('name', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%")
-                        ->orWhere('phone', 'like', "%{$search}%");
-                  });
+                    ->orWhere('bank_reference', 'like', "%{$search}%")
+                    ->orWhere('id', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($t) use ($search) {
+                        $t->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('phone', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -262,13 +264,13 @@ class AdminPaymentController extends Controller
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('notes', 'like', "%{$search}%")
-                  ->orWhere('payment_id', 'like', "%{$search}%")
-                  ->orWhereHas('admin', function ($a) use ($search) {
-                      $a->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%");
-                  })
-                  ->orWhereHas('payment.user', function ($u) use ($search) {
-                      $u->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%");
-                  });
+                    ->orWhere('payment_id', 'like', "%{$search}%")
+                    ->orWhereHas('admin', function ($a) use ($search) {
+                        $a->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('payment.user', function ($u) use ($search) {
+                        $u->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -284,7 +286,7 @@ class AdminPaymentController extends Controller
     {
         $users = User::where('status', 'active')->orderBy('name')->get();
         $settings = $this->settingsService->getSettings();
-        
+
         $recentPayments = Payment::withoutUserScope()
             ->with(['user', 'verifiedBy'])
             ->latest('id')
@@ -296,8 +298,8 @@ class AdminPaymentController extends Controller
             'curl_installed' => function_exists('curl_version'),
             'openssl_installed' => extension_loaded('openssl'),
             'json_installed' => extension_loaded('json'),
-            'cashfree_sdk_available' => class_exists(\Cashfree\Cashfree::class),
-            'razorpay_sdk_available' => class_exists(\Razorpay\Api\Api::class),
+            'cashfree_sdk_available' => class_exists(Cashfree::class),
+            'razorpay_sdk_available' => class_exists(Api::class),
             'database_connection' => DB::connection()->getPdo() ? 'Connected (MySQL)' : 'Error',
         ];
 
@@ -323,12 +325,12 @@ class AdminPaymentController extends Controller
         $gateway = $request->input('gateway');
         $outcome = $request->input('outcome');
 
-        $orderId = ($gateway === 'razorpay' ? 'order_sim_' : 'cf_ord_sim_') . Str::random(12);
-        $paymentId = ($gateway === 'razorpay' ? 'pay_sim_' : 'cf_pay_sim_') . Str::random(12);
+        $orderId = ($gateway === 'razorpay' ? 'order_sim_' : 'cf_ord_sim_').Str::random(12);
+        $paymentId = ($gateway === 'razorpay' ? 'pay_sim_' : 'cf_pay_sim_').Str::random(12);
 
         $meta = [];
         if ($purpose === PaymentPurpose::DIRECT_SUBSCRIPTION) {
-            $plan = \App\Models\Plan::where('is_active', true)->with('durations')->first();
+            $plan = Plan::where('is_active', true)->with('durations')->first();
             $duration = $plan?->durations->first();
             if ($plan && $duration) {
                 $meta = ['plan_id' => $plan->id, 'duration_id' => $duration->id, 'action_type' => 'new'];
@@ -358,7 +360,7 @@ class AdminPaymentController extends Controller
 
             event(new PaymentSuccessEvent($payment));
 
-            return redirect()->back()->with('success', "Simulated successful {$gateway} payment of ₹" . number_format($amount, 2) . " for {$user->name} (Payment #{$payment->id})!");
+            return redirect()->back()->with('success', "Simulated successful {$gateway} payment of ₹".number_format($amount, 2)." for {$user->name} (Payment #{$payment->id})!");
         } else {
             $payment = Payment::create([
                 'user_id' => $user->id,
@@ -402,7 +404,7 @@ class AdminPaymentController extends Controller
         $user = User::first() ?? $request->user();
 
         // Create initial pending payment if testing webhook matching
-        $orderId = ($gateway === 'razorpay' ? 'order_wh_' : 'cf_ord_wh_') . Str::random(10);
+        $orderId = ($gateway === 'razorpay' ? 'order_wh_' : 'cf_ord_wh_').Str::random(10);
         $payment = Payment::create([
             'user_id' => $user->id,
             'mode' => PaymentMode::PG,
@@ -421,21 +423,21 @@ class AdminPaymentController extends Controller
                 'payload' => [
                     'payment' => [
                         'entity' => [
-                            'id' => 'pay_rzp_wh_' . Str::random(8),
+                            'id' => 'pay_rzp_wh_'.Str::random(8),
                             'order_id' => $orderId,
                             'amount' => (int) round($amount * 100),
                             'currency' => 'INR',
                             'status' => ($eventType === 'payment.captured') ? 'captured' : 'failed',
-                        ]
-                    ]
-                ]
+                        ],
+                    ],
+                ],
             ];
             $rawJson = json_encode($payload);
             $signature = hash_hmac('sha256', $rawJson, $webhookSecret);
 
             // Explicitly verify signature via OnlinePaymentGatewayService to test the verification path
             $isSigValid = $this->onlinePgService->verifyWebhookSignature($rawJson, $signature);
-            if (!$isSigValid) {
+            if (! $isSigValid) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Signature verification failed during simulation.',
@@ -472,15 +474,15 @@ class AdminPaymentController extends Controller
                         'payment_amount' => $amount,
                         'payment_currency' => 'INR',
                         'payment_message' => 'Simulated Cashfree test event',
-                    ]
-                ]
+                    ],
+                ],
             ];
             $rawJson = json_encode($payload);
-            $signature = base64_encode(hash_hmac('sha256', $timestamp . $rawJson, $webhookSecret, true));
+            $signature = base64_encode(hash_hmac('sha256', $timestamp.$rawJson, $webhookSecret, true));
 
             // Explicitly verify signature via OnlinePaymentGatewayService to test the verification path
             $isSigValid = $this->onlinePgService->verifyWebhookSignature($rawJson, $signature, $timestamp);
-            if (!$isSigValid) {
+            if (! $isSigValid) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Signature verification failed during simulation.',
@@ -522,7 +524,7 @@ class AdminPaymentController extends Controller
             'amount' => 1500.0,
             'currency' => 'INR',
             'status' => PaymentStatus::PENDING_VERIFICATION,
-            'utr_number' => '423' . rand(100000000, 999999999),
+            'utr_number' => '423'.rand(100000000, 999999999),
         ]);
 
         // 2. Pending Bank Transfer
@@ -533,7 +535,7 @@ class AdminPaymentController extends Controller
             'amount' => 5000.0,
             'currency' => 'INR',
             'status' => PaymentStatus::PENDING_VERIFICATION,
-            'bank_reference' => 'NEFT-SBIN-' . rand(100000, 999999),
+            'bank_reference' => 'NEFT-SBIN-'.rand(100000, 999999),
         ]);
 
         // 3. Successful Razorpay PG
@@ -544,8 +546,8 @@ class AdminPaymentController extends Controller
             'amount' => 2500.0,
             'currency' => 'INR',
             'status' => PaymentStatus::SUCCESS,
-            'gateway_order_id' => 'order_' . Str::random(10),
-            'gateway_payment_id' => 'pay_' . Str::random(10),
+            'gateway_order_id' => 'order_'.Str::random(10),
+            'gateway_payment_id' => 'pay_'.Str::random(10),
             'verified_at' => now(),
         ]);
         PaymentAuditLog::create([
@@ -563,7 +565,7 @@ class AdminPaymentController extends Controller
             'amount' => 300.0,
             'currency' => 'INR',
             'status' => PaymentStatus::REJECTED,
-            'utr_number' => 'INVALID_' . rand(1000, 9999),
+            'utr_number' => 'INVALID_'.rand(1000, 9999),
             'rejection_reason' => 'UTR not found in bank statement records during manual audit.',
             'verified_by' => $admin->id,
             'verified_at' => now(),
@@ -604,7 +606,7 @@ class AdminPaymentController extends Controller
                 $request->input('notes')
             );
 
-            return redirect()->back()->with('success', "Payment #{$payment->id} for ₹" . number_format((float)$payment->amount, 2) . " approved successfully.");
+            return redirect()->back()->with('success', "Payment #{$payment->id} for ₹".number_format((float) $payment->amount, 2).' approved successfully.');
         } catch (\Throwable $e) {
             return redirect()->back()->with('error', $e->getMessage());
         }
@@ -662,6 +664,7 @@ class AdminPaymentController extends Controller
     public function settings(): View
     {
         $settings = $this->settingsService->getSettings();
+
         return view('admin.payments.settings', compact('settings'));
     }
 

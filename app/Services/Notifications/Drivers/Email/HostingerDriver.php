@@ -18,7 +18,7 @@ class HostingerDriver implements EmailProviderDriverInterface
     {
         $apiKey = $config['api_key'] ?? config('services.hostinger_mail.api_key', '');
         if (empty($apiKey)) {
-            throw new RuntimeException("Hostinger Mail API token is missing from provider instance configuration.");
+            throw new RuntimeException('Hostinger Mail API token is missing from provider instance configuration.');
         }
 
         $fromAddress = $config['from_address'] ?? config('mail.from.address', 'agent@nexgenhub.site');
@@ -60,7 +60,7 @@ class HostingerDriver implements EmailProviderDriverInterface
      */
     public function resolveMailboxResourceId(string $apiKey, ?string $targetAddress = null): ?string
     {
-        $cacheKey = 'hostinger_mailbox_map_' . md5($apiKey);
+        $cacheKey = 'hostinger_mailbox_map_'.md5($apiKey);
 
         $mailboxes = Cache::remember($cacheKey, 3600, function () use ($apiKey) {
             $response = Http::withToken($apiKey)

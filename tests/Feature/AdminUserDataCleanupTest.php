@@ -16,8 +16,11 @@ class AdminUserDataCleanupTest extends TestCase
     use RefreshDatabase;
 
     protected User $admin;
+
     protected User $agent;
+
     protected Mru $mru1;
+
     protected Mru $mru2;
 
     protected function setUp(): void

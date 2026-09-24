@@ -2,10 +2,11 @@
 
 namespace App\Services\Backup;
 
-use ZipArchive;
-use RecursiveIteratorIterator;
-use RecursiveDirectoryIterator;
 use FilesystemIterator;
+use Illuminate\Support\Facades\File;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use ZipArchive;
 
 class StorageBackupService
 {
@@ -27,15 +28,15 @@ class StorageBackupService
     /**
      * Archive the storage directory into a target ZIP file.
      *
-     * @param string $outputPath Absolute path to the output .zip file
-     * @param array $extraIncludePaths Optional specific directories to include
+     * @param  string  $outputPath  Absolute path to the output .zip file
+     * @param  array  $extraIncludePaths  Optional specific directories to include
      * @return array Metadata about archived files and size
      */
     public function archive(string $outputPath, array $extraIncludePaths = []): array
     {
-        \Illuminate\Support\Facades\File::ensureDirectoryExists(dirname($outputPath));
+        File::ensureDirectoryExists(dirname($outputPath));
 
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         if ($zip->open($outputPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             throw new \RuntimeException("Failed to open or create ZIP archive at: {$outputPath}");
         }
@@ -56,6 +57,7 @@ class StorageBackupService
                 $zip->addFile($targetPath, $relativeName);
                 $totalFiles++;
                 $totalBytes += filesize($targetPath);
+
                 continue;
             }
 
@@ -102,10 +104,11 @@ class StorageBackupService
     protected function shouldExclude(string $relativePath): bool
     {
         foreach ($this->exclusions as $pattern) {
-            if (str_starts_with($relativePath, $pattern) || str_contains($relativePath, '/' . $pattern)) {
+            if (str_starts_with($relativePath, $pattern) || str_contains($relativePath, '/'.$pattern)) {
                 return true;
             }
         }
+
         return false;
     }
 }

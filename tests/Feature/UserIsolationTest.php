@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\BillRecord;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\User;
 use App\Services\EngineService;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -19,7 +21,7 @@ class UserIsolationTest extends TestCase
     {
         parent::setUp();
         // Seed roles & default users
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
     }
 
     public function test_user_isolation_hides_other_users_consumer_accounts(): void
@@ -109,14 +111,14 @@ class UserIsolationTest extends TestCase
 
         $caNumber = '10230046961';
 
-        $service = new EngineService();
+        $service = new EngineService;
         $results = $service->downloadAndParseBills([$caNumber], $user->id);
 
         $this->assertEquals(1, $results['total']);
         $this->assertEquals(1, $results['success']);
-        
+
         // Assert record created in DB
-        $record = \App\Models\BillRecord::where('ca_number', $caNumber)->first();
+        $record = BillRecord::where('ca_number', $caNumber)->first();
         $this->assertNotNull($record);
         $this->assertEquals('MD ASLAM  MAIRUDDIN', $record->consumer_name);
         $this->assertEquals('LAHGARIYA_LALPUR', $record->mru->code);

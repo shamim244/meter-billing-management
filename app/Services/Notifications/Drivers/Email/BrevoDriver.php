@@ -15,7 +15,7 @@ class BrevoDriver implements EmailProviderDriverInterface
     {
         $apiKey = $config['api_key'] ?? '';
         if (empty($apiKey)) {
-            throw new RuntimeException("Brevo API key is missing from provider instance configuration.");
+            throw new RuntimeException('Brevo API key is missing from provider instance configuration.');
         }
 
         $fromAddress = $config['from_address'] ?? config('mail.from.address', 'notifications@nexgenhub.site');
@@ -26,20 +26,20 @@ class BrevoDriver implements EmailProviderDriverInterface
             'Content-Type' => 'application/json',
             'Accept' => 'application/json',
         ])
-        ->timeout(15)
-        ->post('https://api.brevo.com/v3/smtp/email', [
-            'sender' => [
-                'name' => $fromName,
-                'email' => $fromAddress,
-            ],
-            'to' => [
-                ['email' => $to],
-            ],
-            'subject' => $subject,
-            'htmlContent' => $htmlBody,
-        ]);
+            ->timeout(15)
+            ->post('https://api.brevo.com/v3/smtp/email', [
+                'sender' => [
+                    'name' => $fromName,
+                    'email' => $fromAddress,
+                ],
+                'to' => [
+                    ['email' => $to],
+                ],
+                'subject' => $subject,
+                'htmlContent' => $htmlBody,
+            ]);
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             $err = $response->json('message') ?? $response->body();
             throw new RuntimeException("Brevo API failed ({$response->status()}): {$err}");
         }

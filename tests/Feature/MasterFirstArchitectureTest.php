@@ -7,7 +7,10 @@ use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\Plan;
 use App\Models\User;
+use App\Services\Backup\AgentWorkspaceExportService;
 use App\Services\Plan\PlanService;
+use Database\Seeders\PlanSeeder;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -18,8 +21,8 @@ class MasterFirstArchitectureTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
-        $this->seed(\Database\Seeders\PlanSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
+        $this->seed(PlanSeeder::class);
     }
 
     protected function subscribeUser(User $user): void
@@ -126,7 +129,7 @@ class MasterFirstArchitectureTest extends TestCase
         ]);
 
         $importText = "102300783538, Ramesh Kumar, DS-II, OK, 450.00, 3808220, 9876543210, Lalpur Main\n"
-                    . "102300783541, Suresh Singh, NDS-I, LK, 620.50, 3808221, 9876543211, Lalpur East";
+                    .'102300783541, Suresh Singh, NDS-I, LK, 620.50, 3808221, 9876543211, Lalpur East';
 
         $response = $this->actingAs($user)->post("/mrus/{$mru->id}/consumers/import", [
             'ca_data' => $importText,
@@ -481,7 +484,7 @@ class MasterFirstArchitectureTest extends TestCase
         // 6 columns: CA, Name, Tariff, Basis, Amount, Meter
         // 7 columns: CA, Name, Tariff, Basis, Amount, Meter, Initial Reading
         $importText = "102300990001, Six Col User, DS-II, LK, 350.00, MTR-6COL\n"
-                    . "102300990002, Seven Col User, NDS-I, MD, 500.00, MTR-7COL, 2400";
+                    .'102300990002, Seven Col User, NDS-I, MD, 500.00, MTR-7COL, 2400';
 
         $response = $this->actingAs($user)->post("/mrus/{$mru->id}/consumers/import", [
             'ca_data' => $importText,
@@ -685,11 +688,11 @@ class MasterFirstArchitectureTest extends TestCase
             'status' => 'active',
         ]);
 
-        $tempZip = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'test_backup_' . uniqid() . '.zip';
-        $exportService = app(\App\Services\Backup\AgentWorkspaceExportService::class);
+        $tempZip = sys_get_temp_dir().DIRECTORY_SEPARATOR.'test_backup_'.uniqid().'.zip';
+        $exportService = app(AgentWorkspaceExportService::class);
         $exportService->export($user, $tempZip);
 
-        $zip = new \ZipArchive();
+        $zip = new \ZipArchive;
         $this->assertTrue($zip->open($tempZip));
         $csvContent = $zip->getFromName('ledger/02_consumers_registry.csv');
         $this->assertNotEmpty($csvContent);

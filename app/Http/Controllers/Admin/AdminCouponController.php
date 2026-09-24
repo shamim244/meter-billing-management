@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\CouponCode;
+use App\Models\CouponRedemption;
 use App\Models\Plan;
 use App\Services\Coupon\CouponService;
 use Illuminate\Http\RedirectResponse;
@@ -28,7 +29,7 @@ class AdminCouponController extends Controller
         $query = CouponCode::with(['restrictedPlan', 'creator', 'slabs'])
             ->withCount('redemptions');
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $escaped = addcslashes($search, '%_\\');
             $query->where('code', 'like', "%{$escaped}%");
         }
@@ -48,8 +49,8 @@ class AdminCouponController extends Controller
         $stats = [
             'total_coupons' => CouponCode::count(),
             'active_campaigns' => CouponCode::where('is_active', true)->count(),
-            'total_redemptions' => \App\Models\CouponRedemption::count(),
-            'total_discount_given' => (float)\App\Models\CouponRedemption::sum('discount_or_bonus_amount'),
+            'total_redemptions' => CouponRedemption::count(),
+            'total_discount_given' => (float) CouponRedemption::sum('discount_or_bonus_amount'),
         ];
 
         return view('admin.coupons.index', compact('coupons', 'search', 'typeFilter', 'statusFilter', 'stats'));
@@ -61,6 +62,7 @@ class AdminCouponController extends Controller
     public function create(): View
     {
         $plans = Plan::where('is_active', true)->get();
+
         return view('admin.coupons.create', compact('plans'));
     }
 
@@ -130,7 +132,7 @@ class AdminCouponController extends Controller
     public function update(Request $request, CouponCode $coupon): RedirectResponse
     {
         $request->validate([
-            'code' => 'required|string|max:50|unique:coupon_codes,code,' . $coupon->id,
+            'code' => 'required|string|max:50|unique:coupon_codes,code,'.$coupon->id,
             'discount_kind' => 'required_if:type,subscription_discount|nullable|string|in:percentage,flat',
             'discount_value' => 'required_if:type,subscription_discount|nullable|numeric|min:0.01',
             'plan_restriction_id' => 'nullable|exists:plans,id',

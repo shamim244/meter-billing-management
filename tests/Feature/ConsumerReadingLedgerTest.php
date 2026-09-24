@@ -5,7 +5,10 @@ namespace Tests\Feature;
 use App\Models\BillRecord;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
+use App\Models\Plan;
 use App\Models\User;
+use App\Services\Plan\PlanService;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -16,7 +19,7 @@ class ConsumerReadingLedgerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
     }
 
     public function test_updating_working_reading_syncs_consumer_account_ledger(): void
@@ -59,7 +62,7 @@ class ConsumerReadingLedgerTest extends TestCase
 
     protected function subscribeUser(User $user): void
     {
-        $plan = \App\Models\Plan::firstOrCreate(
+        $plan = Plan::firstOrCreate(
             ['name' => 'Unlimited Test Plan'],
             [
                 'included_mrus' => 50,
@@ -75,7 +78,7 @@ class ConsumerReadingLedgerTest extends TestCase
             ['final_price' => 0, 'is_active' => true]
         );
 
-        app(\App\Services\Plan\PlanService::class)->subscribeAgent($user, $plan, $duration);
+        app(PlanService::class)->subscribeAgent($user, $plan, $duration);
     }
 
     public function test_new_cycle_initializes_previous_reading_from_consumer_ledger(): void

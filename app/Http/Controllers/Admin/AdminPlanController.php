@@ -97,6 +97,7 @@ class AdminPlanController extends Controller
     public function edit(Plan $plan): View
     {
         $plan->load('durations');
+
         return view('admin.plans.edit', compact('plan'));
     }
 
@@ -163,7 +164,7 @@ class AdminPlanController extends Controller
             );
 
             return redirect()->route('admin.plans.index')
-                ->with('success', "Plan permanently deleted.");
+                ->with('success', 'Plan permanently deleted.');
         } catch (\InvalidArgumentException $e) {
             return redirect()->route('admin.plans.index')
                 ->with('error', $e->getMessage());

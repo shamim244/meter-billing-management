@@ -19,7 +19,7 @@ class AdminDashboardController extends Controller
         $totalUsers = User::count();
         $activeUsers = User::where('status', 'active')->count();
         $totalMrus = Mru::count();
-        
+
         // System-wide counts (Admin bypasses BelongsToUser automatically)
         $totalConsumers = ConsumerAccount::withoutGlobalScope('belongs_to_user')->count();
         $totalBills = BillRecord::withoutGlobalScope('belongs_to_user')->count();

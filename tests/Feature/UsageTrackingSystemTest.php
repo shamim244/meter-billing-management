@@ -3,14 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\AgentSubscription;
-use App\Models\BillingBasisHistory;
 use App\Models\BillingCycle;
 use App\Models\BillRecord;
-use App\Models\BillStatus;
-use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\Plan;
-use App\Models\PlanDuration;
 use App\Models\PlanOverageCharge;
 use App\Models\User;
 use App\Services\BillingBasisTrackingService;
@@ -19,6 +15,7 @@ use App\Services\QuotaUsageReportService;
 use App\Services\StatusTagReportService;
 use App\Services\UsageSummaryService;
 use App\Services\WalletService;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -27,17 +24,23 @@ class UsageTrackingSystemTest extends TestCase
     use RefreshDatabase;
 
     protected User $admin;
+
     protected User $agent;
+
     protected BillTagService $tagService;
+
     protected StatusTagReportService $statusTagReportService;
+
     protected BillingBasisTrackingService $basisService;
+
     protected QuotaUsageReportService $quotaService;
+
     protected UsageSummaryService $summaryService;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
 
         $this->admin = User::where('email', 'admin@nbpdcl-saas.com')->first();
         $this->agent = User::where('email', 'test@example.com')->first();

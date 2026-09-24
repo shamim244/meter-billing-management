@@ -26,6 +26,7 @@ class MruQuotaService
     public function getActiveSubscription(User|int $user): ?AgentSubscription
     {
         $userId = $user instanceof User ? $user->id : $user;
+
         return AgentSubscription::where('user_id', $userId)
             ->where('status', 'active')
             ->whereIn('lifecycle_status', ['active', 'renewal_due', 'grace_period'])
@@ -41,7 +42,7 @@ class MruQuotaService
         $userId = $user instanceof User ? $user->id : $user;
         $subscription = $this->getActiveSubscription($userId);
 
-        if (!$subscription) {
+        if (! $subscription) {
             return 0;
         }
 
@@ -68,7 +69,7 @@ class MruQuotaService
         $userModel = $user instanceof User ? $user : User::findOrFail($user);
         $subscription = $this->getActiveSubscription($userModel);
 
-        if (!$subscription) {
+        if (! $subscription) {
             return [
                 'allowed' => false,
                 'requires_subscription' => true,
@@ -95,12 +96,16 @@ class MruQuotaService
         // Case 2: Over quota - pay-gate flow
         $extraRate = (float) $subscription->extra_mru_rate_locked;
 
-        if (!$payOverage) {
+        if (! $payOverage) {
+            $walletBalance = (float) $this->walletService->getBalance($userModel);
+
             return [
                 'allowed' => false,
                 'requires_payment' => true,
+                'is_insufficient_balance' => ($walletBalance < $extraRate),
+                'wallet_balance' => $walletBalance,
                 'amount_due' => $extraRate,
-                'reason' => "This exceeds your plan's MRU limit ({$subscription->included_mrus_locked}). Pay ₹" . number_format($extraRate, 2) . " to continue.",
+                'reason' => "This exceeds your plan's MRU limit ({$subscription->included_mrus_locked}). Pay ₹".number_format($extraRate, 2).' to continue.',
             ];
         }
 
@@ -116,9 +121,13 @@ class MruQuotaService
             );
 
             if ($debitResult !== DebitResult::SUCCESS) {
+                $walletBalance = (float) $this->walletService->getBalance($userModel);
+
                 return [
                     'allowed' => false,
                     'requires_payment' => true,
+                    'is_insufficient_balance' => ($debitResult === DebitResult::INSUFFICIENT_BALANCE),
+                    'wallet_balance' => $walletBalance,
                     'debit_result' => $debitResult->value,
                     'amount_due' => $extraRate,
                     'message' => $debitResult === DebitResult::WALLET_FROZEN
@@ -136,7 +145,7 @@ class MruQuotaService
                 'reference_type' => 'mru',
                 'reference_id' => (string) $mru->id,
                 'amount' => $extraRate,
-                'wallet_transaction_id' => $latestTx?->id ? (string)$latestTx->id : null,
+                'wallet_transaction_id' => $latestTx?->id ? (string) $latestTx->id : null,
                 'created_at' => now(),
             ]);
 
@@ -219,7 +228,7 @@ class MruQuotaService
                     'reference_type' => 'mru',
                     'reference_id' => (string) $mru->id,
                     'amount' => $extraRate,
-                    'wallet_transaction_id' => $latestTx?->id ? (string)$latestTx->id : null,
+                    'wallet_transaction_id' => $latestTx?->id ? (string) $latestTx->id : null,
                     'created_at' => now(),
                 ]);
 
@@ -250,7 +259,7 @@ class MruQuotaService
      */
     public function isActionAllowed(Mru $mru, string $action): bool
     {
-        if (!$mru->isLocked()) {
+        if (! $mru->isLocked()) {
             return true;
         }
 

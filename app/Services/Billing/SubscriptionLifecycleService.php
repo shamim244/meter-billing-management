@@ -15,8 +15,6 @@ use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\Plan\RenewalService;
 use App\Services\Wallet\WalletService;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 class SubscriptionLifecycleService
@@ -127,7 +125,7 @@ class SubscriptionLifecycleService
     ): AgentSubscription {
         $sub = $subscription instanceof AgentSubscription ? $subscription : AgentSubscription::findOrFail($subscription);
 
-        if ($admin && empty(trim((string)$adminReason))) {
+        if ($admin && empty(trim((string) $adminReason))) {
             throw new InvalidArgumentException('A mandatory reason must be logged when an Admin manually overrides/reactivates a subscription.');
         }
 
@@ -174,7 +172,7 @@ class SubscriptionLifecycleService
             ->get();
 
         foreach ($autoRenewable as $sub) {
-            if (!$sub->user) {
+            if (! $sub->user) {
                 continue;
             }
 

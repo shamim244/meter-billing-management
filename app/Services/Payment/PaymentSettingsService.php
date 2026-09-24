@@ -21,7 +21,7 @@ class PaymentSettingsService
             'min_amount' => (float) SystemSetting::get('payment_min_amount', 100.0),
             'wallet_low_balance_threshold' => (float) SystemSetting::get('wallet_low_balance_threshold', config('wallet.low_balance_threshold', 200.00)),
             'active_pg_driver' => (string) SystemSetting::get('payment_active_pg_driver', 'cashfree'), // 'cashfree' or 'razorpay'
-            
+
             // Cashfree PG Settings
             'cashfree_app_id' => (string) SystemSetting::get('payment_cashfree_app_id', config('services.cashfree.app_id', 'test_app_id')),
             'cashfree_secret_key' => (string) SystemSetting::get('payment_cashfree_secret_key', config('services.cashfree.secret_key', 'test_secret_key')),
@@ -37,7 +37,7 @@ class PaymentSettingsService
             // Manual UPI Settings
             'business_upi_id' => (string) SystemSetting::get('payment_business_upi_id', 'nbpdcl.billing@upi'),
             'business_upi_name' => (string) SystemSetting::get('payment_business_upi_name', 'NBPDCL SaaS Billing'),
-            
+
             // Bank Transfer Settings
             'bank_account_name' => (string) SystemSetting::get('payment_bank_account_name', 'NBPDCL SaaS Billing Pvt Ltd'),
             'bank_account_number' => (string) SystemSetting::get('payment_bank_account_number', '918273645019'),
@@ -130,7 +130,7 @@ class PaymentSettingsService
     public function isModeEnabled(PaymentMode $mode): bool
     {
         return match ($mode) {
-            PaymentMode::PG => (bool) SystemSetting::get('payment_pg_enabled', true) && 
+            PaymentMode::PG => (bool) SystemSetting::get('payment_pg_enabled', true) &&
                               ((bool) SystemSetting::get('payment_cashfree_enabled', true) || (bool) SystemSetting::get('payment_razorpay_enabled', true)),
             PaymentMode::MANUAL_UPI => (bool) SystemSetting::get('payment_manual_upi_enabled', true),
             PaymentMode::BANK_TRANSFER => (bool) SystemSetting::get('payment_bank_transfer_enabled', true),
@@ -167,12 +167,13 @@ class PaymentSettingsService
     public function getActivePgDriver(): string
     {
         $driver = (string) SystemSetting::get('payment_active_pg_driver', 'cashfree');
-        if ($driver === 'razorpay' && !$this->isRazorpayEnabled() && $this->isCashfreeEnabled()) {
+        if ($driver === 'razorpay' && ! $this->isRazorpayEnabled() && $this->isCashfreeEnabled()) {
             return 'cashfree';
         }
-        if ($driver === 'cashfree' && !$this->isCashfreeEnabled() && $this->isRazorpayEnabled()) {
+        if ($driver === 'cashfree' && ! $this->isCashfreeEnabled() && $this->isRazorpayEnabled()) {
             return 'razorpay';
         }
+
         return $driver;
     }
 
@@ -182,6 +183,7 @@ class PaymentSettingsService
     public function getCashfreeBaseUrl(): string
     {
         $env = (string) SystemSetting::get('payment_cashfree_environment', config('services.cashfree.environment', 'sandbox'));
+
         return $env === 'production'
             ? 'https://api.cashfree.com/pg'
             : 'https://sandbox.cashfree.com/pg';

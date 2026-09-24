@@ -198,6 +198,11 @@
                         <span>Shortcut Defaults</span>
                     </a>
 
+                    <a href="{{ route('admin.api_hub.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ (request()->routeIs('admin.api_hub.*') || request()->routeIs('admin.rate_limits.*')) ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">⚡</span>
+                        <span>API & Automation Hub</span>
+                    </a>
+
                     <a href="{{ route('admin.tags.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.tags.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
                         <span class="text-base">🏷️</span>
                         <span>Review Tags</span>
@@ -233,6 +238,19 @@
                             </a>
                         </div>
                     </div>
+
+                    <a href="{{ route('admin.issues.index') }}" class="flex items-center justify-between px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.issues.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <div class="flex items-center gap-3">
+                            <span class="text-base">🐞</span>
+                            <span>Bug Tracker & AI Desk</span>
+                        </div>
+                        @php
+                            $pendingIssuesCount = \App\Models\IssueReport::where('status', 'pending')->count();
+                        @endphp
+                        @if($pendingIssuesCount > 0)
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950 font-mono">{{ $pendingIssuesCount }}</span>
+                        @endif
+                    </a>
 
                     <a href="{{ route('admin.backups.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.backups.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
                         <span class="text-base">💾</span>

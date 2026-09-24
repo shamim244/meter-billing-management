@@ -76,9 +76,9 @@ class BillTagService
     public function getActiveTags(): array
     {
         $tags = $this->getAllTags();
-        $active = array_values(array_filter($tags, fn($t) => !empty($t['is_active'])));
+        $active = array_values(array_filter($tags, fn ($t) => ! empty($t['is_active'])));
 
-        usort($active, fn($a, $b) => ($a['order'] ?? 0) <=> ($b['order'] ?? 0));
+        usort($active, fn ($a, $b) => ($a['order'] ?? 0) <=> ($b['order'] ?? 0));
 
         return $active;
     }
@@ -90,7 +90,7 @@ class BillTagService
     {
         $tags = $this->getActiveTags();
         foreach ($tags as $tag) {
-            if (!empty($tag['is_default'])) {
+            if (! empty($tag['is_default'])) {
                 return (string) $tag['code'];
             }
         }
@@ -106,14 +106,14 @@ class BillTagService
         // Ensure at least one default tag
         $hasDefault = false;
         foreach ($tags as &$t) {
-            $t['code'] = trim((string)($t['code'] ?? ''));
-            $t['label'] = trim((string)($t['label'] ?? $t['code']));
-            $t['short_label'] = trim((string)($t['short_label'] ?? $t['label']));
-            $t['color'] = trim((string)($t['color'] ?? 'slate'));
-            $t['is_active'] = !empty($t['is_active']);
-            $t['order'] = (int)($t['order'] ?? 1);
+            $t['code'] = trim((string) ($t['code'] ?? ''));
+            $t['label'] = trim((string) ($t['label'] ?? $t['code']));
+            $t['short_label'] = trim((string) ($t['short_label'] ?? $t['label']));
+            $t['color'] = trim((string) ($t['color'] ?? 'slate'));
+            $t['is_active'] = ! empty($t['is_active']);
+            $t['order'] = (int) ($t['order'] ?? 1);
 
-            if (!empty($t['is_default']) && !$hasDefault && $t['is_active']) {
+            if (! empty($t['is_default']) && ! $hasDefault && $t['is_active']) {
                 $hasDefault = true;
                 $t['is_default'] = true;
             } else {
@@ -121,7 +121,7 @@ class BillTagService
             }
         }
 
-        if (!$hasDefault && count($tags) > 0) {
+        if (! $hasDefault && count($tags) > 0) {
             $tags[0]['is_default'] = true;
         }
 
@@ -153,6 +153,7 @@ class BillTagService
     public function getDisplayLabel(?string $code): string
     {
         $tag = $this->getTagByCode($code);
+
         return $tag['short_label'] ?? ($tag['label'] ?? ($code ?: 'OK'));
     }
 
@@ -162,6 +163,7 @@ class BillTagService
     public function getFullLabel(?string $code): string
     {
         $tag = $this->getTagByCode($code);
+
         return $tag['label'] ?? ($code ?: 'OK');
     }
 
@@ -178,6 +180,7 @@ class BillTagService
         foreach ($tags as $t) {
             if (strtoupper($t['code']) === $cleanCode) {
                 $deleted = true;
+
                 continue;
             }
             $filtered[] = $t;
@@ -185,6 +188,7 @@ class BillTagService
 
         if ($deleted) {
             $this->saveTagConfig($filtered);
+
             return true;
         }
 

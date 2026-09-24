@@ -78,7 +78,7 @@ class Plan extends Model
     {
         if ($this->relationLoaded('durations') || $this->durations()->exists()) {
             $monthly = $this->durations->firstWhere('duration_value', 1);
-            if (!$monthly) {
+            if (! $monthly) {
                 $monthly = $this->durations->firstWhere('duration_months', 1);
             }
             if ($monthly) {

@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -108,7 +107,7 @@ class CouponCode extends Model
      */
     public function isValidNow(): bool
     {
-        if (!$this->is_active) {
+        if (! $this->is_active) {
             return false;
         }
 
@@ -132,7 +131,7 @@ class CouponCode extends Model
      */
     public function canUserRedeem(User|int $user): bool
     {
-        if (!$this->isValidNow()) {
+        if (! $this->isValidNow()) {
             return false;
         }
 
@@ -152,10 +151,10 @@ class CouponCode extends Model
         }
 
         if ($this->discount_kind === 'percentage') {
-            $discount = ($durationPrice * (float)$this->discount_value) / 100;
+            $discount = ($durationPrice * (float) $this->discount_value) / 100;
         } else {
             // Flat amount discount
-            $discount = (float)$this->discount_value;
+            $discount = (float) $this->discount_value;
         }
 
         // Never exceed duration price
@@ -174,19 +173,20 @@ class CouponCode extends Model
         $matchingSlab = $this->slabs
             ->first(function (CouponTopupSlab $slab) use ($topupAmount) {
                 if ($slab->max_amount !== null) {
-                    return $topupAmount >= (float)$slab->min_amount && $topupAmount <= (float)$slab->max_amount;
+                    return $topupAmount >= (float) $slab->min_amount && $topupAmount <= (float) $slab->max_amount;
                 }
-                return $topupAmount >= (float)$slab->min_amount;
+
+                return $topupAmount >= (float) $slab->min_amount;
             });
 
-        if (!$matchingSlab || (float)$matchingSlab->bonus_percent <= 0) {
+        if (! $matchingSlab || (float) $matchingSlab->bonus_percent <= 0) {
             return ['bonus_percent' => 0.00, 'bonus_amount' => 0.00, 'slab' => null];
         }
 
-        $bonusAmount = round(($topupAmount * (float)$matchingSlab->bonus_percent) / 100, 2);
+        $bonusAmount = round(($topupAmount * (float) $matchingSlab->bonus_percent) / 100, 2);
 
         return [
-            'bonus_percent' => (float)$matchingSlab->bonus_percent,
+            'bonus_percent' => (float) $matchingSlab->bonus_percent,
             'bonus_amount' => $bonusAmount,
             'slab' => $matchingSlab,
         ];

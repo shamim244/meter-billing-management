@@ -49,7 +49,7 @@ class AdminTagController extends Controller
 
         foreach ($tags as &$t) {
             $t['is_default'] = (strtoupper(trim($t['code'])) === strtoupper($defaultCode));
-            $t['is_active'] = !empty($t['is_active']);
+            $t['is_active'] = ! empty($t['is_active']);
         }
 
         $this->billTagService->saveTagConfig($tags);
@@ -89,7 +89,7 @@ class AdminTagController extends Controller
             'color' => $request->color,
             'is_default' => false,
             'is_active' => true,
-            'order' => (int)($request->order ?: (count($tags) + 1)),
+            'order' => (int) ($request->order ?: (count($tags) + 1)),
         ];
 
         $this->billTagService->saveTagConfig($tags);
@@ -113,7 +113,7 @@ class AdminTagController extends Controller
 
         $deleted = $this->billTagService->deleteTag($code);
 
-        if (!$deleted) {
+        if (! $deleted) {
             return redirect()->route('admin.tags.index')
                 ->withErrors(['delete' => "Tag '{$code}' not found."]);
         }

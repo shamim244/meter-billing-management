@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\BillRecord;
-use App\Models\BillStatus;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\User;
@@ -17,7 +16,9 @@ class SecurityAuditTest extends TestCase
     use RefreshDatabase;
 
     protected User $userA;
+
     protected User $userB;
+
     protected User $adminUser;
 
     protected function setUp(): void
@@ -196,7 +197,7 @@ class SecurityAuditTest extends TestCase
 
     public function test_like_search_wildcard_escaping(): void
     {
-        $response = $this->actingAs($this->userA)->getJson('/dashboard/data?search=' . urlencode('%_\\'));
+        $response = $this->actingAs($this->userA)->getJson('/dashboard/data?search='.urlencode('%_\\'));
         $response->assertOk();
         $this->assertTrue($response->json('success'));
     }

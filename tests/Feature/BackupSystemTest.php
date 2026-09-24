@@ -8,7 +8,6 @@ use App\Models\Mru;
 use App\Models\SystemBackup;
 use App\Models\User;
 use App\Services\Backup\AgentWorkspaceExportService;
-use App\Services\Backup\BackupRetentionService;
 use App\Services\Backup\BackupService;
 use App\Services\Backup\DatabaseDumpService;
 use App\Services\Backup\StorageBackupService;
@@ -22,6 +21,7 @@ class BackupSystemTest extends TestCase
     use RefreshDatabase;
 
     protected User $adminUser;
+
     protected User $agentUser;
 
     protected function setUp(): void
@@ -47,7 +47,7 @@ class BackupSystemTest extends TestCase
     public function test_database_dump_service_generates_valid_gzipped_sql(): void
     {
         $dumper = app(DatabaseDumpService::class);
-        $outputPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'test_dump_' . uniqid() . '.sql.gz';
+        $outputPath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'test_dump_'.uniqid().'.sql.gz';
 
         $summary = $dumper->dump($outputPath);
 
@@ -70,7 +70,7 @@ class BackupSystemTest extends TestCase
     public function test_storage_backup_service_creates_zip_with_exclusions(): void
     {
         $storageDumper = app(StorageBackupService::class);
-        $outputPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'test_storage_' . uniqid() . '.zip';
+        $outputPath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'test_storage_'.uniqid().'.zip';
 
         // Create a dummy file in storage/app/bills
         Storage::disk('local')->put('bills/test_bill.txt', 'Mock Bill PDF Content');
@@ -155,7 +155,7 @@ class BackupSystemTest extends TestCase
         ]);
 
         $exportService = app(AgentWorkspaceExportService::class);
-        $outputZip = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'test_agent_export_' . uniqid() . '.zip';
+        $outputZip = sys_get_temp_dir().DIRECTORY_SEPARATOR.'test_agent_export_'.uniqid().'.zip';
 
         $manifest = $exportService->export($this->agentUser, $outputZip);
 
@@ -166,7 +166,7 @@ class BackupSystemTest extends TestCase
         $this->assertEquals(1, $manifest['statistics']['total_bill_records']);
 
         // Inspect zip content
-        $zip = new \ZipArchive();
+        $zip = new \ZipArchive;
         $this->assertTrue($zip->open($outputZip));
         $this->assertNotEmpty($zip->getFromName('ledger/01_mrus_master.csv'));
         $this->assertNotEmpty($zip->getFromName('ledger/02_consumers_registry.csv'));

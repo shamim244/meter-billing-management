@@ -2,12 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Models\AgentSubscription;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\Plan;
 use App\Models\User;
-use App\Services\Plan\PlanService;
 use Database\Seeders\PlanSeeder;
 use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;

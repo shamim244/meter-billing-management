@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('bill_records', function (Blueprint $table) {
-            if (!Schema::hasColumn('bill_records', 'reading_source')) {
+            if (! Schema::hasColumn('bill_records', 'reading_source')) {
                 $table->string('reading_source', 20)->default('auto')->after('working_reading');
             }
         });

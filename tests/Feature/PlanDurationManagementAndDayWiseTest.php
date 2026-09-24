@@ -2,13 +2,12 @@
 
 namespace Tests\Feature;
 
-use App\Models\Plan;
-use App\Models\PlanDuration;
 use App\Models\User;
 use App\Services\Plan\PlanService;
 use App\Services\Wallet\WalletService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class PlanDurationManagementAndDayWiseTest extends TestCase
@@ -16,8 +15,11 @@ class PlanDurationManagementAndDayWiseTest extends TestCase
     use RefreshDatabase;
 
     protected User $admin;
+
     protected User $agent;
+
     protected PlanService $planService;
+
     protected WalletService $walletService;
 
     protected function setUp(): void
@@ -27,8 +29,8 @@ class PlanDurationManagementAndDayWiseTest extends TestCase
         $this->planService = app(PlanService::class);
         $this->walletService = app(WalletService::class);
 
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'user', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'user', 'guard_name' => 'web']);
 
         $this->admin = User::factory()->create([
             'email' => 'admin@nbpdcl.test',
@@ -154,7 +156,7 @@ class PlanDurationManagementAndDayWiseTest extends TestCase
             'extra_consumer_rate' => 0.10,
             'base_price' => 100.0,
         ], [
-            ['duration_unit' => 'month', 'duration_value' => 1, 'discount_percent' => 0, 'final_price' => 100, 'is_active' => true]
+            ['duration_unit' => 'month', 'duration_value' => 1, 'discount_percent' => 0, 'final_price' => 100, 'is_active' => true],
         ]);
 
         $duration = $plan->durations()->first();

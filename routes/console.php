@@ -2,6 +2,7 @@
 
 use App\Jobs\CheckMonthlyUsageSummaryJob;
 use App\Services\Billing\SubscriptionLifecycleService;
+use App\Services\Referral\ReferralService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -22,7 +23,7 @@ Artisan::command('usage:check-monthly-summaries', function () {
     $this->info('Monthly usage summary notification job completed.');
 })->purpose('Generate and notify agents of newly ready monthly usage summaries');
 
-Artisan::command('referrals:process-payouts', function (\App\Services\Referral\ReferralService $referralService) {
+Artisan::command('referrals:process-payouts', function (ReferralService $referralService) {
     $this->info('Processing matured referral hold period payouts...');
     $count = $referralService->processExpiredHoldPeriods();
     $this->info("Processed and credited {$count} referral reward payouts.");
@@ -32,3 +33,5 @@ Artisan::command('referrals:process-payouts', function (\App\Services\Referral\R
 Schedule::command('subscriptions:process-lifecycle')->dailyAt('00:05');
 Schedule::command('referrals:process-payouts')->dailyAt('00:15');
 Schedule::command('usage:check-monthly-summaries')->monthlyOn(1, '06:00');
+Schedule::command('saas:backup --type=db_only')->dailyAt('02:00');
+Schedule::command('saas:backup-clean')->dailyAt('02:30');

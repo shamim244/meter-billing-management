@@ -15,7 +15,7 @@ class ResendDriver implements EmailProviderDriverInterface
     {
         $apiKey = $config['api_key'] ?? '';
         if (empty($apiKey)) {
-            throw new RuntimeException("Resend API key is missing from provider instance configuration.");
+            throw new RuntimeException('Resend API key is missing from provider instance configuration.');
         }
 
         $fromAddress = $config['from_address'] ?? config('mail.from.address', 'notifications@nexgenhub.site');
@@ -31,7 +31,7 @@ class ResendDriver implements EmailProviderDriverInterface
                 'html' => $htmlBody,
             ]);
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             $err = $response->json('message') ?? $response->body();
             throw new RuntimeException("Resend API failed ({$response->status()}): {$err}");
         }

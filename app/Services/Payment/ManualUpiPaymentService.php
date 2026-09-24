@@ -28,7 +28,7 @@ class ManualUpiPaymentService
         ?UploadedFile $screenshot = null,
         array $meta = []
     ): Payment {
-        if (!$this->settings->isModeEnabled(PaymentMode::MANUAL_UPI)) {
+        if (! $this->settings->isModeEnabled(PaymentMode::MANUAL_UPI)) {
             throw new \InvalidArgumentException('Manual UPI payment mode is currently disabled.');
         }
 

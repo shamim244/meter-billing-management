@@ -28,6 +28,7 @@ use App\Events\WalletFrozenEvent;
 use App\Events\WalletInsufficientForRenewalEvent;
 use App\Events\WalletLowBalanceEvent;
 use App\Events\WalletUnfrozenEvent;
+use App\Models\User;
 use App\Services\Notifications\NotificationDispatchService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Events\Dispatcher;
@@ -46,7 +47,7 @@ class DomainNotificationSubscriber
     {
         $p = $event->payment;
         $modeStr = $p->mode instanceof \BackedEnum ? $p->mode->value : (string) $p->mode;
-        
+
         // If it was a manual payment (manual_upi / bank_transfer), handleManualPaymentApproved handles sending the dedicated approval notification.
         if (in_array($modeStr, ['manual_upi', 'bank_transfer', 'upi_manual'], true)) {
             return;
@@ -185,7 +186,7 @@ class DomainNotificationSubscriber
 
     public function handleMruUnlocked(MruUnlockedEvent $event): void
     {
-        $feeText = $event->unlockFee ? ('Fee: ₹' . number_format($event->unlockFee, 2)) : 'Self-service unlock';
+        $feeText = $event->unlockFee ? ('Fee: ₹'.number_format($event->unlockFee, 2)) : 'Self-service unlock';
         $this->dispatcher->dispatch('mru.unlocked', $event->mru->user, [
             'mru_code' => $event->mru->code,
             'method' => $feeText,
@@ -299,7 +300,7 @@ class DomainNotificationSubscriber
     // --- Auth Events ---
     public function handleRegistered(Registered $event): void
     {
-        if ($event->user instanceof \App\Models\User) {
+        if ($event->user instanceof User) {
             $this->dispatcher->dispatch('auth.welcome', $event->user, [
                 'agent_name' => $event->user->name,
                 'email' => $event->user->email,

@@ -19,12 +19,12 @@ class AdminMruController extends Controller
 
         $query = Mru::withCount(['consumerAccounts', 'billRecords']);
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $escaped = addcslashes($search, '%_\\');
             $query->where(function ($q) use ($escaped) {
                 $q->where('code', 'like', "%{$escaped}%")
-                  ->orWhere('name', 'like', "%{$escaped}%")
-                  ->orWhere('full_identifier', 'like', "%{$escaped}%");
+                    ->orWhere('name', 'like', "%{$escaped}%")
+                    ->orWhere('full_identifier', 'like', "%{$escaped}%");
             });
         }
 

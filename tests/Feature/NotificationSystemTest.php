@@ -3,14 +3,9 @@
 namespace Tests\Feature;
 
 use App\Events\AdminNotificationFailedEvent;
-use App\Events\AgentPlanMigratedEvent;
-use App\Events\AgentSubscribedEvent;
 use App\Events\MruLockedEvent;
-use App\Events\PaymentSuccessEvent;
-use App\Events\SubscriptionEnteredGracePeriodEvent;
 use App\Events\SubscriptionSuspendedEvent;
 use App\Events\WalletCreditedEvent;
-use App\Events\WalletCriticalBalanceEvent;
 use App\Jobs\SendEmailNotificationJob;
 use App\Models\AgentNotificationPreference;
 use App\Models\AgentSubscription;
@@ -19,10 +14,12 @@ use App\Models\Mru;
 use App\Models\Notification;
 use App\Models\NotificationDelivery;
 use App\Models\NotificationTemplate;
-use App\Models\Payment;
+use App\Models\Plan;
 use App\Models\User;
 use App\Services\Notifications\Contracts\EmailProviderDriverInterface;
 use App\Services\Notifications\EmailProviderRegistryService;
+use App\Services\Notifications\NotificationDispatchService;
+use Database\Seeders\NotificationSystemSeeder;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -37,6 +34,7 @@ class NotificationSystemTest extends TestCase
     use RefreshDatabase;
 
     protected User $adminUser;
+
     protected User $agentUser;
 
     protected function setUp(): void
@@ -59,7 +57,7 @@ class NotificationSystemTest extends TestCase
         ]);
         $this->agentUser->assignRole('user');
 
-        $this->seed(\Database\Seeders\NotificationSystemSeeder::class);
+        $this->seed(NotificationSystemSeeder::class);
     }
 
     /**
@@ -89,14 +87,18 @@ class NotificationSystemTest extends TestCase
         ]);
 
         // Mock drivers in registry
-        $mockFailingDriver = new class implements EmailProviderDriverInterface {
-            public function send(string $to, string $subject, string $htmlBody, array $config): bool {
-                throw new \RuntimeException("Connection to fail.smtp.com refused");
+        $mockFailingDriver = new class implements EmailProviderDriverInterface
+        {
+            public function send(string $to, string $subject, string $htmlBody, array $config): bool
+            {
+                throw new \RuntimeException('Connection to fail.smtp.com refused');
             }
         };
 
-        $mockSucceedingDriver = new class implements EmailProviderDriverInterface {
-            public function send(string $to, string $subject, string $htmlBody, array $config): bool {
+        $mockSucceedingDriver = new class implements EmailProviderDriverInterface
+        {
+            public function send(string $to, string $subject, string $htmlBody, array $config): bool
+            {
                 return true;
             }
         };
@@ -195,7 +197,7 @@ class NotificationSystemTest extends TestCase
         ]);
 
         // Dispatch Critical Event (SubscriptionSuspendedEvent)
-        $plan = \App\Models\Plan::create([
+        $plan = Plan::create([
             'code' => 'TEST_CRIT',
             'name' => 'Critical Plan',
             'billing_period' => 'monthly',
@@ -314,7 +316,7 @@ class NotificationSystemTest extends TestCase
         ]);
 
         $job = new SendEmailNotificationJob($critDelivery->id);
-        $job->failed(new \RuntimeException("SMTP Error on 3rd retry"));
+        $job->failed(new \RuntimeException('SMTP Error on 3rd retry'));
 
         Event::assertDispatched(AdminNotificationFailedEvent::class, function ($e) use ($critNotification) {
             return $e->notification->id === $critNotification->id;
@@ -338,7 +340,7 @@ class NotificationSystemTest extends TestCase
         ]);
 
         $routineJob = new SendEmailNotificationJob($routineDelivery->id);
-        $routineJob->failed(new \RuntimeException("Routine failure"));
+        $routineJob->failed(new \RuntimeException('Routine failure'));
 
         Event::assertNotDispatched(AdminNotificationFailedEvent::class);
     }
@@ -434,15 +436,19 @@ class NotificationSystemTest extends TestCase
     public function test_sync_template_attempts_immediate_send(): void
     {
         // 1. Create a dummy email provider that succeeds
-        $mockDriver = new class implements \App\Services\Notifications\Contracts\EmailProviderDriverInterface {
+        $mockDriver = new class implements EmailProviderDriverInterface
+        {
             public bool $wasCalled = false;
-            public function send(string $to, string $subject, string $htmlBody, array $config): bool {
+
+            public function send(string $to, string $subject, string $htmlBody, array $config): bool
+            {
                 $this->wasCalled = true;
+
                 return true;
             }
         };
 
-        $registry = app(\App\Services\Notifications\EmailProviderRegistryService::class);
+        $registry = app(EmailProviderRegistryService::class);
         $registry->registerDriver('mock_sync', $mockDriver);
 
         EmailProviderInstance::query()->delete();
@@ -461,7 +467,7 @@ class NotificationSystemTest extends TestCase
         $this->assertEquals('sync', $template->dispatch_mode);
 
         // 3. Dispatch auth.welcome event
-        $dispatcher = app(\App\Services\Notifications\NotificationDispatchService::class);
+        $dispatcher = app(NotificationDispatchService::class);
         $notification = $dispatcher->dispatch('auth.welcome', $this->agentUser, [
             'agent_name' => $this->agentUser->name,
             'email' => $this->agentUser->email,
@@ -485,13 +491,15 @@ class NotificationSystemTest extends TestCase
         Queue::fake([SendEmailNotificationJob::class]);
 
         // 1. Create a dummy email provider that throws timeout exception
-        $timeoutDriver = new class implements \App\Services\Notifications\Contracts\EmailProviderDriverInterface {
-            public function send(string $to, string $subject, string $htmlBody, array $config): bool {
-                throw new \RuntimeException("Connection timed out after 8.0 seconds");
+        $timeoutDriver = new class implements EmailProviderDriverInterface
+        {
+            public function send(string $to, string $subject, string $htmlBody, array $config): bool
+            {
+                throw new \RuntimeException('Connection timed out after 8.0 seconds');
             }
         };
 
-        $registry = app(\App\Services\Notifications\EmailProviderRegistryService::class);
+        $registry = app(EmailProviderRegistryService::class);
         $registry->registerDriver('mock_timeout', $timeoutDriver);
 
         EmailProviderInstance::query()->delete();
@@ -504,7 +512,7 @@ class NotificationSystemTest extends TestCase
         ]);
 
         // 2. Dispatch auth.welcome (which is dispatch_mode = 'sync')
-        $dispatcher = app(\App\Services\Notifications\NotificationDispatchService::class);
+        $dispatcher = app(NotificationDispatchService::class);
         $notification = $dispatcher->dispatch('auth.welcome', $this->agentUser, [
             'agent_name' => $this->agentUser->name,
             'email' => $this->agentUser->email,
@@ -535,7 +543,7 @@ class NotificationSystemTest extends TestCase
             ->first();
         $this->assertEquals('queued', $template->dispatch_mode);
 
-        $dispatcher = app(\App\Services\Notifications\NotificationDispatchService::class);
+        $dispatcher = app(NotificationDispatchService::class);
         $notification = $dispatcher->dispatch('wallet.debited', $this->agentUser, [
             'amount' => '50.00',
             'balance' => '450.00',

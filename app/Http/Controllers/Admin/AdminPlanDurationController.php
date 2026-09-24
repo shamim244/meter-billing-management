@@ -56,16 +56,17 @@ class AdminPlanDurationController extends Controller
             ->exists();
 
         if ($exists) {
-            $msg = "A {$val}-" . ($unit === 'day' ? 'day' : 'month') . " duration already exists for this plan.";
+            $msg = "A {$val}-".($unit === 'day' ? 'day' : 'month').' duration already exists for this plan.';
             if ($request->wantsJson()) {
                 return response()->json(['success' => false, 'message' => $msg], 422);
             }
+
             return redirect()->back()->with('error', $msg)->withInput();
         }
 
         // Calculate final price if not explicitly provided
         $baseMonthlyPrice = (float) $plan->base_price;
-        if (!isset($validated['final_price']) || $validated['final_price'] === '') {
+        if (! isset($validated['final_price']) || $validated['final_price'] === '') {
             if ($unit === 'day') {
                 $finalPrice = ($baseMonthlyPrice / 30) * $val * (1 - ($discount / 100));
             } else {
@@ -75,21 +76,21 @@ class AdminPlanDurationController extends Controller
             $finalPrice = (float) $validated['final_price'];
         }
 
-        $months = $unit === 'month' ? $val : max(1, (int)ceil($val / 30));
+        $months = $unit === 'month' ? $val : max(1, (int) ceil($val / 30));
 
         $duration = $plan->durations()->create([
             'duration_unit' => $unit,
             'duration_value' => $val,
             'duration_months' => $months,
-            'name' => !empty($validated['name']) ? trim($validated['name']) : null,
+            'name' => ! empty($validated['name']) ? trim($validated['name']) : null,
             'discount_percent' => $discount,
             'final_price' => max(0.0, $finalPrice),
-            'extra_mru_rate' => !empty($validated['extra_mru_rate']) ? (float)$validated['extra_mru_rate'] : null,
-            'extra_consumer_rate' => !empty($validated['extra_consumer_rate']) ? (float)$validated['extra_consumer_rate'] : null,
+            'extra_mru_rate' => ! empty($validated['extra_mru_rate']) ? (float) $validated['extra_mru_rate'] : null,
+            'extra_consumer_rate' => ! empty($validated['extra_consumer_rate']) ? (float) $validated['extra_consumer_rate'] : null,
             'is_active' => $request->boolean('is_active', true),
         ]);
 
-        $successMsg = "Duration '{$duration->formatted_duration}' (₹" . number_format($duration->final_price, 2) . ") created successfully.";
+        $successMsg = "Duration '{$duration->formatted_duration}' (₹".number_format($duration->final_price, 2).') created successfully.';
 
         if ($request->wantsJson()) {
             return response()->json(['success' => true, 'message' => $successMsg, 'duration' => $duration]);
@@ -117,11 +118,11 @@ class AdminPlanDurationController extends Controller
         ]);
 
         $duration->update([
-            'name' => !empty($validated['name']) ? trim($validated['name']) : null,
+            'name' => ! empty($validated['name']) ? trim($validated['name']) : null,
             'discount_percent' => (float) ($validated['discount_percent'] ?? 0.0),
             'final_price' => (float) $validated['final_price'],
-            'extra_mru_rate' => !empty($validated['extra_mru_rate']) ? (float)$validated['extra_mru_rate'] : null,
-            'extra_consumer_rate' => !empty($validated['extra_consumer_rate']) ? (float)$validated['extra_consumer_rate'] : null,
+            'extra_mru_rate' => ! empty($validated['extra_mru_rate']) ? (float) $validated['extra_mru_rate'] : null,
+            'extra_consumer_rate' => ! empty($validated['extra_consumer_rate']) ? (float) $validated['extra_consumer_rate'] : null,
             'is_active' => $request->boolean('is_active', true),
         ]);
 
@@ -147,15 +148,16 @@ class AdminPlanDurationController extends Controller
         if ($duration->is_active) {
             $otherActiveCount = $plan->durations()->where('id', '!=', $duration->id)->where('is_active', true)->count();
             if ($otherActiveCount === 0) {
-                $errorMsg = "Cannot disable the only active duration. At least 1 active duration is required.";
+                $errorMsg = 'Cannot disable the only active duration. At least 1 active duration is required.';
                 if (request()->wantsJson()) {
                     return response()->json(['success' => false, 'message' => $errorMsg], 422);
                 }
+
                 return redirect()->back()->with('error', $errorMsg);
             }
         }
 
-        $duration->update(['is_active' => !$duration->is_active]);
+        $duration->update(['is_active' => ! $duration->is_active]);
 
         $stateText = $duration->is_active ? 'enabled' : 'disabled';
         $successMsg = "Duration '{$duration->formatted_duration}' is now {$stateText}.";
@@ -179,10 +181,11 @@ class AdminPlanDurationController extends Controller
         // Ensure at least 1 duration remains on the plan
         $remainingCount = $plan->durations()->where('id', '!=', $duration->id)->count();
         if ($remainingCount === 0) {
-            $errorMsg = "Cannot delete the last remaining duration. A plan must have at least 1 duration.";
+            $errorMsg = 'Cannot delete the last remaining duration. A plan must have at least 1 duration.';
             if (request()->wantsJson()) {
                 return response()->json(['success' => false, 'message' => $errorMsg], 422);
             }
+
             return redirect()->back()->with('error', $errorMsg);
         }
 

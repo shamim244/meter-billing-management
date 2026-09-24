@@ -8,8 +8,8 @@ use App\Models\Mru;
 use App\Models\User;
 use App\Services\BillDownloadService;
 use App\Services\BillParseService;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
 class ProcessingCenterTest extends TestCase
@@ -19,7 +19,7 @@ class ProcessingCenterTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
     }
 
     public function test_processing_hub_index_renders_successfully(): void
@@ -72,7 +72,7 @@ class ProcessingCenterTest extends TestCase
                 'pdf_bills_count' => 1,
                 'parsed_count' => 1,
                 'pending_parse' => 0,
-            ]
+            ],
         ]);
     }
 

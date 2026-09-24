@@ -5,25 +5,35 @@ namespace App\Http\Controllers;
 use App\Models\BillRecord;
 use App\Models\BillStatus;
 use App\Models\ConsumerAccount;
+use App\Models\MeterReadingHistory;
 use App\Models\Mru;
+use App\Models\Plan;
 use App\Services\EngineService;
+use App\Services\MeterReadingHistoryService;
 use App\Services\Plan\ConsumerQuotaService;
 use App\Services\Plan\MruQuotaService;
+use App\Services\Plan\PlanService;
+use App\Services\SmartAverageCalculationService;
+use App\Services\Wallet\WalletService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
-
-use App\Services\SmartAverageCalculationService;
 
 class MruController extends Controller
 {
     protected EngineService $engineService;
+
     protected MruQuotaService $mruQuotaService;
+
     protected ConsumerQuotaService $consumerQuotaService;
+
     protected SmartAverageCalculationService $smartAverageService;
 
     public function __construct(
@@ -84,7 +94,7 @@ class MruController extends Controller
                         'consumers_count' => $existing->consumerAccounts()->count(),
                         'show_url' => route('mrus.show', $existing),
                         'dashboard_url' => route('dashboard', ['mru_id' => $existing->id]),
-                    ]
+                    ],
                 ], 200);
             }
 
@@ -94,31 +104,31 @@ class MruController extends Controller
 
         // Quota check & Pay-gate flow
         $activeSubscription = $this->mruQuotaService->getActiveSubscription($userId);
-        if (!$activeSubscription) {
+        if (! $activeSubscription) {
             // Attempt auto-subscribing to Free Plan if available
             try {
                 $user = Auth::user();
-                $freePlan = \App\Models\Plan::where('is_active', true)
+                $freePlan = Plan::where('is_active', true)
                     ->where(function ($q) {
                         $q->where('is_free', true)
-                          ->orWhere('name', 'like', '%Free%')
-                          ->orWhereHas('durations', fn($dq) => $dq->where('final_price', '<=', 0));
+                            ->orWhere('name', 'like', '%Free%')
+                            ->orWhereHas('durations', fn ($dq) => $dq->where('final_price', '<=', 0));
                     })
                     ->first();
 
                 if ($user && $freePlan) {
                     $duration = $freePlan->durations()->where('is_active', true)->orderBy('duration_value', 'desc')->first();
                     if ($duration) {
-                        app(\App\Services\Plan\PlanService::class)->subscribeAgent($user, $freePlan, $duration);
+                        app(PlanService::class)->subscribeAgent($user, $freePlan, $duration);
                         $activeSubscription = $this->mruQuotaService->getActiveSubscription($userId);
                     }
                 }
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning("[MRU] Auto-subscribe to Free Plan on MRU creation failed: " . $e->getMessage());
+                Log::warning('[MRU] Auto-subscribe to Free Plan on MRU creation failed: '.$e->getMessage());
             }
         }
 
-        if (!$activeSubscription) {
+        if (! $activeSubscription) {
             $msg = 'An active subscription plan is required to create an MRU. Please choose a plan or activate your Free plan to continue.';
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json([
@@ -134,18 +144,28 @@ class MruController extends Controller
 
         $payOverage = $request->boolean('pay_overage', false);
 
-        if ($activeSubscription && $this->mruQuotaService->checkMruQuotaAvailable($userId) <= 0 && !$payOverage) {
+        if ($activeSubscription && $this->mruQuotaService->checkMruQuotaAvailable($userId) <= 0 && ! $payOverage) {
             $extraRate = (float) $activeSubscription->extra_mru_rate_locked;
+            $user = Auth::user();
+            $walletBalance = $user ? (float) app(WalletService::class)->getBalance($user) : 0.0;
+            $isInsufficient = ($walletBalance < $extraRate);
+
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json([
                     'requires_overage' => true,
                     'overage_type' => 'mru_creation',
                     'amount_due' => $extraRate,
-                    'message' => "This exceeds your plan's included MRU limit ({$activeSubscription->included_mrus_locked}). Pay ₹" . number_format($extraRate, 2) . " to create this MRU.",
+                    'wallet_balance' => $walletBalance,
+                    'is_insufficient_balance' => $isInsufficient,
+                    'topup_url' => route('wallet.index'),
+                    'upgrade_url' => route('user-panel.subscription'),
+                    'message' => $isInsufficient
+                        ? "This exceeds your plan's included MRU limit ({$activeSubscription->included_mrus_locked}). Wallet balance (₹".number_format($walletBalance, 2).') is insufficient for ₹'.number_format($extraRate, 2).' creation fee.'
+                        : "This exceeds your plan's included MRU limit ({$activeSubscription->included_mrus_locked}). Pay ₹".number_format($extraRate, 2).' from your wallet to create this MRU.',
                 ], 402);
             }
 
-            return redirect()->route('mrus.index')->with('error', "This exceeds your plan's included MRU limit ({$activeSubscription->included_mrus_locked}). Additional MRU creation requires overage confirmation (₹" . number_format($extraRate, 2) . ").");
+            return redirect()->route('mrus.index')->with('error', "This exceeds your plan's included MRU limit ({$activeSubscription->included_mrus_locked}). Additional MRU creation requires overage confirmation (₹".number_format($extraRate, 2).').');
         }
 
         $mru = Mru::create([
@@ -158,15 +178,25 @@ class MruController extends Controller
 
         if ($activeSubscription) {
             $quotaResult = $this->mruQuotaService->consumeMruSlot($userId, $mru, $payOverage);
-            if (!$quotaResult['allowed']) {
+            if (! $quotaResult['allowed']) {
                 $mru->delete();
+                $user = Auth::user();
+                $walletBalance = $quotaResult['wallet_balance'] ?? ($user ? (float) app(WalletService::class)->getBalance($user) : 0.0);
+                $isInsufficient = $quotaResult['is_insufficient_balance'] ?? ($walletBalance < ($quotaResult['amount_due'] ?? 0));
+
                 if ($request->wantsJson() || $request->ajax()) {
                     return response()->json([
                         'requires_overage' => true,
+                        'overage_type' => 'mru_creation',
                         'amount_due' => $quotaResult['amount_due'] ?? 0,
+                        'wallet_balance' => $walletBalance,
+                        'is_insufficient_balance' => $isInsufficient,
+                        'topup_url' => route('wallet.index'),
+                        'upgrade_url' => route('user-panel.subscription'),
                         'message' => $quotaResult['message'] ?? $quotaResult['reason'] ?? 'MRU quota exceeded.',
                     ], 402);
                 }
+
                 return redirect()->route('mrus.index')->with('error', $quotaResult['message'] ?? 'MRU quota exceeded.');
             }
         }
@@ -181,7 +211,7 @@ class MruController extends Controller
                     'id' => $mru->id,
                     'code' => $mru->code,
                     'name' => $mru->name,
-                ]
+                ],
             ], 201);
         }
 
@@ -221,7 +251,7 @@ class MruController extends Controller
         $payOverage = $request->boolean('pay_overage', true);
         $result = $this->mruQuotaService->unlockMru($mru, $payOverage);
 
-        if (!$result['success']) {
+        if (! $result['success']) {
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json([
                     'success' => false,
@@ -255,12 +285,12 @@ class MruController extends Controller
 
         // Permanent Consumer Master List for this MRU
         $consumersQuery = $mru->consumerAccounts()->orderBy('ca_number');
-        if (!empty($search)) {
+        if (! empty($search)) {
             $escaped = addcslashes($search, '%_\\');
             $consumersQuery->where(function ($q) use ($escaped) {
                 $q->where('ca_number', 'like', "%{$escaped}%")
-                  ->orWhere('consumer_name', 'like', "%{$escaped}%")
-                  ->orWhere('meter_no', 'like', "%{$escaped}%");
+                    ->orWhere('consumer_name', 'like', "%{$escaped}%")
+                    ->orWhere('meter_no', 'like', "%{$escaped}%");
             });
         }
         $consumers = $consumersQuery->paginate(50);
@@ -291,7 +321,7 @@ class MruController extends Controller
                 'required',
                 'string',
                 'max:50',
-                \Illuminate\Validation\Rule::unique('mrus', 'code')
+                Rule::unique('mrus', 'code')
                     ->where(fn ($q) => $q->where('user_id', $userId))
                     ->ignore($mru->id),
             ],
@@ -301,11 +331,11 @@ class MruController extends Controller
         $oldCode = $mru->code;
         $newCode = strtoupper(trim($request->code));
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($mru, $oldCode, $newCode, $userId, $request) {
+        DB::transaction(function () use ($mru, $oldCode, $newCode, $userId, $request) {
             // If MRU Code changed, migrate physical PDF folders and database paths
             if ($oldCode !== $newCode) {
                 $bills = BillRecord::where('mru_id', $mru->id)->get();
-                $cycles = $bills->groupBy(fn($b) => "{$b->billing_year}_{$b->billing_month}");
+                $cycles = $bills->groupBy(fn ($b) => "{$b->billing_year}_{$b->billing_month}");
 
                 foreach ($cycles as $cycleBills) {
                     $first = $cycleBills->first();
@@ -321,7 +351,7 @@ class MruController extends Controller
 
                     // Update bill_records pdf_path in database
                     foreach ($cycleBills as $b) {
-                        if (!empty($b->pdf_path) && str_contains($b->pdf_path, "/{$oldCode}/")) {
+                        if (! empty($b->pdf_path) && str_contains($b->pdf_path, "/{$oldCode}/")) {
                             $b->pdf_path = str_replace("/{$oldCode}/", "/{$newCode}/", $b->pdf_path);
                             $b->save();
                         }
@@ -345,7 +375,7 @@ class MruController extends Controller
     protected function authorizeMru(Mru $mru): void
     {
         $currentUser = Auth::user();
-        if (!$currentUser || ($mru->user_id !== $currentUser->id && !$currentUser->hasRole('admin'))) {
+        if (! $currentUser || ($mru->user_id !== $currentUser->id && ! $currentUser->hasRole('admin'))) {
             abort(403, 'Unauthorized access to this MRU.');
         }
     }
@@ -361,10 +391,10 @@ class MruController extends Controller
         $userId = $mru->user_id;
         $mruCode = $mru->code;
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($mru, $userId, $mruCode) {
+        DB::transaction(function () use ($mru, $userId, $mruCode) {
             // 1. Purge all physical PDF directories for this MRU across all years and months
             $bills = BillRecord::where('mru_id', $mru->id)->get();
-            $cycles = $bills->groupBy(fn($b) => "{$b->billing_year}_{$b->billing_month}");
+            $cycles = $bills->groupBy(fn ($b) => "{$b->billing_year}_{$b->billing_month}");
 
             foreach ($cycles as $cycleBills) {
                 $first = $cycleBills->first();
@@ -376,7 +406,7 @@ class MruController extends Controller
 
             // 2. Cleanly delete database records
             $caNumbers = $mru->consumerAccounts()->pluck('ca_number')->toArray();
-            if (!empty($caNumbers)) {
+            if (! empty($caNumbers)) {
                 BillStatus::where('user_id', $userId)->whereIn('ca_number', $caNumbers)->delete();
             }
 
@@ -408,7 +438,7 @@ class MruController extends Controller
         $monthLabel = date('M, Y', mktime(0, 0, 0, $month, 1, $year));
         $count = 0;
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($mru, $userId, $mruCode, $month, $year, &$count) {
+        DB::transaction(function () use ($mru, $userId, $mruCode, $month, $year, &$count) {
             // 1. Purge physical storage folder for this specific session
             $dir = "users/{$userId}/pdfs/{$year}/{$month}/{$mruCode}";
             if (Storage::disk('local')->exists($dir)) {
@@ -422,7 +452,7 @@ class MruController extends Controller
                 ->get();
 
             $caNumbers = $bills->pluck('ca_number')->toArray();
-            if (!empty($caNumbers)) {
+            if (! empty($caNumbers)) {
                 BillStatus::where('user_id', $userId)
                     ->where('billing_month', $month)
                     ->where('billing_year', $year)
@@ -469,7 +499,7 @@ class MruController extends Controller
             'meter_no' => $request->meter_no,
             'tariff_category' => $request->tariff_category ? strtoupper(trim($request->tariff_category)) : null,
             'billing_basis' => $request->billing_basis ? strtoupper(trim($request->billing_basis)) : 'OK',
-            'baseline_amount' => $request->filled('baseline_amount') ? (float)$request->baseline_amount : 0.00,
+            'baseline_amount' => $request->filled('baseline_amount') ? (float) $request->baseline_amount : 0.00,
             'baseline_previous_reading' => $baseReading,
             'mobile' => $request->mobile,
             'address' => $request->address,
@@ -502,12 +532,14 @@ class MruController extends Controller
         $rawLines = preg_split('/[\r\n]+/', trim($request->ca_data));
         $importedCount = 0;
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($rawLines, $mru, $userId, &$importedCount) {
+        DB::transaction(function () use ($rawLines, $mru, $userId, &$importedCount) {
             $headerMap = null;
 
             foreach ($rawLines as $line) {
                 $line = trim($line);
-                if (empty($line)) continue;
+                if (empty($line)) {
+                    continue;
+                }
 
                 // Parse line whether TSV, CSV or plain text
                 $cols = str_contains($line, "\t") ? explode("\t", $line) : str_getcsv($line);
@@ -540,6 +572,7 @@ class MruController extends Controller
                                 $headerMap['address'] = $idx;
                             }
                         }
+
                         continue; // skip header row
                     } else {
                         $headerMap = false; // no header detected
@@ -558,7 +591,9 @@ class MruController extends Controller
 
                 if (is_array($headerMap)) {
                     $ca = isset($headerMap['ca']) ? ($cols[$headerMap['ca']] ?? '') : ($cols[0] ?? '');
-                    if (!preg_match('/^\d+$/', $ca)) continue;
+                    if (! preg_match('/^\d+$/', $ca)) {
+                        continue;
+                    }
 
                     $name = isset($headerMap['name']) ? ($cols[$headerMap['name']] ?? null) : null;
                     $tariff = isset($headerMap['tariff']) ? ($cols[$headerMap['tariff']] ?? null) : null;
@@ -570,7 +605,9 @@ class MruController extends Controller
                     $address = isset($headerMap['address']) ? ($cols[$headerMap['address']] ?? null) : null;
                 } else {
                     $ca = $cols[0] ?? '';
-                    if (!preg_match('/^\d+$/', $ca)) continue;
+                    if (! preg_match('/^\d+$/', $ca)) {
+                        continue;
+                    }
 
                     $colCount = count($cols);
                     $c2 = strtoupper($cols[2] ?? '');
@@ -580,39 +617,39 @@ class MruController extends Controller
 
                     if ($isMasterFormat) {
                         // Positional: CA, Name, Tariff, Basis, Amount, Meter, [Reading], [Mobile], [Address]
-                        $name = !empty($cols[1]) ? $cols[1] : null;
-                        $tariff = !empty($cols[2]) ? $cols[2] : null;
-                        $basis = !empty($cols[3]) ? $cols[3] : null;
-                        $amount = !empty($cols[4]) ? $cols[4] : null;
-                        $meter = !empty($cols[5]) ? $cols[5] : null;
+                        $name = ! empty($cols[1]) ? $cols[1] : null;
+                        $tariff = ! empty($cols[2]) ? $cols[2] : null;
+                        $basis = ! empty($cols[3]) ? $cols[3] : null;
+                        $amount = ! empty($cols[4]) ? $cols[4] : null;
+                        $meter = ! empty($cols[5]) ? $cols[5] : null;
 
                         if (isset($cols[6])) {
                             if (preg_match('/^[6-9]\d{9}$/', $cols[6])) {
                                 // Exactly 10-digit mobile number starting with 6-9
                                 $mobile = $cols[6];
-                                $address = !empty($cols[7]) ? $cols[7] : null;
+                                $address = ! empty($cols[7]) ? $cols[7] : null;
                             } elseif (is_numeric($cols[6])) {
                                 // Numeric initial / baseline meter reading
                                 $prevReading = $cols[6];
                                 if (isset($cols[7])) {
                                     if (preg_match('/^[6-9]\d{9}$/', $cols[7]) || is_numeric($cols[7])) {
                                         $mobile = $cols[7];
-                                        $address = !empty($cols[8]) ? $cols[8] : null;
+                                        $address = ! empty($cols[8]) ? $cols[8] : null;
                                     } else {
                                         $address = $cols[7];
                                     }
                                 }
                             } else {
                                 $mobile = $cols[6];
-                                $address = !empty($cols[7]) ? $cols[7] : null;
+                                $address = ! empty($cols[7]) ? $cols[7] : null;
                             }
                         }
                     } else {
                         // Traditional fallback: CA, Name, Meter, Mobile, Address
-                        $name = !empty($cols[1]) ? $cols[1] : null;
-                        $meter = !empty($cols[2]) ? $cols[2] : null;
-                        $mobile = !empty($cols[3]) ? $cols[3] : null;
-                        $address = !empty($cols[4]) ? $cols[4] : null;
+                        $name = ! empty($cols[1]) ? $cols[1] : null;
+                        $meter = ! empty($cols[2]) ? $cols[2] : null;
+                        $mobile = ! empty($cols[3]) ? $cols[3] : null;
+                        $address = ! empty($cols[4]) ? $cols[4] : null;
                     }
                 }
 
@@ -620,17 +657,31 @@ class MruController extends Controller
                     'mru_id' => $mru->id,
                     'status' => 'active',
                 ];
-                if ($name !== null && $name !== '') $payload['consumer_name'] = $name;
-                if ($meter !== null && $meter !== '') $payload['meter_no'] = $meter;
-                if ($tariff !== null && $tariff !== '') $payload['tariff_category'] = strtoupper($tariff);
-                if ($basis !== null && $basis !== '') $payload['billing_basis'] = strtoupper($basis);
-                if ($amount !== null && $amount !== '' && is_numeric($amount)) $payload['baseline_amount'] = (float)$amount;
-                if ($prevReading !== null && $prevReading !== '' && is_numeric($prevReading)) {
-                    $payload['baseline_previous_reading'] = (int)$prevReading;
-                    $payload['last_working_reading'] = (int)$prevReading;
+                if ($name !== null && $name !== '') {
+                    $payload['consumer_name'] = $name;
                 }
-                if ($mobile !== null && $mobile !== '') $payload['mobile'] = $mobile;
-                if ($address !== null && $address !== '') $payload['address'] = $address;
+                if ($meter !== null && $meter !== '') {
+                    $payload['meter_no'] = $meter;
+                }
+                if ($tariff !== null && $tariff !== '') {
+                    $payload['tariff_category'] = strtoupper($tariff);
+                }
+                if ($basis !== null && $basis !== '') {
+                    $payload['billing_basis'] = strtoupper($basis);
+                }
+                if ($amount !== null && $amount !== '' && is_numeric($amount)) {
+                    $payload['baseline_amount'] = (float) $amount;
+                }
+                if ($prevReading !== null && $prevReading !== '' && is_numeric($prevReading)) {
+                    $payload['baseline_previous_reading'] = (int) $prevReading;
+                    $payload['last_working_reading'] = (int) $prevReading;
+                }
+                if ($mobile !== null && $mobile !== '') {
+                    $payload['mobile'] = $mobile;
+                }
+                if ($address !== null && $address !== '') {
+                    $payload['address'] = $address;
+                }
 
                 ConsumerAccount::updateOrCreate(
                     ['user_id' => $userId, 'ca_number' => $ca],
@@ -673,10 +724,10 @@ class MruController extends Controller
             $updateData['billing_basis'] = $request->billing_basis ? strtoupper(trim($request->billing_basis)) : 'OK';
         }
         if ($request->has('baseline_amount')) {
-            $updateData['baseline_amount'] = $request->filled('baseline_amount') ? (float)$request->baseline_amount : 0.00;
+            $updateData['baseline_amount'] = $request->filled('baseline_amount') ? (float) $request->baseline_amount : 0.00;
         }
         if ($request->has('baseline_previous_reading')) {
-            $baseReading = $request->filled('baseline_previous_reading') ? (int)$request->baseline_previous_reading : null;
+            $baseReading = $request->filled('baseline_previous_reading') ? (int) $request->baseline_previous_reading : null;
             $updateData['baseline_previous_reading'] = $baseReading;
             if ($baseReading !== null && empty($consumer->last_working_reading)) {
                 $updateData['last_working_reading'] = $baseReading;
@@ -709,7 +760,7 @@ class MruController extends Controller
         $this->authorizeMru($mru);
 
         $consumers = $mru->consumerAccounts()->orderBy('ca_number')->get();
-        $fileName = "MRU_{$mru->code}_consumers_" . date('Ymd') . ".csv";
+        $fileName = "MRU_{$mru->code}_consumers_".date('Ymd').'.csv';
 
         return response()->streamDownload(function () use ($consumers, $mru) {
             $output = fopen('php://output', 'w');
@@ -723,7 +774,7 @@ class MruController extends Controller
                     $c->consumer_name,
                     $c->tariff_category ?: 'DS-II',
                     $c->billing_basis ?: 'OK',
-                    number_format((float)($c->baseline_amount ?? 0), 2, '.', ''),
+                    number_format((float) ($c->baseline_amount ?? 0), 2, '.', ''),
                     $c->baseline_previous_reading ?? ($c->last_working_reading ?? ''),
                     $mru->code,
                     $mru->name,
@@ -752,6 +803,7 @@ class MruController extends Controller
 
         $month = (int) $request->input('billing_month');
         $year = (int) $request->input('billing_year');
+        $adjPercent = (int) $request->input('adjustment_percent', 0);
         $userId = Auth::id();
 
         $monthLabel = strtoupper(date('M, Y', mktime(0, 0, 0, $month, 1, $year)));
@@ -777,15 +829,24 @@ class MruController extends Controller
             payOverage: $payOverage
         );
 
-        if (!$quotaResult['allowed']) {
+        if (! $quotaResult['allowed']) {
             $requiresSub = $quotaResult['requires_subscription'] ?? false;
+            $user = Auth::user();
+            $walletBalance = $quotaResult['wallet_balance'] ?? ($user ? (float) app(WalletService::class)->getBalance($user) : 0.0);
+            $amountDue = $quotaResult['amount_due'] ?? 0;
+            $isInsufficient = $quotaResult['is_insufficient_balance'] ?? ($walletBalance < $amountDue);
+
             return response()->json([
                 'success' => false,
                 'requires_subscription' => $requiresSub,
                 'requires_overage' => $quotaResult['requires_payment'] ?? false,
                 'overage_type' => 'consumer_cycle',
-                'amount_due' => $quotaResult['amount_due'] ?? 0,
+                'amount_due' => $amountDue,
                 'extra_count' => $quotaResult['extra_count'] ?? 0,
+                'wallet_balance' => $walletBalance,
+                'is_insufficient_balance' => $isInsufficient,
+                'topup_url' => route('wallet.index'),
+                'upgrade_url' => route('user-panel.subscription'),
                 'redirect_url' => $requiresSub ? route('user-panel.subscription') : null,
                 'message' => $requiresSub
                     ? 'An active subscription plan is required to create a billing cycle. Please choose a plan or activate your Free plan to continue.'
@@ -793,7 +854,7 @@ class MruController extends Controller
             ], 402);
         }
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($activeConsumers, $userId, $month, $year, $monthLabel, $mru) {
+        DB::transaction(function () use ($activeConsumers, $userId, $month, $year, $monthLabel, $mru, $adjPercent) {
             $caNumbers = $activeConsumers->pluck('ca_number')->unique()->values();
             $historicalBills = BillRecord::where('user_id', $userId)
                 ->whereIn('ca_number', $caNumbers)
@@ -802,8 +863,23 @@ class MruController extends Controller
                 ->get()
                 ->groupBy('ca_number');
 
+            $meterHistories = MeterReadingHistory::where('user_id', $userId)
+                ->whereIn('ca_number', $caNumbers)
+                ->where(function ($q) use ($month, $year) {
+                    $q->where('billing_year', '<', $year)
+                        ->orWhere(function ($q2) use ($month, $year) {
+                            $q2->where('billing_year', $year)
+                                ->where('billing_month', '<', $month);
+                        });
+                })
+                ->orderBy('billing_year', 'desc')
+                ->orderBy('billing_month', 'desc')
+                ->get()
+                ->groupBy('ca_number');
+
             foreach ($activeConsumers as $consumer) {
                 $history = $historicalBills->get($consumer->ca_number, collect());
+                $mrhForCa = $meterHistories->get($consumer->ca_number, collect());
 
                 $resolvedPrev = $this->smartAverageService->resolvePreviousReading(
                     $consumer->ca_number,
@@ -811,7 +887,8 @@ class MruController extends Controller
                     $year,
                     null,
                     $consumer,
-                    $history
+                    $history,
+                    $mrhForCa
                 );
 
                 $avgCalc = $this->smartAverageService->calculateSmartAverage(
@@ -821,14 +898,18 @@ class MruController extends Controller
                     $consumer->billing_basis ?: 'OK',
                     null,
                     $consumer,
-                    $history
+                    $history,
+                    0,
+                    [],
+                    $mrhForCa
                 );
 
                 $prevReading = $resolvedPrev['reading'];
                 $avgUnits = $avgCalc['avg_units'];
-                $projectedReading = $this->smartAverageService->calculateProjectedReading($prevReading, $avgUnits, null);
+                $effectiveUnits = $this->smartAverageService->adjustAverageUnits($avgUnits, $adjPercent);
+                $projectedReading = $this->smartAverageService->calculateProjectedReading($prevReading, $avgUnits, null, $adjPercent);
 
-                BillRecord::updateOrCreate(
+                $bill = BillRecord::updateOrCreate(
                     [
                         'user_id' => $userId,
                         'ca_number' => $consumer->ca_number,
@@ -842,15 +923,26 @@ class MruController extends Controller
                         'meter_no' => $consumer->meter_no,
                         'tariff_category' => $consumer->tariff_category ?: 'DS-II',
                         'billing_basis' => $consumer->billing_basis ?: 'OK',
-                        'total_amount' => $consumer->baseline_amount !== null ? (float)$consumer->baseline_amount : 0.00,
+                        'total_amount' => $consumer->baseline_amount !== null ? (float) $consumer->baseline_amount : 0.00,
                         'previous_reading' => $prevReading,
-                        'units_consumed' => $avgUnits,
+                        'units_consumed' => $effectiveUnits,
                         'calculated_avg_units' => $avgUnits,
                         'working_reading' => (string) $projectedReading,
                         'reading_source' => 'auto',
                         'download_status' => 'pending',
                     ]
                 );
+
+                try {
+                    app(MeterReadingHistoryService::class)->recordFromWorkingReading(
+                        $bill,
+                        (string) $projectedReading,
+                        $effectiveUnits,
+                        false
+                    );
+                } catch (\Throwable $e) {
+                    // Ignore background history recording errors
+                }
             }
         });
 
@@ -906,15 +998,24 @@ class MruController extends Controller
             payOverage: $payOverage
         );
 
-        if (!$quotaResult['allowed']) {
+        if (! $quotaResult['allowed']) {
             $requiresSub = $quotaResult['requires_subscription'] ?? false;
+            $user = Auth::user();
+            $walletBalance = $quotaResult['wallet_balance'] ?? ($user ? (float) app(WalletService::class)->getBalance($user) : 0.0);
+            $amountDue = $quotaResult['amount_due'] ?? 0;
+            $isInsufficient = $quotaResult['is_insufficient_balance'] ?? ($walletBalance < $amountDue);
+
             return response()->json([
                 'success' => false,
                 'requires_subscription' => $requiresSub,
                 'requires_overage' => $quotaResult['requires_payment'] ?? false,
                 'overage_type' => 'consumer_cycle',
-                'amount_due' => $quotaResult['amount_due'] ?? 0,
+                'amount_due' => $amountDue,
                 'extra_count' => $quotaResult['extra_count'] ?? 0,
+                'wallet_balance' => $walletBalance,
+                'is_insufficient_balance' => $isInsufficient,
+                'topup_url' => route('wallet.index'),
+                'upgrade_url' => route('user-panel.subscription'),
                 'redirect_url' => $requiresSub ? route('user-panel.subscription') : null,
                 'message' => $requiresSub
                     ? 'An active subscription plan is required to create a billing cycle. Please choose a plan or activate your Free tier to continue.'
@@ -969,8 +1070,8 @@ class MruController extends Controller
             'billing_year' => 'required|integer|min:2020|max:2035',
         ]);
 
-        $month = (int)$request->input('billing_month');
-        $year = (int)$request->input('billing_year');
+        $month = (int) $request->input('billing_month');
+        $year = (int) $request->input('billing_year');
         $userId = Auth::id();
 
         $allCAs = $mru->consumerAccounts()->where('status', 'active')->pluck('ca_number')->toArray();
@@ -1022,7 +1123,7 @@ class MruController extends Controller
         $this->authorizeMru($mru);
 
         $currentUser = Auth::user();
-        if ($consumer->mru_id !== $mru->id || ($consumer->user_id !== $currentUser->id && !$currentUser->hasRole('admin'))) {
+        if ($consumer->mru_id !== $mru->id || ($consumer->user_id !== $currentUser->id && ! $currentUser->hasRole('admin'))) {
             abort(403, 'Unauthorized consumer operation in this MRU.');
         }
     }

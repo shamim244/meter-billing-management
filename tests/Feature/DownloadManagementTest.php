@@ -7,6 +7,7 @@ use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\User;
 use App\Services\EngineService;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -17,7 +18,7 @@ class DownloadManagementTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
     }
 
     public function test_single_ca_download_endpoint_returns_json_and_stores_bill(): void
@@ -48,6 +49,7 @@ class DownloadManagementTest extends TestCase
                     'parse_status' => 'parsed',
                     'pdf_path' => "users/{$userId}/pdfs/{$year}/{$month}/TEST_0477/{$cas[0]}.pdf",
                 ]);
+
                 return [
                     'total' => 1,
                     'success' => 1,
@@ -126,7 +128,7 @@ class DownloadManagementTest extends TestCase
             ->method('downloadAndParseBills')
             ->with(
                 $this->callback(function ($cas) {
-                    return count($cas) === 2 && in_array('1002', $cas) && in_array('1003', $cas) && !in_array('1001', $cas);
+                    return count($cas) === 2 && in_array('1002', $cas) && in_array('1003', $cas) && ! in_array('1001', $cas);
                 }),
                 $user->id,
                 8,

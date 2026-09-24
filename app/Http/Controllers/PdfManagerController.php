@@ -3,14 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\BillRecord;
-use App\Models\BillStatus;
-use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Services\BillParseService;
 use App\Services\EngineService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
@@ -20,6 +19,7 @@ use ZipArchive;
 class PdfManagerController extends Controller
 {
     protected BillParseService $parseService;
+
     protected EngineService $engineService;
 
     public function __construct(BillParseService $parseService, EngineService $engineService)
@@ -50,7 +50,7 @@ class PdfManagerController extends Controller
         $hasExplicitFilter = $request->has('mru_id') || $request->has('month') || $request->has('year') || $request->has('status') || $request->has('search');
 
         // Default to latest available active cycle on first visit
-        if (!$hasExplicitFilter && $latestCycle) {
+        if (! $hasExplicitFilter && $latestCycle) {
             $month = (int) $latestCycle->billing_month;
             $year = (int) $latestCycle->billing_year;
             $mruId = null;
@@ -68,16 +68,16 @@ class PdfManagerController extends Controller
         $query = BillRecord::with('mru')
             ->where('user_id', $userId);
 
-        if (!empty($mruId)) {
+        if (! empty($mruId)) {
             $query->where('mru_id', $mruId);
         }
 
-        if (!empty($month)) {
-            $query->where('billing_month', (int)$month);
+        if (! empty($month)) {
+            $query->where('billing_month', (int) $month);
         }
 
-        if (!empty($year)) {
-            $query->where('billing_year', (int)$year);
+        if (! empty($year)) {
+            $query->where('billing_year', (int) $year);
         }
 
         // Status filters
@@ -91,22 +91,22 @@ class PdfManagerController extends Controller
             $query->where('parse_status', 'parsed');
         } elseif ($status === 'unparsed') {
             $query->where('download_status', 'downloaded')
-                  ->whereNotNull('pdf_path')
-                  ->where(function ($q) {
-                      $q->whereNull('parse_status')->orWhere('parse_status', '!=', 'parsed');
-                  });
+                ->whereNotNull('pdf_path')
+                ->where(function ($q) {
+                    $q->whereNull('parse_status')->orWhere('parse_status', '!=', 'parsed');
+                });
         } elseif ($status === 'failed') {
             $query->where('parse_status', 'failed');
         }
 
         // Search
-        if (!empty($search)) {
+        if (! empty($search)) {
             $escapedSearch = addcslashes($search, '%_\\');
             $query->where(function ($q) use ($escapedSearch) {
                 $q->where('ca_number', 'like', "%{$escapedSearch}%")
-                  ->orWhere('consumer_name', 'like', "%{$escapedSearch}%")
-                  ->orWhere('meter_no', 'like', "%{$escapedSearch}%")
-                  ->orWhere('pdf_filename', 'like', "%{$escapedSearch}%");
+                    ->orWhere('consumer_name', 'like', "%{$escapedSearch}%")
+                    ->orWhere('meter_no', 'like', "%{$escapedSearch}%")
+                    ->orWhere('pdf_filename', 'like', "%{$escapedSearch}%");
             });
         }
 
@@ -150,7 +150,7 @@ class PdfManagerController extends Controller
             'avg_size_kb' => $totalDiskFiles > 0 ? round(($totalBytes / $totalDiskFiles) / 1024, 1) : 0,
             'download_rate' => $allUserBillsCount > 0 ? round(($downloadedBillsCount / $allUserBillsCount) * 100, 1) : 0,
             'parsed_rate' => $allUserBillsCount > 0 ? round(($parsedBillsCount / $allUserBillsCount) * 100, 1) : 0,
-            'plan_tier' => ucfirst($user->plan_tier ?? 'Free'),
+            'plan_tier' => $user->current_plan_name ?? ucfirst($user->plan_tier ?? 'Free'),
             'storage_limit_mb' => $user->storage_limit_mb ?? 100,
             'storage_limit_bytes' => $user->getStorageLimitBytes(),
             'storage_limit_formatted' => $this->formatBytes($user->getStorageLimitBytes()),
@@ -162,14 +162,14 @@ class PdfManagerController extends Controller
         $mrus = Mru::where('user_id', $userId)->withCount('billRecords')->orderBy('code')->get();
 
         $availableMonths = BillRecord::where('user_id', $userId)
-            ->select('billing_month', \Illuminate\Support\Facades\DB::raw('count(*) as total'))
+            ->select('billing_month', DB::raw('count(*) as total'))
             ->groupBy('billing_month')
             ->orderBy('billing_month', 'desc')
             ->pluck('total', 'billing_month')
             ->toArray();
 
         $availableYears = BillRecord::where('user_id', $userId)
-            ->select('billing_year', \Illuminate\Support\Facades\DB::raw('count(*) as total'))
+            ->select('billing_year', DB::raw('count(*) as total'))
             ->groupBy('billing_year')
             ->orderBy('billing_year', 'desc')
             ->pluck('total', 'billing_year')
@@ -194,7 +194,7 @@ class PdfManagerController extends Controller
             $cyclePdfCount = 0;
 
             foreach ($cycleBills as $cb) {
-                if (!empty($cb->pdf_path) && Storage::disk('local')->exists($cb->pdf_path)) {
+                if (! empty($cb->pdf_path) && Storage::disk('local')->exists($cb->pdf_path)) {
                     $cyclePdfCount++;
                     $cycleBytes += Storage::disk('local')->size($cb->pdf_path);
                 }
@@ -215,7 +215,7 @@ class PdfManagerController extends Controller
 
         // Attach file sizes for current page items
         foreach ($bills as $b) {
-            if (!empty($b->pdf_path) && Storage::disk('local')->exists($b->pdf_path)) {
+            if (! empty($b->pdf_path) && Storage::disk('local')->exists($b->pdf_path)) {
                 $b->file_size_bytes = Storage::disk('local')->size($b->pdf_path);
                 $b->file_size_formatted = $this->formatBytes($b->file_size_bytes);
                 $b->file_exists = true;
@@ -255,18 +255,24 @@ class PdfManagerController extends Controller
             ->where('user_id', $userId)
             ->whereNotNull('pdf_path');
 
-        if (!empty($billIds) && is_array($billIds)) {
+        if (! empty($billIds) && is_array($billIds)) {
             $query->whereIn('id', $billIds);
         } else {
             // Apply filter scope
-            if ($request->filled('mru_id')) $query->where('mru_id', $request->mru_id);
-            if ($request->filled('month')) $query->where('billing_month', (int)$request->month);
-            if ($request->filled('year')) $query->where('billing_year', (int)$request->year);
+            if ($request->filled('mru_id')) {
+                $query->where('mru_id', $request->mru_id);
+            }
+            if ($request->filled('month')) {
+                $query->where('billing_month', (int) $request->month);
+            }
+            if ($request->filled('year')) {
+                $query->where('billing_year', (int) $request->year);
+            }
             if ($request->filled('search')) {
                 $escapedSearch = addcslashes($request->search, '%_\\');
                 $query->where(function ($q) use ($escapedSearch) {
                     $q->where('ca_number', 'like', "%{$escapedSearch}%")
-                      ->orWhere('consumer_name', 'like', "%{$escapedSearch}%");
+                        ->orWhere('consumer_name', 'like', "%{$escapedSearch}%");
                 });
             }
         }
@@ -277,18 +283,18 @@ class PdfManagerController extends Controller
             return response()->json(['error' => 'No matching bills with stored PDFs found to download.'], 404);
         }
 
-        $zipFileName = "NBPDCL_PDFs_" . date('Ymd_His') . ".zip";
+        $zipFileName = 'NBPDCL_PDFs_'.date('Ymd_His').'.zip';
         $zipTempPath = tempnam(sys_get_temp_dir(), 'pdf_zip_');
 
         try {
-            $zip = new ZipArchive();
+            $zip = new ZipArchive;
             if ($zip->open($zipTempPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
                 return response()->json(['error' => 'Failed to initialize ZIP archive.'], 500);
             }
 
             $addedFiles = 0;
             foreach ($bills as $bill) {
-                if (!empty($bill->pdf_path) && Storage::disk('local')->exists($bill->pdf_path)) {
+                if (! empty($bill->pdf_path) && Storage::disk('local')->exists($bill->pdf_path)) {
                     $content = Storage::disk('local')->get($bill->pdf_path);
                     $mruCode = $bill->mru ? $bill->mru->code : 'GENERAL';
                     $zipPath = "{$bill->billing_year}/{$bill->billing_month}/{$mruCode}/{$bill->ca_number}.pdf";
@@ -300,7 +306,10 @@ class PdfManagerController extends Controller
             $zip->close();
 
             if ($addedFiles === 0) {
-                if (file_exists($zipTempPath)) @unlink($zipTempPath);
+                if (file_exists($zipTempPath)) {
+                    @unlink($zipTempPath);
+                }
+
                 return response()->json(['error' => 'None of the selected bill records have valid physical PDF files on disk.'], 404);
             }
 
@@ -368,7 +377,7 @@ class PdfManagerController extends Controller
             return response()->json(['success' => false, 'message' => 'No matching bill records found.'], 404);
         }
 
-        $grouped = $bills->groupBy(fn($b) => "{$b->billing_month}_{$b->billing_year}_{$b->mru_id}");
+        $grouped = $bills->groupBy(fn ($b) => "{$b->billing_month}_{$b->billing_year}_{$b->mru_id}");
         $totalSuccess = 0;
         $totalCount = 0;
 
@@ -407,7 +416,7 @@ class PdfManagerController extends Controller
 
         $deletedFiles = 0;
         foreach ($bills as $bill) {
-            if (!empty($bill->pdf_path) && Storage::disk('local')->exists($bill->pdf_path)) {
+            if (! empty($bill->pdf_path) && Storage::disk('local')->exists($bill->pdf_path)) {
                 Storage::disk('local')->delete($bill->pdf_path);
                 $deletedFiles++;
             }
@@ -454,7 +463,7 @@ class PdfManagerController extends Controller
         foreach ($dbBills as $bill) {
             $knownPaths[$bill->pdf_path] = $bill;
 
-            if (!Storage::disk('local')->exists($bill->pdf_path)) {
+            if (! Storage::disk('local')->exists($bill->pdf_path)) {
                 $missingOnDisk[] = [
                     'id' => $bill->id,
                     'ca_number' => $bill->ca_number,
@@ -480,10 +489,10 @@ class PdfManagerController extends Controller
             $diskFiles = Storage::disk('local')->allFiles($userPdfBaseDir);
             foreach ($diskFiles as $file) {
                 if (str_ends_with(strtolower($file), '.pdf')) {
-                    if (!isset($knownPaths[$file])) {
+                    if (! isset($knownPaths[$file])) {
                         // Check if exists in DB at all
                         $existsInDb = BillRecord::where('user_id', $userId)->where('pdf_path', $file)->exists();
-                        if (!$existsInDb) {
+                        if (! $existsInDb) {
                             $orphanedPdfs[] = [
                                 'path' => $file,
                                 'filename' => basename($file),
@@ -526,7 +535,7 @@ class PdfManagerController extends Controller
             ->get();
 
         foreach ($dbBills as $bill) {
-            if (!Storage::disk('local')->exists($bill->pdf_path)) {
+            if (! Storage::disk('local')->exists($bill->pdf_path)) {
                 $bill->update([
                     'pdf_path' => null,
                     'pdf_filename' => null,
@@ -544,12 +553,12 @@ class PdfManagerController extends Controller
             foreach ($diskFiles as $file) {
                 if (str_ends_with(strtolower($file), '.pdf')) {
                     $existsInDb = BillRecord::where('user_id', $userId)->where('pdf_path', $file)->exists();
-                    if (!$existsInDb) {
+                    if (! $existsInDb) {
                         // Extract metadata from path: users/{userId}/pdfs/{year}/{month}/{mruCode}/{ca}.pdf
                         $parts = explode('/', $file);
                         if (count($parts) >= 6) {
-                            $year = (int)$parts[3];
-                            $month = (int)$parts[4];
+                            $year = (int) $parts[3];
+                            $month = (int) $parts[4];
                             $mruCode = $parts[5];
                             $ca = pathinfo(end($parts), PATHINFO_FILENAME);
 
@@ -617,10 +626,10 @@ class PdfManagerController extends Controller
         if ($olderThanCurrent) {
             $query->where(function ($q) use ($currentMonth, $currentYear) {
                 $q->where('billing_year', '<', $currentYear)
-                  ->orWhere(function ($sub) use ($currentMonth, $currentYear) {
-                      $sub->where('billing_year', '=', $currentYear)
-                          ->where('billing_month', '<', $currentMonth);
-                  });
+                    ->orWhere(function ($sub) use ($currentMonth, $currentYear) {
+                        $sub->where('billing_year', '=', $currentYear)
+                            ->where('billing_month', '<', $currentMonth);
+                    });
             });
         } elseif ($month && $year) {
             $query->where('billing_month', $month)->where('billing_year', $year);
@@ -653,7 +662,7 @@ class PdfManagerController extends Controller
         $deletedFiles = 0;
 
         foreach ($bills as $bill) {
-            if (!empty($bill->pdf_path) && Storage::disk('local')->exists($bill->pdf_path)) {
+            if (! empty($bill->pdf_path) && Storage::disk('local')->exists($bill->pdf_path)) {
                 $freedBytes += Storage::disk('local')->size($bill->pdf_path);
                 Storage::disk('local')->delete($bill->pdf_path);
                 $deletedFiles++;
@@ -702,18 +711,18 @@ class PdfManagerController extends Controller
             ], 422);
         }
 
-        $month = (int)$request->billing_month;
-        $year = (int)$request->billing_year;
+        $month = (int) $request->billing_month;
+        $year = (int) $request->billing_year;
         $mruId = $request->mru_id;
 
-        $mru = !empty($mruId) ? Mru::where('user_id', $userId)->where('id', $mruId)->first() : null;
+        $mru = ! empty($mruId) ? Mru::where('user_id', $userId)->where('id', $mruId)->first() : null;
         $mruCode = $mru ? $mru->code : 'GENERAL';
 
         $uploadedCount = 0;
         $processedRecords = [];
 
         $files = $request->file('files');
-        if (!is_array($files)) {
+        if (! is_array($files)) {
             $files = [$files];
         }
 
@@ -725,14 +734,14 @@ class PdfManagerController extends Controller
                 $ca = pathinfo($filename, PATHINFO_FILENAME);
 
                 // If filename is not pure digits, fallback to auto CA or sanitized name
-                if (!preg_match('/^\d+$/', $ca)) {
+                if (! preg_match('/^\d+$/', $ca)) {
                     // Try to extract first numeric sequence from filename
                     if (preg_match('/(\d{8,15})/', $filename, $matches)) {
                         $ca = $matches[1];
                     }
                 }
 
-                if (!empty($ca)) {
+                if (! empty($ca)) {
                     $storagePath = "users/{$userId}/pdfs/{$year}/{$month}/{$mruCode}/{$ca}.pdf";
                     Storage::disk('local')->put($storagePath, file_get_contents($uploadedFile->getRealPath()));
 
@@ -756,7 +765,7 @@ class PdfManagerController extends Controller
                     $uploadedCount++;
                 }
             } elseif ($ext === 'zip') {
-                $zip = new ZipArchive();
+                $zip = new ZipArchive;
                 if ($zip->open($uploadedFile->getRealPath()) === true) {
                     for ($i = 0; $i < $zip->numFiles; $i++) {
                         $entryName = $zip->getNameIndex($i);
@@ -769,7 +778,7 @@ class PdfManagerController extends Controller
                                 $ca = $m[1];
                             }
 
-                            if (!empty($ca) && preg_match('/^\d+$/', $ca)) {
+                            if (! empty($ca) && preg_match('/^\d+$/', $ca)) {
                                 $storagePath = "users/{$userId}/pdfs/{$year}/{$month}/{$mruCode}/{$ca}.pdf";
                                 Storage::disk('local')->put($storagePath, $pdfContent);
 
@@ -800,7 +809,7 @@ class PdfManagerController extends Controller
         }
 
         // Auto parse uploaded records
-        if (!empty($processedRecords)) {
+        if (! empty($processedRecords)) {
             try {
                 $this->parseService->parseSpecificBills($userId, $processedRecords);
             } catch (\Throwable $e) {
@@ -820,12 +829,15 @@ class PdfManagerController extends Controller
      */
     protected function formatBytes(int $bytes, int $precision = 2): string
     {
-        if ($bytes <= 0) return '0 B';
+        if ($bytes <= 0) {
+            return '0 B';
+        }
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
         $bytes = max($bytes, 0);
         $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
         $pow = min($pow, count($units) - 1);
         $bytes /= pow(1024, $pow);
-        return round($bytes, $precision) . ' ' . $units[$pow];
+
+        return round($bytes, $precision).' '.$units[$pow];
     }
 }

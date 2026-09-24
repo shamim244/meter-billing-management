@@ -27,6 +27,7 @@ class PushChannelDriver implements ChannelDriverInterface
                 'attempt_count' => 1,
                 'last_attempted_at' => now(),
             ]);
+
             return DeliveryResult::success();
         }
 
@@ -39,8 +40,8 @@ class PushChannelDriver implements ChannelDriverInterface
                     'contents' => ['en' => $notification->body],
                 ]);
 
-            if (!$response->successful()) {
-                throw new \RuntimeException("OneSignal error: " . $response->body());
+            if (! $response->successful()) {
+                throw new \RuntimeException('OneSignal error: '.$response->body());
             }
 
             $delivery->update([
@@ -51,7 +52,7 @@ class PushChannelDriver implements ChannelDriverInterface
 
             return DeliveryResult::success();
         } catch (Throwable $e) {
-            Log::warning("[PushChannelDriver] Push delivery failed: " . $e->getMessage());
+            Log::warning('[PushChannelDriver] Push delivery failed: '.$e->getMessage());
             $delivery->update([
                 'status' => 'failed',
                 'failed_reason' => $e->getMessage(),

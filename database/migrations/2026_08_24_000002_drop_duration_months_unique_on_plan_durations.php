@@ -28,7 +28,7 @@ return new class extends Migration
                     WHERE `Key_name` = 'plan_durations_plan_id_index'
                 "))->isNotEmpty();
 
-                if (!$planIdIndexExists) {
+                if (! $planIdIndexExists) {
                     Schema::table('plan_durations', function (Blueprint $table) {
                         $table->index('plan_id');
                     });

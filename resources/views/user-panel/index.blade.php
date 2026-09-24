@@ -22,7 +22,7 @@
                                 {{ $user->hasRole('admin') ? '👑 Administrator' : '⚡ Operator' }}
                             </span>
                             <span class="px-2 py-0.5 rounded-md text-[11px] font-bold font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                                Plan: <span class="text-brand-600 dark:text-cyan-400 font-bold uppercase">{{ $user->plan_tier ?? 'Free' }}</span>
+                                Plan: <span class="text-brand-600 dark:text-cyan-400 font-bold uppercase">{{ $user->current_plan_name ?? $user->plan_tier ?? 'Free' }}</span>
                             </span>
                         </div>
                         <p class="text-xs font-mono text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
@@ -103,7 +103,7 @@
                     <div class="flex items-center justify-between">
                         <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Subscription & Quotas</span>
                         <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-brand-50 dark:bg-brand-950/60 text-brand-600 dark:text-cyan-400">
-                            {{ $user->plan_tier ?? 'Free Plan' }}
+                            {{ $user->current_plan_name ?? $user->plan_tier ?? 'Free Plan' }}
                         </span>
                     </div>
 

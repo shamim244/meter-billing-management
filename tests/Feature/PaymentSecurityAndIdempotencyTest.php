@@ -9,8 +9,6 @@ use App\Events\PaymentSuccessEvent;
 use App\Models\CouponCode;
 use App\Models\CouponRedemption;
 use App\Models\Payment;
-use App\Models\Plan;
-use App\Models\PlanDuration;
 use App\Models\User;
 use App\Services\Coupon\CouponRedemptionService;
 use App\Services\Payment\PaymentSettingsService;
@@ -24,7 +22,9 @@ class PaymentSecurityAndIdempotencyTest extends TestCase
     use RefreshDatabase;
 
     protected User $agent;
+
     protected WalletService $walletService;
+
     protected CouponRedemptionService $couponRedemptionService;
 
     protected function setUp(): void
@@ -161,7 +161,7 @@ class PaymentSecurityAndIdempotencyTest extends TestCase
             'data' => [
                 'order' => ['order_id' => 'unknown_random_attacker_order_999'],
                 'payment' => ['cf_payment_id' => 'attacker_pay_id', 'payment_status' => 'SUCCESS'],
-                'customer_details' => ['customer_id' => 'user_' . $this->agent->id],
+                'customer_details' => ['customer_id' => 'user_'.$this->agent->id],
             ],
         ];
 
@@ -232,7 +232,7 @@ class PaymentSecurityAndIdempotencyTest extends TestCase
 
         // Exactly 1 redemption record in database
         $redemptionsCount = CouponRedemption::where('coupon_code_id', $coupon->id)
-            ->where('redeemed_for_reference_id', (string)$payment->id)
+            ->where('redeemed_for_reference_id', (string) $payment->id)
             ->count();
         $this->assertEquals(1, $redemptionsCount);
 

@@ -37,7 +37,7 @@ class NotificationTemplateService
 
         $defaults = $this->getFactoryDefaults();
         $def = $defaults[$eventType] ?? [
-            'subject' => 'Notification: ' . ucfirst(str_replace(['.', '_'], ' ', $eventType)),
+            'subject' => 'Notification: '.ucfirst(str_replace(['.', '_'], ' ', $eventType)),
             'body_template' => 'You have a new update regarding {event_type}.',
             'priority' => 'routine',
             'dispatch_mode' => 'queued',
@@ -60,9 +60,10 @@ class NotificationTemplateService
         $rendered = $template;
         foreach ($data as $key => $value) {
             if (is_scalar($value) || is_null($value)) {
-                $rendered = str_replace('{' . $key . '}', (string) ($value ?? ''), $rendered);
+                $rendered = str_replace('{'.$key.'}', (string) ($value ?? ''), $rendered);
             }
         }
+
         return $rendered;
     }
 

@@ -41,8 +41,8 @@ class CouponTopupSlab extends Model
      */
     public function getFormattedRangeAttribute(): string
     {
-        $min = '₹' . number_format((float)$this->min_amount, 0);
-        $max = $this->max_amount !== null ? '₹' . number_format((float)$this->max_amount, 0) : 'Above';
+        $min = '₹'.number_format((float) $this->min_amount, 0);
+        $max = $this->max_amount !== null ? '₹'.number_format((float) $this->max_amount, 0) : 'Above';
 
         return "{$min} – {$max}";
     }

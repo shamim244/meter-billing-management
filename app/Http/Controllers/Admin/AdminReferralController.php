@@ -11,7 +11,6 @@ use App\Services\Referral\ReferralService;
 use App\Services\Referral\ReferralSettingsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class AdminReferralController extends Controller
@@ -27,7 +26,7 @@ class AdminReferralController extends Controller
     public function settings(): View
     {
         $settings = $this->settingsService->getSettings();
-        
+
         $totalReferrals = ReferralSignup::count();
         $totalPaidPayouts = ReferralPayout::where('status', 'paid')->sum('reward_amount');
         $pendingPayouts = ReferralPayout::where('status', 'pending')->sum('reward_amount');
@@ -84,9 +83,9 @@ class AdminReferralController extends Controller
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
-                $q->whereHas('referrer', fn($r) => $r->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%"))
-                  ->orWhereHas('referee', fn($r) => $r->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%"))
-                  ->orWhereHas('couponCode', fn($c) => $c->where('code', 'like', "%{$search}%"));
+                $q->whereHas('referrer', fn ($r) => $r->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%"))
+                    ->orWhereHas('referee', fn ($r) => $r->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%"))
+                    ->orWhereHas('couponCode', fn ($c) => $c->where('code', 'like', "%{$search}%"));
             });
         }
 
@@ -159,9 +158,10 @@ class AdminReferralController extends Controller
             return back()->with('error', 'Only referral coupon codes can be toggled via this endpoint.');
         }
 
-        $coupon->update(['is_active' => !$coupon->is_active]);
+        $coupon->update(['is_active' => ! $coupon->is_active]);
 
         $statusStr = $coupon->is_active ? 'activated' : 'deactivated';
+
         return back()->with('success', "Referral code '{$coupon->code}' has been {$statusStr}.");
     }
 

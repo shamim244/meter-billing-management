@@ -27,10 +27,10 @@ class EmailProviderRegistryService
 
     public function __construct()
     {
-        $this->registerDriver('smtp', new SmtpDriver());
-        $this->registerDriver('resend', new ResendDriver());
-        $this->registerDriver('brevo', new BrevoDriver());
-        $this->registerDriver('hostinger', new HostingerDriver());
+        $this->registerDriver('smtp', new SmtpDriver);
+        $this->registerDriver('resend', new ResendDriver);
+        $this->registerDriver('brevo', new BrevoDriver);
+        $this->registerDriver('hostinger', new HostingerDriver);
     }
 
     /**
@@ -47,7 +47,7 @@ class EmailProviderRegistryService
     public function getDriver(string $type): EmailProviderDriverInterface
     {
         $normalized = strtolower(trim($type));
-        if (!isset($this->drivers[$normalized])) {
+        if (! isset($this->drivers[$normalized])) {
             throw new InvalidArgumentException("Unsupported email provider driver type: [{$type}]");
         }
 
@@ -77,6 +77,7 @@ class EmailProviderRegistryService
                 'failed_reason' => 'Recipient user email is empty or missing.',
                 'last_attempted_at' => now(),
             ]);
+
             return DeliveryResult::failure('Recipient email is missing.');
         }
 
@@ -92,6 +93,7 @@ class EmailProviderRegistryService
                 'failed_reason' => $errMsg,
                 'last_attempted_at' => now(),
             ]);
+
             return DeliveryResult::failure($errMsg);
         }
 
@@ -156,9 +158,9 @@ class EmailProviderRegistryService
 
         $subject = "Test Email from NBPDCL Platform [{$provider->label}]";
         $body = $this->wrapInHtmlTemplate(
-            "Email Provider Test",
-            "This is a test email sent directly through provider instance <strong>{$provider->label}</strong> ({$provider->driver_type}) at " . now()->toDateTimeString() . ".",
-            "Administrator"
+            'Email Provider Test',
+            "This is a test email sent directly through provider instance <strong>{$provider->label}</strong> ({$provider->driver_type}) at ".now()->toDateTimeString().'.',
+            'Administrator'
         );
 
         try {
@@ -181,7 +183,7 @@ class EmailProviderRegistryService
 
             return [
                 'success' => false,
-                'message' => "Test send failed: " . $e->getMessage(),
+                'message' => 'Test send failed: '.$e->getMessage(),
             ];
         }
     }

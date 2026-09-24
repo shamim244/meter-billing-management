@@ -3,10 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\BillRecord;
-use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\User;
 use App\Services\BillParseService;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -18,7 +18,7 @@ class ContinuousSmartSyncTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
     }
 
     public function test_continuous_smart_sync_auto_registers_and_smart_updates(): void

@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use App\Models\Plan;
-use App\Models\PlanDuration;
 use App\Services\Plan\PlanService;
 use Illuminate\Database\Seeder;
 

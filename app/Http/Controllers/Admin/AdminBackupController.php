@@ -9,7 +9,6 @@ use App\Services\Backup\BackupRetentionService;
 use App\Services\Backup\BackupService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminBackupController extends Controller
 {
@@ -55,14 +54,16 @@ class AdminBackupController extends Controller
 
         if ($isAsync) {
             CreateBackupJob::dispatch($type, $userId);
+
             return back()->with('success', 'Backup task queued successfully! Processing in background.');
         }
 
         try {
             $backup = $this->backupService->createBackup($type, $userId);
+
             return back()->with('success', "Backup [{$backup->filename}] created successfully ({$backup->human_size}) in {$backup->duration_seconds}s!");
         } catch (\Throwable $e) {
-            return back()->with('error', 'Backup failed: ' . $e->getMessage());
+            return back()->with('error', 'Backup failed: '.$e->getMessage());
         }
     }
 

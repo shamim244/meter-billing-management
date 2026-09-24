@@ -134,7 +134,7 @@ class QuotaUsageReportService
     public function getAdminAggregateQuotaUsage(int $month, int $year, string $sortBy = 'overage_spend'): array
     {
         // Get all agents (non-admin users)
-        $agents = User::whereDoesntHave('roles', fn($q) => $q->where('name', 'admin'))->get();
+        $agents = User::whereDoesntHave('roles', fn ($q) => $q->where('name', 'admin'))->get();
 
         $rows = [];
         $totals = [

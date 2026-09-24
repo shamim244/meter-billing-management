@@ -28,7 +28,7 @@ class BankTransferPaymentService
         ?UploadedFile $screenshot = null,
         array $meta = []
     ): Payment {
-        if (!$this->settings->isModeEnabled(PaymentMode::BANK_TRANSFER)) {
+        if (! $this->settings->isModeEnabled(PaymentMode::BANK_TRANSFER)) {
             throw new \InvalidArgumentException('Bank Transfer payment mode is currently disabled.');
         }
 

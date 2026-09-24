@@ -6,7 +6,6 @@ use App\Jobs\SendEmailNotificationJob;
 use App\Models\Notification;
 use App\Models\NotificationDelivery;
 use App\Models\User;
-use App\Services\Notifications\Contracts\ChannelDriverInterface;
 use App\Services\Notifications\Drivers\Channels\EmailChannelDriver;
 use App\Services\Notifications\Drivers\Channels\InAppChannelDriver;
 use App\Services\Notifications\Drivers\Channels\PushChannelDriver;
@@ -15,9 +14,13 @@ use Illuminate\Support\Facades\Log;
 class NotificationDispatchService
 {
     protected NotificationTemplateService $templateService;
+
     protected AgentPreferenceService $preferenceService;
+
     protected InAppChannelDriver $inAppDriver;
+
     protected EmailChannelDriver $emailDriver;
+
     protected PushChannelDriver $pushDriver;
 
     public function __construct(
@@ -37,10 +40,10 @@ class NotificationDispatchService
     /**
      * Single entry point for dispatching notifications from domain events.
      *
-     * @param string $eventType e.g. 'subscription.suspended', 'wallet.debited'
-     * @param User|null $recipient Recipient user or null for Admin broadcasts
-     * @param array<string, mixed> $payload Merge field values
-     * @param string|null $priorityOverride Explicit priority override ('critical' | 'routine')
+     * @param  string  $eventType  e.g. 'subscription.suspended', 'wallet.debited'
+     * @param  User|null  $recipient  Recipient user or null for Admin broadcasts
+     * @param  array<string, mixed>  $payload  Merge field values
+     * @param  string|null  $priorityOverride  Explicit priority override ('critical' | 'routine')
      */
     public function dispatch(
         string $eventType,
@@ -108,7 +111,7 @@ class NotificationDispatchService
         // In-App channel is always applicable
         $channels[] = 'in_app';
 
-        if (!$recipient) {
+        if (! $recipient) {
             return $channels;
         }
 
@@ -156,7 +159,7 @@ class NotificationDispatchService
                         Log::warning("[NotificationDispatch] Immediate sync email attempt failed or timed out for delivery #{$delivery->id}: {$e->getMessage()}. Falling back to queued dispatch.");
                     }
 
-                    if (!$sentSuccessfully) {
+                    if (! $sentSuccessfully) {
                         // Fall back to normal QUEUED dispatch instead so request never hangs
                         SendEmailNotificationJob::dispatch($delivery->id);
                     }

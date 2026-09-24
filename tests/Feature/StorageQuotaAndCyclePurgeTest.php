@@ -6,6 +6,7 @@ use App\Models\BillRecord;
 use App\Models\Mru;
 use App\Models\User;
 use App\Services\BillDownloadService;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -18,7 +19,7 @@ class StorageQuotaAndCyclePurgeTest extends TestCase
     {
         parent::setUp();
         Storage::fake('local');
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
     }
 
     public function test_purge_cycle_pdfs_removes_physical_files_while_preserving_database_ledger(): void
@@ -78,7 +79,7 @@ class StorageQuotaAndCyclePurgeTest extends TestCase
         $this->assertEquals(1500, $fresh->current_reading);
         $this->assertEquals(1350, $fresh->previous_reading);
         $this->assertEquals(150, $fresh->units_consumed);
-        $this->assertEquals(1250.00, (float)$fresh->total_amount);
+        $this->assertEquals(1250.00, (float) $fresh->total_amount);
         $this->assertEquals('MTR998877', $fresh->meter_no);
         $this->assertEquals('submit_ok', $fresh->review_status);
         $this->assertEquals('Verified with supervisor', $fresh->remark);

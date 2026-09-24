@@ -2,13 +2,13 @@
 
 namespace Tests\Feature;
 
-use App\Models\AgentSubscription;
 use App\Models\Mru;
 use App\Models\Plan;
-use App\Models\PlanDuration;
 use App\Models\User;
 use App\Services\Plan\PlanService;
 use App\Services\Wallet\WalletService;
+use Database\Seeders\NotificationSystemSeeder;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -19,8 +19,8 @@ class MruLockingAndDowngradeConflictTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
-        $this->seed(\Database\Seeders\NotificationSystemSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
+        $this->seed(NotificationSystemSeeder::class);
     }
 
     public function test_agent_can_lock_and_unlock_their_active_mru(): void

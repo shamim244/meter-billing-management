@@ -2,7 +2,9 @@
 
 namespace App\Traits;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Auth;
 
 /**
@@ -24,7 +26,7 @@ trait BelongsToUser
         // Only apply the scope when a user is authenticated
         // and the request is NOT from an admin context (e.g. Filament panel)
         static::addGlobalScope('belongs_to_user', function (Builder $builder) {
-            if (Auth::check() && !static::isAdminContext()) {
+            if (Auth::check() && ! static::isAdminContext()) {
                 $builder->where(
                     static::resolveUserColumn(),
                     Auth::id()
@@ -57,15 +59,16 @@ trait BelongsToUser
     protected static function isAdminContext(): bool
     {
         $user = Auth::user();
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
         if (method_exists($user, 'hasRole') && $user->hasRole('admin')) {
             // In CLI / test environment without active web routing, admin bypasses scope
-            if (!request() || !request()->route()) {
+            if (! request() || ! request()->route()) {
                 return true;
             }
+
             // On web requests, only bypass scope on admin routes
             return request()->is('admin*');
         }
@@ -95,14 +98,14 @@ trait BelongsToUser
     public function scopeForUser(Builder $builder, int $userId): Builder
     {
         return $builder->withoutGlobalScope('belongs_to_user')
-                       ->where(static::resolveUserColumn(), $userId);
+            ->where(static::resolveUserColumn(), $userId);
     }
 
     /**
      * Relationship: the owning user.
      */
-    public function user(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function user(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, static::resolveUserColumn());
+        return $this->belongsTo(User::class, static::resolveUserColumn());
     }
 }

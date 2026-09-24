@@ -53,5 +53,9 @@
                 {{ $slot }}
             </main>
         </div>
+
+        @auth
+            <x-bug-reporter-modal />
+        @endauth
     </body>
 </html>

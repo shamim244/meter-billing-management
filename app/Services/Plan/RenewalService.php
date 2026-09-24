@@ -8,9 +8,9 @@ use App\Models\AgentSubscription;
 use App\Models\Mru;
 use App\Models\PlanOverageCharge;
 use App\Models\RenewalAttempt;
+use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\Wallet\WalletService;
-use Illuminate\Support\Facades\DB;
 
 class RenewalService
 {
@@ -25,6 +25,7 @@ class RenewalService
     public function getRenewableSubscription(User|int $user): ?AgentSubscription
     {
         $userId = $user instanceof User ? $user->id : $user;
+
         return AgentSubscription::where('user_id', $userId)
             ->whereIn('lifecycle_status', ['active', 'renewal_due', 'grace_period', 'suspended'])
             ->latest('id')
@@ -40,7 +41,7 @@ class RenewalService
         $userModel = $user instanceof User ? $user : User::findOrFail($user);
         $subscription = $this->getRenewableSubscription($userModel);
 
-        if (!$subscription) {
+        if (! $subscription) {
             return [
                 'has_subscription' => false,
                 'message' => 'No active subscription found.',
@@ -94,7 +95,7 @@ class RenewalService
         $userModel = $user instanceof User ? $user : User::findOrFail($user);
         $subscription = $this->getRenewableSubscription($userModel);
 
-        if (!$subscription) {
+        if (! $subscription) {
             return [
                 'success' => false,
                 'message' => 'No active subscription found to renew.',
@@ -165,7 +166,9 @@ class RenewalService
 
             // Lock Agent's explicitly selected MRUs first
             foreach ($selectedMrusToLock as $mruId) {
-                if ($lockedCount >= $neededLocks) break;
+                if ($lockedCount >= $neededLocks) {
+                    break;
+                }
                 $mru = $activeMrus->firstWhere('id', $mruId);
                 if ($mru && $mru->status === 'active') {
                     $this->mruQuotaService->lockMru($mru, 'renewal_excluded');
@@ -177,7 +180,9 @@ class RenewalService
             // If not enough locked, auto-lock the most recently created active MRUs
             if ($lockedCount < $neededLocks) {
                 foreach ($activeMrus as $mru) {
-                    if ($lockedCount >= $neededLocks) break;
+                    if ($lockedCount >= $neededLocks) {
+                        break;
+                    }
                     if ($mru->status === 'active') {
                         $this->mruQuotaService->lockMru($mru, 'auto_locked_renewal');
                         $lockedMrusList[] = $mru->name;
@@ -262,6 +267,7 @@ class RenewalService
     {
         $sub = $subscription instanceof AgentSubscription ? $subscription : AgentSubscription::findOrFail($subscription);
         $sub->update(['auto_renewal_enabled' => $enabled]);
+
         return (bool) $sub->auto_renewal_enabled;
     }
 
@@ -270,7 +276,7 @@ class RenewalService
      */
     public function getAutoLockTimeoutHours(): int
     {
-        return (int) \App\Models\SystemSetting::get(
+        return (int) SystemSetting::get(
             'plan_mru_autolock_timeout_hours',
             config('plans.mru_autolock_timeout_hours', 72)
         );

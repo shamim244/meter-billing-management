@@ -51,7 +51,7 @@ class NotificationController extends Controller
     public function recent(Request $request): JsonResponse
     {
         $userId = Auth::id();
-        if (!$userId) {
+        if (! $userId) {
             return response()->json(['unread_count' => 0, 'notifications' => []]);
         }
 
@@ -132,8 +132,8 @@ class NotificationController extends Controller
         $inputs = $request->input('preferences', []);
 
         foreach ($categories as $cat) {
-            $emailEnabled = !empty($inputs[$cat]['email']);
-            $pushEnabled = !empty($inputs[$cat]['push']);
+            $emailEnabled = ! empty($inputs[$cat]['email']);
+            $pushEnabled = ! empty($inputs[$cat]['push']);
 
             $this->preferenceService->updatePreference($userId, $cat, 'email', $emailEnabled);
             $this->preferenceService->updatePreference($userId, $cat, 'push', $pushEnabled);

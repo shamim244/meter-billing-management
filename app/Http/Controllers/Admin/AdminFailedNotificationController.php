@@ -15,7 +15,7 @@ class AdminFailedNotificationController extends Controller
     public function index(Request $request): View
     {
         $failedCriticalDeliveries = NotificationDelivery::with(['notification.user', 'emailProviderInstance'])
-            ->whereHas('notification', fn($q) => $q->where('priority', 'critical'))
+            ->whereHas('notification', fn ($q) => $q->where('priority', 'critical'))
             ->whereIn('status', ['failed', 'permanently_failed'])
             ->orderBy('id', 'desc')
             ->paginate(25);

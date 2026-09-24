@@ -6,6 +6,7 @@ use App\Models\BillRecord;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\User;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -18,7 +19,7 @@ class PdfManagementAndDeletionTest extends TestCase
     {
         parent::setUp();
         Storage::fake('local');
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
     }
 
     public function test_mru_code_renaming_migrates_physical_pdf_folders_and_db_paths(): void
@@ -48,7 +49,7 @@ class PdfManagementAndDeletionTest extends TestCase
         ]);
 
         $response->assertRedirect();
-        
+
         // Assert old file moved to new path
         $newPdfPath = "users/{$user->id}/pdfs/2026/8/0245/102300783538.pdf";
         Storage::disk('local')->assertMissing($pdfPath);
@@ -84,7 +85,7 @@ class PdfManagementAndDeletionTest extends TestCase
 
         // Physical folder on disk must be purged
         Storage::disk('local')->assertMissing("users/{$user->id}/pdfs/2026/8/0244");
-        
+
         // DB records for that month must be gone
         $this->assertDatabaseMissing('bill_records', ['id' => $bill->id]);
     }

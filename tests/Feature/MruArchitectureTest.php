@@ -4,7 +4,11 @@ namespace Tests\Feature;
 
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
+use App\Models\Plan;
 use App\Models\User;
+use App\Services\Plan\PlanService;
+use Database\Seeders\PlanSeeder;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -15,8 +19,8 @@ class MruArchitectureTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
-        $this->seed(\Database\Seeders\PlanSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
+        $this->seed(PlanSeeder::class);
     }
 
     public function test_user_can_create_mru_workspace(): void
@@ -140,7 +144,7 @@ class MruArchitectureTest extends TestCase
 
     protected function subscribeUser(User $user): void
     {
-        $plan = \App\Models\Plan::firstOrCreate(
+        $plan = Plan::firstOrCreate(
             ['name' => 'Unlimited Test Plan'],
             [
                 'included_mrus' => 50,
@@ -156,7 +160,7 @@ class MruArchitectureTest extends TestCase
             ['final_price' => 0, 'is_active' => true]
         );
 
-        app(\App\Services\Plan\PlanService::class)->subscribeAgent($user, $plan, $duration);
+        app(PlanService::class)->subscribeAgent($user, $plan, $duration);
     }
 
     public function test_user_can_launch_billing_cycle_for_mru_with_month_and_year(): void
@@ -296,4 +300,3 @@ class MruArchitectureTest extends TestCase
         $this->assertDatabaseCount('mrus', 2);
     }
 }
-

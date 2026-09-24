@@ -5,15 +5,12 @@ namespace Tests\Feature;
 use App\Enums\PaymentMode;
 use App\Enums\PaymentPurpose;
 use App\Enums\PaymentStatus;
-use App\Models\AgentSubscription;
 use App\Models\CouponCode;
 use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\PlanDuration;
-use App\Models\ReferralPayout;
 use App\Models\ReferralSignup;
 use App\Models\User;
-use App\Services\Billing\PlanChangeService;
 use App\Services\Payment\PaymentVerificationService;
 use App\Services\Referral\ReferralService;
 use App\Services\Referral\ReferralSettingsService;
@@ -27,12 +24,19 @@ class ReferralSystemTest extends TestCase
     use RefreshDatabase;
 
     protected User $admin;
+
     protected User $referrer;
+
     protected User $referee;
+
     protected ReferralService $referralService;
+
     protected ReferralSettingsService $settingsService;
+
     protected WalletService $walletService;
+
     protected Plan $plan;
+
     protected PlanDuration $duration;
 
     protected function setUp(): void
@@ -154,7 +158,7 @@ class ReferralSystemTest extends TestCase
 
         $this->assertNotNull($subPayout);
         $this->assertEquals('pending', $subPayout->status);
-        $this->assertEquals(50.00, (float)$subPayout->reward_amount); // 10% of 500 = ₹50
+        $this->assertEquals(50.00, (float) $subPayout->reward_amount); // 10% of 500 = ₹50
         $this->assertEquals($this->referrer->id, $subPayout->referrer_user_id);
     }
 
@@ -178,7 +182,7 @@ class ReferralSystemTest extends TestCase
         $payout = $this->referralService->checkAndCreatePendingPayout(
             user: $this->referee,
             paymentReferenceType: 'subscription_payment',
-            paymentReferenceId: 'payment_' . $payment->id,
+            paymentReferenceId: 'payment_'.$payment->id,
             paymentAmount: 500.00
         );
 
@@ -190,7 +194,7 @@ class ReferralSystemTest extends TestCase
         $verificationService->refund($payment, $this->admin, 'Referee requested refund due to duplicate billing');
 
         $this->assertEquals('cancelled', $payout->fresh()->status);
-        $this->assertStringContainsString('Payment #' . $payment->id . ' refunded', $payout->fresh()->clawback_reason);
+        $this->assertStringContainsString('Payment #'.$payment->id.' refunded', $payout->fresh()->clawback_reason);
 
         // Wallet balance must be untouched
         $this->assertEquals($initialReferrerBalance, $this->walletService->getBalance($this->referrer));
@@ -216,7 +220,7 @@ class ReferralSystemTest extends TestCase
         $payout = $this->referralService->checkAndCreatePendingPayout(
             user: $this->referee,
             paymentReferenceType: 'subscription_payment',
-            paymentReferenceId: 'payment_' . $payment->id,
+            paymentReferenceId: 'payment_'.$payment->id,
             paymentAmount: 1000.00
         );
 
@@ -316,7 +320,7 @@ class ReferralSystemTest extends TestCase
         );
 
         $this->assertNotNull($payout);
-        $this->assertEquals(250.00, (float)$payout->reward_amount); // 25% of 1000 = ₹250 (not ₹100 default)
+        $this->assertEquals(250.00, (float) $payout->reward_amount); // 25% of 1000 = ₹250 (not ₹100 default)
     }
 
     /**

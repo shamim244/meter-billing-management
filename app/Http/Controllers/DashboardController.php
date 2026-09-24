@@ -2,28 +2,39 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BillingBasisHistory;
 use App\Models\BillRecord;
 use App\Models\BillStatus;
 use App\Models\ConsumerAccount;
+use App\Models\MeterReadingHistory;
 use App\Models\Mru;
+use App\Models\User;
 use App\Services\BillTagService;
+use App\Services\MeterReadingHistoryService;
 use App\Services\SmartAverageCalculationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
     protected BillTagService $billTagService;
+
     protected SmartAverageCalculationService $smartAverageService;
+
+    protected MeterReadingHistoryService $meterHistoryService;
 
     public function __construct(
         BillTagService $billTagService,
-        SmartAverageCalculationService $smartAverageService
+        SmartAverageCalculationService $smartAverageService,
+        MeterReadingHistoryService $meterHistoryService
     ) {
         $this->billTagService = $billTagService;
         $this->smartAverageService = $smartAverageService;
+        $this->meterHistoryService = $meterHistoryService;
     }
 
     /**
@@ -48,31 +59,36 @@ class DashboardController extends Controller
 
         $selectedMruId = (string) $request->get('mru_id', $mrus->first()?->id ?? '');
 
-        // Map of available periods per MRU (MRU -> Child Billing Cycles)
-        $rawMruPeriods = BillRecord::select('mru_id', 'billing_month', 'billing_year')
-            ->whereNotNull('mru_id')
-            ->distinct()
-            ->orderBy('billing_year', 'desc')
-            ->orderBy('billing_month', 'desc')
-            ->get();
-
+        // Map of available periods per MRU (Scoped to user's available MRUs)
+        $userMruIds = $mrus->pluck('id')->filter()->all();
         $mruPeriodsMap = [];
         foreach ($mrus as $m) {
-            $mruPeriodsMap[(string)$m->id] = [];
+            $mruPeriodsMap[(string) $m->id] = [];
         }
-        foreach ($rawMruPeriods as $rp) {
-            $mKey = (string)$rp->mru_id;
-            if (!isset($mruPeriodsMap[$mKey])) {
-                $mruPeriodsMap[$mKey] = [];
-            }
-            $periodKey = "{$rp->billing_month}_{$rp->billing_year}";
-            if (!collect($mruPeriodsMap[$mKey])->contains('key', $periodKey)) {
-                $mruPeriodsMap[$mKey][] = [
-                    'key' => $periodKey,
-                    'month' => (int) $rp->billing_month,
-                    'year' => (int) $rp->billing_year,
-                    'label' => date('M, Y', mktime(0, 0, 0, $rp->billing_month, 1, $rp->billing_year)),
-                ];
+
+        if (! empty($userMruIds)) {
+            $rawMruPeriods = BillRecord::select('mru_id', 'billing_month', 'billing_year')
+                ->whereIn('mru_id', $userMruIds)
+                ->whereNotNull('mru_id')
+                ->distinct()
+                ->orderBy('billing_year', 'desc')
+                ->orderBy('billing_month', 'desc')
+                ->get();
+
+            foreach ($rawMruPeriods as $rp) {
+                $mKey = (string) $rp->mru_id;
+                if (! isset($mruPeriodsMap[$mKey])) {
+                    $mruPeriodsMap[$mKey] = [];
+                }
+                $periodKey = "{$rp->billing_month}_{$rp->billing_year}";
+                if (! collect($mruPeriodsMap[$mKey])->contains('key', $periodKey)) {
+                    $mruPeriodsMap[$mKey][] = [
+                        'key' => $periodKey,
+                        'month' => (int) $rp->billing_month,
+                        'year' => (int) $rp->billing_year,
+                        'label' => date('M, Y', mktime(0, 0, 0, $rp->billing_month, 1, $rp->billing_year)),
+                    ];
+                }
             }
         }
 
@@ -85,96 +101,102 @@ class DashboardController extends Controller
 
         // High-level KPI Stats for current user & selected MRU
         $consumersQuery = ConsumerAccount::query();
-        if (!empty($selectedMruId)) {
+        if (! empty($selectedMruId)) {
             $consumersQuery->where('mru_id', $selectedMruId);
         }
         $totalConsumers = $consumersQuery->count();
-        $totalBillsAllTime = BillRecord::count();
+        $totalBillsAllTime = BillRecord::where('user_id', $userId)->count();
 
         // Stats for selected month & MRU
         $periodBillsQuery = BillRecord::where('billing_month', $selectedMonth)
             ->where('billing_year', $selectedYear);
-        if (!empty($selectedMruId)) {
+        if (! empty($selectedMruId)) {
             $periodBillsQuery->where('mru_id', $selectedMruId);
         }
 
-        $totalPeriodBills = (clone $periodBillsQuery)->count();
-        $totalPeriodAmount = (clone $periodBillsQuery)->sum('total_amount');
-        $totalPeriodUnits = (clone $periodBillsQuery)->sum('units_consumed');
+        // Consolidated aggregate in 1 SQL query
+        $periodBillsAgg = (clone $periodBillsQuery)->selectRaw("
+            COUNT(*) as total_bills,
+            COALESCE(SUM(total_amount), 0) as total_amount,
+            COALESCE(SUM(units_consumed), 0) as total_units,
+            SUM(CASE WHEN pdf_path IS NULL OR download_status != 'downloaded' THEN 1 ELSE 0 END) as missing_pdf
+        ")->first();
 
-        // Status counts for selected month & MRU
-        $statusSubmittedQuery = BillStatus::where('billing_month', $selectedMonth)
-            ->where('billing_year', $selectedYear)
-            ->where('status', 'submitted');
-        $statusCriticalQuery = BillStatus::where('billing_month', $selectedMonth)
-            ->where('billing_year', $selectedYear)
-            ->where('status', 'critical');
-        $statusDoubtQuery = BillStatus::where('billing_month', $selectedMonth)
-            ->where('billing_year', $selectedYear)
-            ->where('status', 'doubt');
+        $totalPeriodBills = (int) ($periodBillsAgg->total_bills ?? 0);
+        $totalPeriodAmount = (float) ($periodBillsAgg->total_amount ?? 0);
+        $totalPeriodUnits = (int) ($periodBillsAgg->total_units ?? 0);
+        $missingPdfCount = (int) ($periodBillsAgg->missing_pdf ?? 0);
 
-        if (!empty($selectedMruId)) {
-            $mruCas = ConsumerAccount::where('mru_id', $selectedMruId)->pluck('ca_number');
-            $statusSubmittedQuery->whereIn('ca_number', $mruCas);
-            $statusCriticalQuery->whereIn('ca_number', $mruCas);
-            $statusDoubtQuery->whereIn('ca_number', $mruCas);
+        // Status counts for selected month & MRU in 1 SQL query
+        $statusCountsQuery = BillStatus::where('billing_month', $selectedMonth)
+            ->where('billing_year', $selectedYear);
+
+        if (! empty($selectedMruId)) {
+            $statusCountsQuery->where(function ($q) use ($selectedMruId) {
+                $q->whereIn('ca_number', function ($sub) use ($selectedMruId) {
+                    $sub->select('ca_number')->from('consumer_accounts')->where('mru_id', $selectedMruId);
+                })->orWhereIn('ca_number', function ($sub) use ($selectedMruId) {
+                    $sub->select('ca_number')->from('bill_records')->where('mru_id', $selectedMruId);
+                });
+            });
         }
 
-        $missingPdfCount = (clone $periodBillsQuery)
-            ->where(function($q) {
-                $q->whereNull('pdf_path')->orWhere('download_status', '!=', 'downloaded');
-            })->count();
+        $statusAgg = (clone $statusCountsQuery)->selectRaw("
+            SUM(CASE WHEN LOWER(status) = 'submitted' THEN 1 ELSE 0 END) as submitted,
+            SUM(CASE WHEN LOWER(status) = 'critical' THEN 1 ELSE 0 END) as critical,
+            SUM(CASE WHEN LOWER(status) = 'doubt' THEN 1 ELSE 0 END) as doubt
+        ")->first();
 
         $statusCounts = [
-            'submitted' => $statusSubmittedQuery->count(),
-            'critical' => $statusCriticalQuery->count(),
-            'doubt' => $statusDoubtQuery->count(),
+            'submitted' => (int) ($statusAgg->submitted ?? 0),
+            'critical' => (int) ($statusAgg->critical ?? 0),
+            'doubt' => (int) ($statusAgg->doubt ?? 0),
             'missing_pdf' => $missingPdfCount,
         ];
         $statusCounts['pending'] = max(0, $totalPeriodBills - ($statusCounts['submitted'] + $statusCounts['critical'] + $statusCounts['doubt']));
 
-        $statusCounts['basis_ok'] = (clone $periodBillsQuery)->where(function($q) {
+        $statusCounts['basis_ok'] = (clone $periodBillsQuery)->where(function ($q) {
             $q->where('billing_basis', 'OK')
-              ->orWhere(function($sub) {
-                  $sub->where(function($b) {
-                      $b->whereNull('billing_basis')->orWhere('billing_basis', '');
-                  })->where(function($sub2) {
-                      $sub2->whereDoesntHave('consumerAccount')
-                           ->orWhereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'OK')->orWhereNull('billing_basis')->orWhere('billing_basis', ''));
-                  });
-              });
+                ->orWhere(function ($sub) {
+                    $sub->where(function ($b) {
+                        $b->whereNull('billing_basis')->orWhere('billing_basis', '');
+                    })->where(function ($sub2) {
+                        $sub2->whereDoesntHave('consumerAccount')
+                            ->orWhereHas('consumerAccount', fn ($ca) => $ca->where('billing_basis', 'OK')->orWhereNull('billing_basis')->orWhere('billing_basis', ''));
+                    });
+                });
         })->count();
-        $statusCounts['basis_lk'] = (clone $periodBillsQuery)->where(function($q) {
+        $statusCounts['basis_lk'] = (clone $periodBillsQuery)->where(function ($q) {
             $q->where('billing_basis', 'LK')
-              ->orWhere(function($sub) {
-                  $sub->where(function($b) {
-                      $b->whereNull('billing_basis')->orWhere('billing_basis', '');
-                  })->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'LK'));
-              });
+                ->orWhere(function ($sub) {
+                    $sub->where(function ($b) {
+                        $b->whereNull('billing_basis')->orWhere('billing_basis', '');
+                    })->whereHas('consumerAccount', fn ($ca) => $ca->where('billing_basis', 'LK'));
+                });
         })->count();
-        $statusCounts['basis_md'] = (clone $periodBillsQuery)->where(function($q) {
+        $statusCounts['basis_md'] = (clone $periodBillsQuery)->where(function ($q) {
             $q->where('billing_basis', 'MD')
-              ->orWhere(function($sub) {
-                  $sub->where(function($b) {
-                      $b->whereNull('billing_basis')->orWhere('billing_basis', '');
-                  })->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'MD'));
-              });
+                ->orWhere(function ($sub) {
+                    $sub->where(function ($b) {
+                        $b->whereNull('billing_basis')->orWhere('billing_basis', '');
+                    })->whereHas('consumerAccount', fn ($ca) => $ca->where('billing_basis', 'MD'));
+                });
         })->count();
-        $statusCounts['basis_pl'] = (clone $periodBillsQuery)->where(function($q) {
+        $statusCounts['basis_pl'] = (clone $periodBillsQuery)->where(function ($q) {
             $q->where('billing_basis', 'PL')
-              ->orWhere(function($sub) {
-                  $sub->where(function($b) {
-                      $b->whereNull('billing_basis')->orWhere('billing_basis', '');
-                  })->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'PL'));
-              });
+                ->orWhere(function ($sub) {
+                    $sub->where(function ($b) {
+                        $b->whereNull('billing_basis')->orWhere('billing_basis', '');
+                    })->whereHas('consumerAccount', fn ($ca) => $ca->where('billing_basis', 'PL'));
+                });
         })->count();
-        $statusCounts['basis_rn'] = (clone $periodBillsQuery)->where(function($q) {
+        $statusCounts['basis_rn'] = (clone $periodBillsQuery)->where(function ($q) {
             $q->where('billing_basis', 'RN')
-              ->orWhere(function($sub) {
-                  $sub->where(function($b) {
-                      $b->whereNull('billing_basis')->orWhere('billing_basis', '');
-                  })->whereHas('consumerAccount', fn($ca) => $ca->where('billing_basis', 'RN'));
-              });
+                ->orWhere(function ($sub) {
+                    $sub->where(function ($b) {
+                        $b->whereNull('billing_basis')->orWhere('billing_basis', '');
+                    })->whereHas('consumerAccount', fn ($ca) => $ca->where('billing_basis', 'RN'));
+                });
         })->count();
 
         $activeTags = $this->billTagService->getActiveTags();
@@ -218,7 +240,7 @@ class DashboardController extends Controller
         } else {
             $perPage = max(1, min(1000, (int) ($perPageParam ?: 50)));
         }
-        
+
         $statusSort = $request->get('status_sort', 'default');
         $sortCol = $request->get('sort_col', 'ca_number');
         $sortAsc = $request->get('sort_asc', 'true') === 'true' || $request->get('sort_asc', true) === true;
@@ -227,36 +249,39 @@ class DashboardController extends Controller
             ->where('billing_month', $month)
             ->where('billing_year', $year);
 
-        if (!empty($mruId)) {
+        if (! empty($mruId)) {
             $baseQuery->where('mru_id', $mruId);
         }
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $escapedSearch = addcslashes($search, '%_\\');
             $baseQuery->where(function ($q) use ($escapedSearch) {
                 $q->where('ca_number', 'like', "%{$escapedSearch}%")
-                  ->orWhere('consumer_name', 'like', "%{$escapedSearch}%")
-                  ->orWhere('meter_no', 'like', "%{$escapedSearch}%")
-                  ->orWhere('tariff_category', 'like', "%{$escapedSearch}%")
-                  ->orWhereHas('consumerAccount', function ($caQ) use ($escapedSearch) {
-                      $caQ->where('consumer_name', 'like', "%{$escapedSearch}%")
-                          ->orWhere('meter_no', 'like', "%{$escapedSearch}%")
-                          ->orWhere('tariff_category', 'like', "%{$escapedSearch}%")
-                          ->orWhere('billing_basis', 'like', "%{$escapedSearch}%");
-                  });
+                    ->orWhere('consumer_name', 'like', "%{$escapedSearch}%")
+                    ->orWhere('meter_no', 'like', "%{$escapedSearch}%")
+                    ->orWhere('tariff_category', 'like', "%{$escapedSearch}%")
+                    ->orWhereHas('consumerAccount', function ($caQ) use ($escapedSearch) {
+                        $caQ->where('consumer_name', 'like', "%{$escapedSearch}%")
+                            ->orWhere('meter_no', 'like', "%{$escapedSearch}%")
+                            ->orWhere('tariff_category', 'like', "%{$escapedSearch}%")
+                            ->orWhere('billing_basis', 'like', "%{$escapedSearch}%");
+                    });
             });
         }
+
+        $allRecords = $baseQuery->get();
+
+        $caNumbers = $allRecords->pluck('ca_number')->unique()->values();
 
         // Get user statuses & remarks for this period
         $userStatusModels = BillStatus::where('billing_month', $month)
             ->where('billing_year', $year)
+            ->where('user_id', $userId)
+            ->whereIn('ca_number', $caNumbers)
             ->get()
             ->keyBy('ca_number');
 
-        $allRecords = $baseQuery->get();
-
         // Pre-fetch historical bill records for these CAs to resolve DB Previous Reading and Outlier-Proof Smart Average
-        $caNumbers = $allRecords->pluck('ca_number')->unique()->values();
         $historicalBills = BillRecord::where('user_id', $userId)
             ->whereIn('ca_number', $caNumbers)
             ->orderBy('billing_year', 'desc')
@@ -264,7 +289,7 @@ class DashboardController extends Controller
             ->get()
             ->groupBy('ca_number');
 
-        $basisHistories = \App\Models\BillingBasisHistory::where('user_id', $userId)
+        $basisHistories = BillingBasisHistory::where('user_id', $userId)
             ->where('billing_month', $month)
             ->where('billing_year', $year)
             ->whereIn('ca_number', $caNumbers)
@@ -276,15 +301,50 @@ class DashboardController extends Controller
             ->get()
             ->keyBy('ca_number');
 
+        // Pre-fetch dedicated meter reading histories for all these CAs in 1 single query
+        $meterHistories = MeterReadingHistory::where('user_id', $userId)
+            ->whereIn('ca_number', $caNumbers)
+            ->where(function ($q) use ($month, $year) {
+                $q->where('billing_year', '<', $year)
+                    ->orWhere(function ($q2) use ($month, $year) {
+                        $q2->where('billing_year', $year)
+                            ->where('billing_month', '<', $month);
+                    });
+            })
+            ->orderBy('billing_year', 'desc')
+            ->orderBy('billing_month', 'desc')
+            ->get()
+            ->groupBy('ca_number');
+
+        $tuningStepsParam = $request->input('tuning_steps');
+        $tuningSteps = [];
+        if (is_string($tuningStepsParam)) {
+            $decoded = json_decode($tuningStepsParam, true);
+            if (is_array($decoded)) {
+                $tuningSteps = $decoded;
+            }
+        } elseif (is_array($tuningStepsParam)) {
+            $tuningSteps = $tuningStepsParam;
+        }
+
+        if (empty($tuningSteps) && session()->has('dashboard_tuning_steps')) {
+            $tuningSteps = session('dashboard_tuning_steps', []);
+        }
+
+        $adjPercent = (float) $request->input('adjustment_percent', 0);
+        if ($adjPercent == 0 && empty($tuningSteps) && session()->has('dashboard_tuning_percent')) {
+            $adjPercent = (float) session('dashboard_tuning_percent', 0);
+        }
+
         // Attach review_status, remark, and 4-Box Reading Metrics
-        $mapped = $allRecords->map(function ($bill) use ($userStatusModels, $historicalBills, $basisHistories, $consumers, $month, $year) {
+        $mapped = $allRecords->map(function ($bill) use ($userStatusModels, $historicalBills, $meterHistories, $basisHistories, $consumers, $month, $year, $adjPercent, $tuningSteps) {
             $st = $userStatusModels[$bill->ca_number] ?? null;
-            $bill->review_status = !empty($bill->review_status) && $bill->review_status !== 'pending' ? $bill->review_status : ($st ? $st->status : ($bill->review_status ?: 'pending'));
-            $bill->remark = !empty($bill->remark) ? $bill->remark : ($st ? ($st->remark ?? '') : '');
-            $bill->tag = !empty($bill->tag) ? $bill->tag : ($st ? ($st->tag ?? 'OK') : 'OK');
+            $bill->review_status = ! empty($bill->review_status) && $bill->review_status !== 'pending' ? $bill->review_status : ($st ? $st->status : ($bill->review_status ?: 'pending'));
+            $bill->remark = ! empty($bill->remark) ? $bill->remark : ($st ? ($st->remark ?? '') : '');
+            $bill->tag = ! empty($bill->tag) ? $bill->tag : ($st ? ($st->tag ?? 'OK') : 'OK');
             $bill->display_tag = $this->billTagService->getDisplayLabel($bill->tag);
             $bill->full_tag = $this->billTagService->getFullLabel($bill->tag);
-            $bill->has_pdf = !empty($bill->pdf_path);
+            $bill->has_pdf = ! empty($bill->pdf_path);
 
             $bbh = $basisHistories[$bill->ca_number] ?? null;
             $bill->is_consecutive_alert = (bool) ($bbh?->is_consecutive_alert ?? false);
@@ -293,40 +353,42 @@ class DashboardController extends Controller
             // Master-First Identity & Profile Resolution
             $consumerAcc = $bill->consumerAccount ?? ($consumers[$bill->ca_number] ?? null);
             $masterName = $consumerAcc?->consumer_name;
-            if (!empty($masterName) && !str_starts_with($masterName, 'Consumer ')) {
+            if (! empty($masterName) && ! str_starts_with($masterName, 'Consumer ')) {
                 $bill->consumer_name = $masterName;
             } elseif (empty($bill->consumer_name)) {
                 $bill->consumer_name = "Consumer {$bill->ca_number}";
             }
 
             $masterMeter = $consumerAcc?->meter_no;
-            if (!empty($masterMeter)) {
+            if (! empty($masterMeter)) {
                 $bill->meter_no = $masterMeter;
             }
 
             $masterTariff = $consumerAcc?->tariff_category;
-            $bill->tariff_category = !empty($masterTariff) ? $masterTariff : ($bill->tariff_category ?: 'DS-II');
+            $bill->tariff_category = ! empty($masterTariff) ? $masterTariff : ($bill->tariff_category ?: 'DS-II');
 
             $masterBasis = $consumerAcc?->billing_basis;
-            if (empty($bill->billing_basis) && !empty($masterBasis)) {
+            if (empty($bill->billing_basis) && ! empty($masterBasis)) {
                 $bill->billing_basis = $masterBasis;
             }
             $bill->billing_basis = $bill->billing_basis ?: 'OK';
 
-            if ((empty($bill->total_amount) || (float)$bill->total_amount == 0.0) && $consumerAcc && (float)$consumerAcc->baseline_amount > 0) {
+            if ((empty($bill->total_amount) || (float) $bill->total_amount == 0.0) && $consumerAcc && (float) $consumerAcc->baseline_amount > 0) {
                 $bill->total_amount = (float) $consumerAcc->baseline_amount;
                 $bill->is_baseline_amount = true;
             }
 
             // 1. Box 2: Previous Reading from DB / Master Ledger
             $history = $historicalBills->get($bill->ca_number, collect());
+            $mrhForCa = $meterHistories->get($bill->ca_number, collect());
             $resolvedPrev = $this->smartAverageService->resolvePreviousReading(
                 $bill->ca_number,
                 $month,
                 $year,
                 $bill,
                 $consumerAcc,
-                $history
+                $history,
+                $mrhForCa
             );
 
             $bill->db_prev_reading = $resolvedPrev['reading_str'];
@@ -340,17 +402,24 @@ class DashboardController extends Controller
                 $bill->billing_basis ?: 'OK',
                 $bill,
                 $consumerAcc,
-                $history
+                $history,
+                $adjPercent,
+                $tuningSteps,
+                $mrhForCa
             );
 
+            $baseAvg = $avgCalc['base_units'];
+            $bill->base_avg_units = $baseAvg;
             $bill->smart_avg_units = $avgCalc['avg_units'];
             $bill->smart_avg_label = $avgCalc['label'];
             $bill->smart_avg_range = $avgCalc['range'];
+            $bill->tuning_percent = $avgCalc['tuning_percent'];
+            $bill->tuning_steps = $avgCalc['tuning_steps'];
 
             // 3. Box 1: Working Reading (Current) & Auto-Fill Projection
             $prevNum = $resolvedPrev['reading'] ?? 0;
-            $pdfNum = (!empty($bill->current_reading) && is_numeric($bill->current_reading)) ? (int)$bill->current_reading : null;
-            $projectedReading = $this->smartAverageService->calculateProjectedReading($prevNum, $avgCalc['avg_units'], $pdfNum);
+            $pdfNum = (! empty($bill->current_reading) && is_numeric($bill->current_reading)) ? (int) $bill->current_reading : null;
+            $projectedReading = $this->smartAverageService->calculateProjectedReading($prevNum, $avgCalc['avg_units'], $pdfNum, 0);
 
             $bill->projected_reading = (string) $projectedReading;
 
@@ -372,9 +441,9 @@ class DashboardController extends Controller
                 }
             }
 
-            $workNum = is_numeric($bill->working_reading) ? (int)$bill->working_reading : $projectedReading;
+            $workNum = is_numeric($bill->working_reading) ? (int) $bill->working_reading : $projectedReading;
             $bill->working_diff_units = ($prevNum > 0 && $workNum >= $prevNum) ? ($workNum - $prevNum) : ($bill->units_consumed ?: $avgCalc['avg_units']);
-            if (empty($bill->units_consumed) || (int)$bill->units_consumed === 0) {
+            if (empty($bill->units_consumed) || (int) $bill->units_consumed === 0) {
                 $bill->units_consumed = $bill->working_diff_units;
             }
 
@@ -388,7 +457,7 @@ class DashboardController extends Controller
                 } elseif ($workNum === $pdfNum) {
                     $bill->pdf_sync_status = 'matched'; // 0.01% case: Working == PDF
                     $bill->pdf_delta = 0;
-                    $bill->pdf_status_label = "Exact Match";
+                    $bill->pdf_status_label = 'Exact Match';
                 } else {
                     $bill->pdf_sync_status = 'invalid_behind'; // ERROR: Working < PDF!
                     $bill->pdf_delta = $workNum - $pdfNum;
@@ -397,14 +466,17 @@ class DashboardController extends Controller
             } else {
                 $bill->pdf_sync_status = 'awaiting'; // ⏳ Awaiting PDF (80-90% relying on Prev + Avg)
                 $bill->pdf_delta = null;
-                $bill->pdf_status_label = "Awaiting PDF";
+                $bill->pdf_status_label = 'Awaiting PDF';
             }
 
             return $bill;
         });
 
         $consumersQuery = ConsumerAccount::query();
-        if (!empty($mruId)) {
+        if ($userId) {
+            $consumersQuery->where('user_id', $userId);
+        }
+        if (! empty($mruId)) {
             $consumersQuery->where('mru_id', $mruId);
         }
         $totalConsumers = $consumersQuery->count();
@@ -416,13 +488,13 @@ class DashboardController extends Controller
             'submitted' => $mapped->where('review_status', 'submitted')->count(),
             'critical' => $mapped->where('review_status', 'critical')->count(),
             'doubt' => $mapped->where('review_status', 'doubt')->count(),
-            'missing_pdf' => $mapped->filter(fn($item) => empty($item->pdf_path) || $item->download_status !== 'downloaded')->count(),
+            'missing_pdf' => $mapped->filter(fn ($item) => empty($item->pdf_path) || $item->download_status !== 'downloaded')->count(),
             'total_consumers' => $totalConsumers,
-            'basis_ok' => $mapped->filter(fn($item) => strtoupper(trim((string)($item->billing_basis ?: 'OK'))) === 'OK')->count(),
-            'basis_lk' => $mapped->filter(fn($item) => strtoupper(trim((string)($item->billing_basis ?: ''))) === 'LK')->count(),
-            'basis_md' => $mapped->filter(fn($item) => strtoupper(trim((string)($item->billing_basis ?: ''))) === 'MD')->count(),
-            'basis_pl' => $mapped->filter(fn($item) => strtoupper(trim((string)($item->billing_basis ?: ''))) === 'PL')->count(),
-            'basis_rn' => $mapped->filter(fn($item) => strtoupper(trim((string)($item->billing_basis ?: ''))) === 'RN')->count(),
+            'basis_ok' => $mapped->filter(fn ($item) => strtoupper(trim((string) ($item->billing_basis ?: 'OK'))) === 'OK')->count(),
+            'basis_lk' => $mapped->filter(fn ($item) => strtoupper(trim((string) ($item->billing_basis ?: ''))) === 'LK')->count(),
+            'basis_md' => $mapped->filter(fn ($item) => strtoupper(trim((string) ($item->billing_basis ?: ''))) === 'MD')->count(),
+            'basis_pl' => $mapped->filter(fn ($item) => strtoupper(trim((string) ($item->billing_basis ?: ''))) === 'PL')->count(),
+            'basis_rn' => $mapped->filter(fn ($item) => strtoupper(trim((string) ($item->billing_basis ?: ''))) === 'RN')->count(),
         ];
 
         // Dynamic sum of units and amount for matching search
@@ -430,21 +502,22 @@ class DashboardController extends Controller
         $filteredAmount = $mapped->sum('total_amount');
 
         // Apply filter (all, pending, submitted, critical, doubt)
-        if (!empty($filter) && $filter !== 'all') {
-            $mapped = $mapped->filter(fn($item) => $item->review_status === $filter);
+        if (! empty($filter) && $filter !== 'all') {
+            $mapped = $mapped->filter(fn ($item) => $item->review_status === $filter);
         }
 
         // Apply Tag filter (all, OK, BQC, RCQ, 24days, etc.)
         $tagFilter = $request->get('tag_filter', $request->get('tag', 'all'));
-        if (!empty($tagFilter) && $tagFilter !== 'all') {
-            $mapped = $mapped->filter(fn($item) => strtoupper($item->tag ?? '') === strtoupper($tagFilter));
+        if (! empty($tagFilter) && $tagFilter !== 'all') {
+            $mapped = $mapped->filter(fn ($item) => strtoupper($item->tag ?? '') === strtoupper($tagFilter));
         }
 
         // Apply Basis filter (all, OK, LK, MD, PL, RN)
         $basisFilter = strtoupper(trim((string) $request->get('basis_filter', $request->get('basis', 'all'))));
-        if (!empty($basisFilter) && $basisFilter !== 'ALL') {
+        if (! empty($basisFilter) && $basisFilter !== 'ALL') {
             $mapped = $mapped->filter(function ($item) use ($basisFilter) {
                 $b = strtoupper(trim((string) ($item->billing_basis ?: 'OK')));
+
                 return $b === $basisFilter;
             });
         }
@@ -523,7 +596,7 @@ class DashboardController extends Controller
                 };
 
                 if ($numA == $numB) {
-                    return strcmp((string)$a->ca_number, (string)$b->ca_number);
+                    return strcmp((string) $a->ca_number, (string) $b->ca_number);
                 }
 
                 return $sortAsc ? ($numA <=> $numB) : ($numB <=> $numA);
@@ -546,9 +619,9 @@ class DashboardController extends Controller
                 default => trim((string) ($b->ca_number ?? '')),
             };
 
-            $cmp = strnatcasecmp((string)$valA, (string)$valB);
+            $cmp = strnatcasecmp((string) $valA, (string) $valB);
             if ($cmp === 0) {
-                return strcmp((string)$a->ca_number, (string)$b->ca_number);
+                return strcmp((string) $a->ca_number, (string) $b->ca_number);
             }
 
             return $sortAsc ? $cmp : -$cmp;
@@ -561,14 +634,15 @@ class DashboardController extends Controller
         $items = $sorted->slice($offset, $perPage)->values();
 
         $availablePeriods = BillRecord::select('billing_month', 'billing_year')
-            ->when(!empty($mruId), function ($q) use ($mruId) {
+            ->when($userId, fn ($q) => $q->where('user_id', $userId))
+            ->when(! empty($mruId), function ($q) use ($mruId) {
                 $q->where('mru_id', $mruId);
             })
             ->distinct()
             ->orderBy('billing_year', 'desc')
             ->orderBy('billing_month', 'desc')
             ->get()
-            ->unique(fn($p) => "{$p->billing_month}_{$p->billing_year}")
+            ->unique(fn ($p) => "{$p->billing_month}_{$p->billing_year}")
             ->map(function ($p) {
                 return [
                     'key' => "{$p->billing_month}_{$p->billing_year}",
@@ -579,7 +653,7 @@ class DashboardController extends Controller
             })
             ->values();
 
-        /** @var \App\Models\User $currentUser */
+        /** @var User $currentUser */
         $currentUser = Auth::user();
 
         return response()->json([
@@ -589,6 +663,10 @@ class DashboardController extends Controller
             'filtered_units' => $filteredUnits,
             'filtered_amount' => $filteredAmount,
             'available_periods' => $availablePeriods,
+            'active_tuning' => [
+                'percent' => $adjPercent,
+                'steps' => $tuningSteps,
+            ],
             'user_shortcuts' => $currentUser ? $currentUser->getShortcutMap() : config('shortcuts.default'),
             'shortcut_labels' => $currentUser ? $currentUser->getShortcutLabels() : config('shortcuts.labels'),
             'available_tags' => $this->billTagService->getActiveTags(),
@@ -600,7 +678,7 @@ class DashboardController extends Controller
                 'last_page' => $totalPages,
                 'from' => $totalMatching > 0 ? $offset + 1 : 0,
                 'to' => min($offset + $perPage, $totalMatching),
-            ]
+            ],
         ]);
     }
 
@@ -623,7 +701,7 @@ class DashboardController extends Controller
 
         // Submitted Bill Lockout: Require explicit confirmation/override flag if bill is submitted
         $isSubmitted = (strtolower(trim($bill->review_status ?? '')) === 'submitted');
-        if (!$isSubmitted) {
+        if (! $isSubmitted) {
             $isSubmitted = BillStatus::where('user_id', $userId)
                 ->where('ca_number', $bill->ca_number)
                 ->where('billing_month', $bill->billing_month)
@@ -634,7 +712,7 @@ class DashboardController extends Controller
 
         $force = $request->boolean('force') || $request->boolean('override_submitted') || $request->boolean('confirm_override');
 
-        if ($isSubmitted && !$force) {
+        if ($isSubmitted && ! $force) {
             return response()->json([
                 'success' => false,
                 'requires_override' => true,
@@ -645,25 +723,38 @@ class DashboardController extends Controller
 
         $readingSource = $request->input('source', 'manual');
 
-        $bill = \Illuminate\Support\Facades\DB::transaction(function () use ($userId, $bill, $readingVal, $readingSource) {
+        $bill = DB::transaction(function () use ($userId, $bill, $readingVal, $readingSource) {
             $bill->working_reading = $readingVal;
             $bill->reading_source = $readingSource;
             if (is_numeric($readingVal)) {
-                $prev = is_numeric($bill->previous_reading) ? (int)$bill->previous_reading : 0;
+                $prev = is_numeric($bill->previous_reading) ? (int) $bill->previous_reading : 0;
                 if ($prev <= 0) {
                     $consumer = ConsumerAccount::where('user_id', $userId)->where('ca_number', $bill->ca_number)->first();
                     $resolved = $this->smartAverageService->resolvePreviousReading($bill->ca_number, $bill->billing_month, $bill->billing_year, $bill, $consumer, null);
-                    if (!empty($resolved['reading'])) {
+                    if (! empty($resolved['reading'])) {
                         $prev = (int) $resolved['reading'];
                         $bill->previous_reading = $prev;
                     }
                 }
-                if ($prev > 0 && (int)$readingVal >= $prev) {
-                    $bill->units_consumed = (int)$readingVal - $prev;
+                if ($prev > 0 && (int) $readingVal >= $prev) {
+                    $bill->units_consumed = (int) $readingVal - $prev;
                     $bill->calculated_avg_units = $bill->units_consumed;
                 }
             }
             $bill->save();
+
+            // Record to dedicated MeterReadingHistory table
+            try {
+                $isSubmittedNow = (strtolower(trim($bill->review_status ?? '')) === 'submitted');
+                $this->meterHistoryService->recordFromWorkingReading(
+                    $bill,
+                    $readingVal,
+                    $bill->units_consumed ? (int) $bill->units_consumed : null,
+                    $isSubmittedNow
+                );
+            } catch (\Throwable $e) {
+                Log::warning('MeterReadingHistory recording failed: '.$e->getMessage());
+            }
 
             // 1. Update Master Reading Ledger on ConsumerAccount
             $consumer = ConsumerAccount::where('user_id', $userId)
@@ -672,7 +763,7 @@ class DashboardController extends Controller
 
             if ($consumer) {
                 $isNewer = false;
-                if (!$consumer->last_working_year || $bill->billing_year > $consumer->last_working_year) {
+                if (! $consumer->last_working_year || $bill->billing_year > $consumer->last_working_year) {
                     $isNewer = true;
                 } elseif ($bill->billing_year == $consumer->last_working_year && $bill->billing_month >= ($consumer->last_working_month ?? 0)) {
                     $isNewer = true;
@@ -691,10 +782,10 @@ class DashboardController extends Controller
                 ->where('ca_number', $bill->ca_number)
                 ->where(function ($q) use ($bill) {
                     $q->where('billing_year', '>', $bill->billing_year)
-                      ->orWhere(function ($q2) use ($bill) {
-                          $q2->where('billing_year', $bill->billing_year)
-                             ->where('billing_month', '>', $bill->billing_month);
-                      });
+                        ->orWhere(function ($q2) use ($bill) {
+                            $q2->where('billing_year', $bill->billing_year)
+                                ->where('billing_month', '>', $bill->billing_month);
+                        });
                 })
                 ->orderBy('billing_year', 'asc')
                 ->orderBy('billing_month', 'asc')
@@ -704,9 +795,9 @@ class DashboardController extends Controller
                 ->where('ca_number', $bill->ca_number)
                 ->whereRaw('LOWER(status) = ?', ['submitted'])
                 ->get()
-                ->keyBy(fn($s) => "{$s->billing_month}_{$s->billing_year}");
+                ->keyBy(fn ($s) => "{$s->billing_month}_{$s->billing_year}");
 
-            $currentChainReading = is_numeric($readingVal) ? (int)$readingVal : 0;
+            $currentChainReading = is_numeric($readingVal) ? (int) $readingVal : 0;
             foreach ($subsequentBills as $futureBill) {
                 $statusKey = "{$futureBill->billing_month}_{$futureBill->billing_year}";
                 $isFutureSubmitted = (strtolower(trim($futureBill->review_status ?? '')) === 'submitted') || isset($submittedFutureStatuses[$statusKey]);
@@ -714,16 +805,17 @@ class DashboardController extends Controller
 
                 // Cascade Protection: Do NOT overwrite future bills whose review_status is 'submitted' or reading_source is 'manual'
                 if ($isFutureSubmitted || $isFutureManual) {
-                    if (!empty($futureBill->working_reading) && is_numeric($futureBill->working_reading)) {
+                    if (! empty($futureBill->working_reading) && is_numeric($futureBill->working_reading)) {
                         $currentChainReading = (int) $futureBill->working_reading;
                     }
+
                     continue;
                 }
 
                 $futureBill->previous_reading = (string) $currentChainReading;
                 $avgUnits = $futureBill->units_consumed ?: 50;
                 $newProjected = $currentChainReading + $avgUnits;
-                if (!empty($futureBill->current_reading) && is_numeric($futureBill->current_reading)) {
+                if (! empty($futureBill->current_reading) && is_numeric($futureBill->current_reading)) {
                     $pdfReading = (int) $futureBill->current_reading;
                     if ($newProjected < $pdfReading) {
                         $newProjected = $pdfReading;
@@ -732,6 +824,18 @@ class DashboardController extends Controller
                 $futureBill->working_reading = (string) $newProjected;
                 $futureBill->reading_source = 'auto';
                 $futureBill->save();
+
+                try {
+                    $this->meterHistoryService->recordFromWorkingReading(
+                        $futureBill,
+                        (string) $newProjected,
+                        $futureBill->units_consumed ? (int) $futureBill->units_consumed : null,
+                        false
+                    );
+                } catch (\Throwable $e) {
+                    // ignore
+                }
+
                 $currentChainReading = $newProjected;
             }
 
@@ -758,17 +862,35 @@ class DashboardController extends Controller
         $month = (int) $request->input('month', now()->month);
         $year = (int) $request->input('year', now()->year);
         $mruId = $request->input('mru_id');
+        $adjPercent = (float) $request->input('adjustment_percent', 0);
+        $tuningStepsParam = $request->input('tuning_steps');
+        $tuningSteps = [];
+        if (is_string($tuningStepsParam)) {
+            $decoded = json_decode($tuningStepsParam, true);
+            if (is_array($decoded)) {
+                $tuningSteps = $decoded;
+            }
+        } elseif (is_array($tuningStepsParam)) {
+            $tuningSteps = $tuningStepsParam;
+        }
+
+        if (empty($tuningSteps) && session()->has('dashboard_tuning_steps')) {
+            $tuningSteps = session('dashboard_tuning_steps', []);
+        }
+        if ($adjPercent == 0 && empty($tuningSteps) && session()->has('dashboard_tuning_percent')) {
+            $adjPercent = (float) session('dashboard_tuning_percent', 0);
+        }
 
         $query = BillRecord::where('user_id', $userId)
             ->where('billing_month', $month)
             ->where('billing_year', $year)
             ->where(function ($q) {
                 $q->whereNull('review_status')
-                  ->orWhereRaw('LOWER(review_status) != ?', ['submitted']);
+                    ->orWhereRaw('LOWER(review_status) != ?', ['submitted']);
             })
             ->where(function ($q) {
                 $q->whereNull('reading_source')
-                  ->orWhere('reading_source', '!=', 'manual');
+                    ->orWhere('reading_source', '!=', 'manual');
             });
 
         // Exclude accounts already marked submitted in bill_statuses
@@ -782,13 +904,13 @@ class DashboardController extends Controller
             $query->whereNotIn('ca_number', $submittedCas);
         }
 
-        if (!empty($mruId)) {
+        if (! empty($mruId)) {
             $query->where('mru_id', $mruId);
         }
 
         $bills = $query->get();
 
-        $count = \Illuminate\Support\Facades\DB::transaction(function () use ($userId, $bills, $month, $year) {
+        $count = DB::transaction(function () use ($userId, $bills, $month, $year, $adjPercent, $tuningSteps) {
             $count = 0;
             $caNumbers = $bills->pluck('ca_number')->unique()->values();
             $historicalBills = BillRecord::where('user_id', $userId)
@@ -803,6 +925,20 @@ class DashboardController extends Controller
                 ->get()
                 ->keyBy('ca_number');
 
+            $meterHistories = MeterReadingHistory::where('user_id', $userId)
+                ->whereIn('ca_number', $caNumbers)
+                ->where(function ($q) use ($month, $year) {
+                    $q->where('billing_year', '<', $year)
+                        ->orWhere(function ($q2) use ($month, $year) {
+                            $q2->where('billing_year', $year)
+                                ->where('billing_month', '<', $month);
+                        });
+                })
+                ->orderBy('billing_year', 'desc')
+                ->orderBy('billing_month', 'desc')
+                ->get()
+                ->groupBy('ca_number');
+
             foreach ($bills as $bill) {
                 // Safeguard against overwriting manual custom entries or submitted bills
                 if ($bill->reading_source === 'manual') {
@@ -814,6 +950,7 @@ class DashboardController extends Controller
 
                 $history = $historicalBills->get($bill->ca_number, collect());
                 $consumer = $consumers->get($bill->ca_number);
+                $mrhForCa = $meterHistories->get($bill->ca_number, collect());
 
                 $resolvedPrev = $this->smartAverageService->resolvePreviousReading(
                     $bill->ca_number,
@@ -821,7 +958,8 @@ class DashboardController extends Controller
                     $year,
                     $bill,
                     $consumer,
-                    $history
+                    $history,
+                    $mrhForCa
                 );
 
                 $avgCalc = $this->smartAverageService->calculateSmartAverage(
@@ -831,28 +969,42 @@ class DashboardController extends Controller
                     $bill->billing_basis ?: ($consumer?->billing_basis ?: 'OK'),
                     $bill,
                     $consumer,
-                    $history
+                    $history,
+                    $adjPercent,
+                    $tuningSteps,
+                    $mrhForCa
                 );
 
                 $dbPrevReading = $resolvedPrev['reading'] ?? 0;
-                $avgUnits = $avgCalc['avg_units'];
+                $effectiveUnits = $avgCalc['avg_units'];
 
-                $pdfReading = (!empty($bill->current_reading) && is_numeric($bill->current_reading)) ? (int) $bill->current_reading : null;
-                $projected = $this->smartAverageService->calculateProjectedReading($dbPrevReading, $avgUnits, $pdfReading);
+                $pdfReading = (! empty($bill->current_reading) && is_numeric($bill->current_reading)) ? (int) $bill->current_reading : null;
+                $projected = $this->smartAverageService->calculateProjectedReading($dbPrevReading, $effectiveUnits, $pdfReading, 0);
 
                 if ($dbPrevReading > 0) {
                     $bill->previous_reading = $dbPrevReading;
                 }
                 $bill->working_reading = (string) $projected;
                 $bill->reading_source = 'auto';
-                $bill->units_consumed = $avgUnits;
-                $bill->calculated_avg_units = $avgUnits;
+                $bill->units_consumed = $effectiveUnits;
+                $bill->calculated_avg_units = $avgCalc['base_units'];
                 $bill->save();
+
+                try {
+                    $this->meterHistoryService->recordFromWorkingReading(
+                        $bill,
+                        (string) $projected,
+                        $effectiveUnits,
+                        false
+                    );
+                } catch (\Throwable $e) {
+                    // ignore
+                }
 
                 // Sync master ledger
                 if ($consumer) {
                     $isNewer = false;
-                    if (!$consumer->last_working_year || $year > $consumer->last_working_year) {
+                    if (! $consumer->last_working_year || $year > $consumer->last_working_year) {
                         $isNewer = true;
                     } elseif ($year == $consumer->last_working_year && $month >= ($consumer->last_working_month ?? 0)) {
                         $isNewer = true;
@@ -891,7 +1043,7 @@ class DashboardController extends Controller
 
         $userId = Auth::id();
 
-        $bill = \Illuminate\Support\Facades\DB::transaction(function () use ($userId, $request) {
+        $bill = DB::transaction(function () use ($userId, $request) {
             $bill = BillRecord::where('user_id', $userId)->findOrFail($request->id);
             $bill->review_status = $request->review_status;
             $bill->save();
@@ -925,12 +1077,25 @@ class DashboardController extends Controller
                 );
             }
 
+            // Synchronize with meter_reading_histories table
+            try {
+                $isSubmitted = ($request->review_status === 'submitted');
+                MeterReadingHistory::where('user_id', $userId)
+                    ->where('ca_number', $bill->ca_number)
+                    ->where('billing_month', $bill->billing_month)
+                    ->where('billing_year', $bill->billing_year)
+                    ->where('reading_source', 'working')
+                    ->update(['is_closed' => $isSubmitted]);
+            } catch (\Throwable $e) {
+                Log::warning('MeterReadingHistory status sync failed: '.$e->getMessage());
+            }
+
             return $bill;
         });
 
         return response()->json([
             'success' => true,
-            'message' => "Review status updated to " . ucfirst($bill->review_status),
+            'message' => 'Review status updated to '.ucfirst($bill->review_status),
             'review_status' => $bill->review_status,
         ]);
     }
@@ -948,7 +1113,7 @@ class DashboardController extends Controller
         $userId = Auth::id();
         $remark = $request->remark ? trim($request->remark) : null;
 
-        $bill = \Illuminate\Support\Facades\DB::transaction(function () use ($userId, $request, $remark) {
+        $bill = DB::transaction(function () use ($userId, $request, $remark) {
             $bill = BillRecord::where('user_id', $userId)->findOrFail($request->id);
             $bill->remark = $remark;
             $bill->save();
@@ -971,7 +1136,7 @@ class DashboardController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => "Remark updated",
+            'message' => 'Remark updated',
             'remark' => $bill->remark,
         ]);
     }
@@ -992,12 +1157,12 @@ class DashboardController extends Controller
         $userId = Auth::id();
         $tag = trim((string) $request->tag) ?: 'OK';
 
-        $bill = \Illuminate\Support\Facades\DB::transaction(function () use ($userId, $request, $tag) {
+        $bill = DB::transaction(function () use ($userId, $request, $tag) {
             $bill = null;
             if ($request->id) {
                 $bill = BillRecord::where('user_id', $userId)->find($request->id);
             }
-            if (!$bill && $request->ca_number && $request->billing_month && $request->billing_year) {
+            if (! $bill && $request->ca_number && $request->billing_month && $request->billing_year) {
                 $bill = BillRecord::where('user_id', $userId)
                     ->where('ca_number', $request->ca_number)
                     ->where('billing_month', (int) $request->billing_month)
@@ -1011,8 +1176,8 @@ class DashboardController extends Controller
             }
 
             $ca = $bill ? $bill->ca_number : $request->ca_number;
-            $month = $bill ? $bill->billing_month : (int)$request->billing_month;
-            $year = $bill ? $bill->billing_year : (int)$request->billing_year;
+            $month = $bill ? $bill->billing_month : (int) $request->billing_month;
+            $year = $bill ? $bill->billing_year : (int) $request->billing_year;
 
             if ($ca && $month && $year) {
                 BillStatus::updateOrCreate(
@@ -1033,7 +1198,7 @@ class DashboardController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => "Tag updated to " . $this->billTagService->getDisplayLabel($tag),
+            'message' => 'Tag updated to '.$this->billTagService->getDisplayLabel($tag),
             'tag' => $tag,
             'display_tag' => $this->billTagService->getDisplayLabel($tag),
             'full_tag' => $this->billTagService->getFullLabel($tag),
@@ -1045,7 +1210,7 @@ class DashboardController extends Controller
      */
     public function getShortcuts(): JsonResponse
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
 
         return response()->json([
@@ -1053,7 +1218,7 @@ class DashboardController extends Controller
             'shortcuts' => $user->getShortcutMap(),
             'labels' => $user->getShortcutLabels(),
             'defaults' => config('shortcuts.default'),
-            'is_customized' => !empty($user->shortcuts),
+            'is_customized' => ! empty($user->shortcuts),
         ]);
     }
 
@@ -1076,7 +1241,7 @@ class DashboardController extends Controller
             'shortcuts.exit_box' => 'nullable|string|max:30',
         ]);
 
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
         $user->shortcuts = $request->shortcuts;
         $user->save();
@@ -1093,7 +1258,7 @@ class DashboardController extends Controller
      */
     public function resetShortcuts(): JsonResponse
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
         $user->shortcuts = null;
         $user->save();
@@ -1119,5 +1284,77 @@ class DashboardController extends Controller
             'csrf_token' => csrf_token(),
         ]);
     }
-}
 
+    /**
+     * Save active percentage tuning & sequential compounding steps in session.
+     */
+    public function saveTuning(Request $request): JsonResponse
+    {
+        $request->validate([
+            'percent' => 'nullable|numeric|min:-90|max:300',
+            'steps' => 'nullable|array',
+            'steps.*' => 'numeric|min:-90|max:300',
+            'base_units' => 'nullable|integer|min:1',
+        ]);
+
+        $percent = (float) $request->input('percent', 0);
+        $steps = $request->input('steps', []);
+        $baseUnits = (int) $request->input('base_units', 50);
+
+        session([
+            'dashboard_tuning_percent' => $percent,
+            'dashboard_tuning_steps' => $steps,
+        ]);
+
+        $compounded = ! empty($steps)
+            ? $this->smartAverageService->compoundAdjustAverageUnits($baseUnits, $steps)
+            : [
+                'base_units' => $baseUnits,
+                'tuned_units' => $this->smartAverageService->adjustAverageUnits($baseUnits, $percent),
+                'net_percent' => $percent,
+                'steps' => [],
+            ];
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Average tuning preferences updated',
+            'tuning' => [
+                'percent' => $percent,
+                'steps' => $steps,
+                'base_units' => $baseUnits,
+                'tuned_units' => $compounded['tuned_units'],
+                'net_percent' => $compounded['net_percent'],
+                'step_details' => $compounded['steps'],
+            ],
+        ]);
+    }
+
+    /**
+     * Reset active tuning preferences back to baseline normal (0%).
+     */
+    public function resetTuning(Request $request): JsonResponse
+    {
+        session()->forget(['dashboard_tuning_percent', 'dashboard_tuning_steps']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Tuning reset to baseline normal',
+        ]);
+    }
+
+    /**
+     * Get two-dimensional consumption matrix for a consumer across all periods.
+     */
+    public function getMeterMatrix(Request $request, string $caNumber): JsonResponse
+    {
+        $userId = Auth::id();
+        $year = $request->filled('year') ? (int) $request->input('year') : null;
+
+        $matrix = $this->meterHistoryService->getConsumerMonthlyMatrix($userId, $caNumber, $year);
+
+        return response()->json([
+            'success' => true,
+            'data' => $matrix,
+        ]);
+    }
+}

@@ -57,7 +57,7 @@ class PlanDuration extends Model
         $val = $this->duration_value ?: $this->duration_months ?: 1;
         $unit = $this->duration_unit === 'day' ? 'Day' : 'Month';
 
-        return "{$val} {$unit}" . ($val > 1 ? 's' : '');
+        return "{$val} {$unit}".($val > 1 ? 's' : '');
     }
 
     /**
@@ -70,7 +70,7 @@ class PlanDuration extends Model
         $label = "{$val}{$unit}";
 
         if ($this->discount_percent > 0) {
-            $label .= ' -' . rtrim(rtrim(number_format((float)$this->discount_percent, 2), '0'), '.') . '%';
+            $label .= ' -'.rtrim(rtrim(number_format((float) $this->discount_percent, 2), '0'), '.').'%';
         }
 
         return $label;

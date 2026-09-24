@@ -3,16 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DebitResult;
-use App\Enums\PaymentAuditAction;
 use App\Enums\PaymentMode;
 use App\Enums\PaymentPurpose;
-use App\Enums\PaymentStatus;
-use App\Events\ManualPaymentSubmittedEvent;
 use App\Models\AgentSubscription;
 use App\Models\Payment;
-use App\Models\PaymentAuditLog;
 use App\Models\Plan;
 use App\Models\PlanDuration;
+use App\Models\User;
 use App\Services\Billing\PlanChangeService;
 use App\Services\Coupon\CouponRedemptionService;
 use App\Services\Payment\BankTransferPaymentService;
@@ -20,12 +17,14 @@ use App\Services\Payment\ManualUpiPaymentService;
 use App\Services\Payment\OnlinePaymentGatewayService;
 use App\Services\Payment\PaymentSettingsService;
 use App\Services\Plan\PlanService;
+use App\Services\Referral\ReferralService;
 use App\Services\Wallet\WalletService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
 class SubscriptionCheckoutController extends Controller
@@ -46,11 +45,11 @@ class SubscriptionCheckoutController extends Controller
      */
     public function quote(Request $request, Plan $plan, PlanDuration $duration): JsonResponse
     {
-        if ($duration->plan_id !== $plan->id || !$plan->is_active) {
+        if ($duration->plan_id !== $plan->id || ! $plan->is_active) {
             return response()->json(['success' => false, 'message' => 'Selected plan or duration is not currently available.'], 404);
         }
 
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
         $walletBalance = (float) $this->walletService->getBalance($user);
 
@@ -69,7 +68,7 @@ class SubscriptionCheckoutController extends Controller
         $couponData = null;
         $finalPayable = (float) $pricingDetails['final_amount'];
 
-        if (!empty($couponCode)) {
+        if (! empty($couponCode)) {
             $couponValidation = $this->couponRedemptionService->validateCode(
                 code: $couponCode,
                 user: $user,
@@ -144,7 +143,7 @@ class SubscriptionCheckoutController extends Controller
                 'active_mrus_count' => $downgradeEligibility['active_mrus_count'],
                 'new_plan_quota' => $downgradeEligibility['new_plan_quota'],
                 'excess_mrus' => $downgradeEligibility['excess_mrus'] ?? 0,
-                'active_mrus' => ($downgradeEligibility['active_mrus'] ?? collect())->map(fn($m) => [
+                'active_mrus' => ($downgradeEligibility['active_mrus'] ?? collect())->map(fn ($m) => [
                     'id' => $m->id,
                     'code' => $m->code,
                     'name' => $m->name,
@@ -160,12 +159,12 @@ class SubscriptionCheckoutController extends Controller
      */
     public function show(Request $request, Plan $plan, PlanDuration $duration): View|RedirectResponse
     {
-        if ($duration->plan_id !== $plan->id || !$plan->is_active) {
+        if ($duration->plan_id !== $plan->id || ! $plan->is_active) {
             return redirect()->route('user-panel.subscription')
                 ->with('error', 'Selected plan or duration is not currently available.');
         }
 
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
         $settings = $this->settingsService->getSettings();
         $walletBalance = (float) $this->walletService->getBalance($user);
@@ -198,22 +197,23 @@ class SubscriptionCheckoutController extends Controller
      */
     public function process(Request $request, Plan $plan, PlanDuration $duration): RedirectResponse|JsonResponse
     {
-        if ($duration->plan_id !== $plan->id || !$plan->is_active) {
+        if ($duration->plan_id !== $plan->id || ! $plan->is_active) {
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json(['success' => false, 'error' => 'Selected plan or duration is not available.'], 422);
             }
+
             return redirect()->route('user-panel.subscription')->with('error', 'Invalid plan or duration.');
         }
 
         $request->validate([
-            'mode' => 'required|string|in:' . implode(',', PaymentMode::values()),
+            'mode' => 'required|string|in:'.implode(',', PaymentMode::values()),
             'action_mode' => 'nullable|string|in:auto,shift,extend,new',
             'utr_number' => 'required_if:mode,manual_upi|nullable|string|max:100',
             'bank_reference' => 'required_if:mode,bank_transfer|nullable|string|max:100',
             'screenshot' => 'nullable|image|max:5120',
         ]);
 
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
         $mode = PaymentMode::from($request->input('mode'));
 
@@ -227,19 +227,21 @@ class SubscriptionCheckoutController extends Controller
         if ($amount <= 0) {
             if ($pricingDetails['action_type'] === 'downgrade' && $activeSubscription) {
                 $eligibility = $this->planChangeService->checkDowngradeEligibility($activeSubscription, $plan);
-                if (!$eligibility['eligible']) {
+                if (! $eligibility['eligible']) {
                     return redirect()->route('subscription.purchase', ['plan' => $plan->id, 'duration' => $duration->id, 'action_mode' => $actionMode])
                         ->with('error', $eligibility['message']);
                 }
                 $downgradeResult = $this->planChangeService->downgradePlan($activeSubscription, $plan, $duration);
                 if ($downgradeResult['success']) {
                     return redirect()->route('user-panel.subscription')
-                        ->with('success', "Plan successfully changed to {$plan->name}. Proration credit of ₹" . number_format($downgradeResult['amount_credited'], 2) . " was added to your wallet.");
+                        ->with('success', "Plan successfully changed to {$plan->name}. Proration credit of ₹".number_format($downgradeResult['amount_credited'], 2).' was added to your wallet.');
                 }
+
                 return redirect()->route('user-panel.subscription')->with('error', $downgradeResult['message'] ?? 'Plan change failed.');
             }
 
             $subscription = $this->planService->subscribeAgent($user, $plan, $duration);
+
             return redirect()->route('user-panel.subscription')
                 ->with('success', "🎉 Subscribed to {$plan->name} ({$duration->formatted_duration}) successfully!");
         }
@@ -253,7 +255,7 @@ class SubscriptionCheckoutController extends Controller
 
         // Check optional coupon code
         $couponCode = trim($request->input('coupon_code', ''));
-        if (!empty($couponCode)) {
+        if (! empty($couponCode)) {
             $couponValidation = $this->couponRedemptionService->validateCode(
                 code: $couponCode,
                 user: $user,
@@ -262,10 +264,11 @@ class SubscriptionCheckoutController extends Controller
                 planId: $plan->id
             );
 
-            if (!$couponValidation['valid']) {
+            if (! $couponValidation['valid']) {
                 if ($request->wantsJson() || $request->ajax()) {
                     return response()->json(['success' => false, 'error' => $couponValidation['message']], 422);
                 }
+
                 return back()->withInput()->with('error', $couponValidation['message']);
             }
 
@@ -293,7 +296,8 @@ class SubscriptionCheckoutController extends Controller
                             'payment_id' => $orderData['payment']->id,
                         ]);
                     }
-                    return redirect()->route('payments.index')->with('info', "Subscription PG order generated. Complete checkout to finalize.");
+
+                    return redirect()->route('payments.index')->with('info', 'Subscription PG order generated. Complete checkout to finalize.');
 
                 case PaymentMode::MANUAL_UPI:
                     $payment = $this->manualUpiService->submitPayment(
@@ -304,8 +308,9 @@ class SubscriptionCheckoutController extends Controller
                         $request->file('screenshot'),
                         $meta
                     );
+
                     return redirect()->route('payments.index')
-                        ->with('success', "Direct subscription payment of ₹" . number_format($amount, 2) . " submitted with UTR: {$payment->utr_number}. Your plan will activate upon admin approval.");
+                        ->with('success', 'Direct subscription payment of ₹'.number_format($amount, 2)." submitted with UTR: {$payment->utr_number}. Your plan will activate upon admin approval.");
 
                 case PaymentMode::BANK_TRANSFER:
                     $payment = $this->bankTransferService->submitPayment(
@@ -316,13 +321,15 @@ class SubscriptionCheckoutController extends Controller
                         $request->file('screenshot'),
                         $meta
                     );
+
                     return redirect()->route('payments.index')
-                        ->with('success', "Direct subscription payment of ₹" . number_format($amount, 2) . " submitted with Ref: {$payment->bank_reference}. Your plan will activate upon admin approval.");
+                        ->with('success', 'Direct subscription payment of ₹'.number_format($amount, 2)." submitted with Ref: {$payment->bank_reference}. Your plan will activate upon admin approval.");
             }
         } catch (\Throwable $e) {
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json(['success' => false, 'error' => $e->getMessage()], 422);
             }
+
             return back()->withInput()->with('error', $e->getMessage());
         }
 
@@ -346,12 +353,13 @@ class SubscriptionCheckoutController extends Controller
             ->where('plan_id', $plan->id)
             ->firstOrFail();
 
-        if (!$plan->is_active) {
+        if (! $plan->is_active) {
             $msg = 'Selected plan is not currently active.';
+
             return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
         }
 
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
 
         $activeSubscription = $user->activeSubscription;
@@ -365,7 +373,7 @@ class SubscriptionCheckoutController extends Controller
         // Check optional coupon code
         $couponCode = trim($request->input('coupon_code', ''));
         $couponToRedeem = null;
-        if (!empty($couponCode)) {
+        if (! empty($couponCode)) {
             $couponValidation = $this->couponRedemptionService->validateCode(
                 code: $couponCode,
                 user: $user,
@@ -374,7 +382,7 @@ class SubscriptionCheckoutController extends Controller
                 planId: $plan->id
             );
 
-            if (!$couponValidation['valid']) {
+            if (! $couponValidation['valid']) {
                 return $request->wantsJson()
                     ? response()->json(['success' => false, 'message' => $couponValidation['message']], 422)
                     : back()->with('error', $couponValidation['message']);
@@ -385,7 +393,8 @@ class SubscriptionCheckoutController extends Controller
         }
 
         if ($amountDue > 0 && $walletBalance < $amountDue) {
-            $msg = "Insufficient wallet balance. You need ₹" . number_format($amountDue, 2) . " but your wallet balance is ₹" . number_format($walletBalance, 2) . ".";
+            $msg = 'Insufficient wallet balance. You need ₹'.number_format($amountDue, 2).' but your wallet balance is ₹'.number_format($walletBalance, 2).'.';
+
             return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg, 'requires_topup' => true], 422) : back()->with('error', $msg);
         }
 
@@ -393,8 +402,9 @@ class SubscriptionCheckoutController extends Controller
         if ($pricingDetails['action_mode'] === 'shift' && $pricingDetails['is_upgrade'] && $activeSubscription) {
             return DB::transaction(function () use ($activeSubscription, $plan, $duration, $couponToRedeem, $user, $originalAmountDue, $amountDue, $request) {
                 $res = $this->planChangeService->upgradePlan($activeSubscription, $plan, $duration);
-                if (!$res['success']) {
+                if (! $res['success']) {
                     $msg = $res['message'] ?? 'Upgrade failed.';
+
                     return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
                 }
 
@@ -403,11 +413,12 @@ class SubscriptionCheckoutController extends Controller
                         coupon: $couponToRedeem,
                         user: $user,
                         originalAmount: $originalAmountDue,
-                        referenceId: 'sub_' . $res['subscription']->id
+                        referenceId: 'sub_'.$res['subscription']->id
                     );
                 }
 
-                $msg = "🎉 Switched to {$plan->name} ({$duration->formatted_duration}) successfully! Prorated fee of ₹" . number_format($amountDue, 2) . " was debited from your wallet. Valid from today until " . $res['subscription']->billing_end->format('M d, Y') . ".";
+                $msg = "🎉 Switched to {$plan->name} ({$duration->formatted_duration}) successfully! Prorated fee of ₹".number_format($amountDue, 2).' was debited from your wallet. Valid from today until '.$res['subscription']->billing_end->format('M d, Y').'.';
+
                 return $request->wantsJson() ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $res['subscription']->id]) : back()->with('success', $msg);
             });
         }
@@ -415,14 +426,14 @@ class SubscriptionCheckoutController extends Controller
         // Case 2: Shift Mode - Downgrade (Prorated credit added to wallet, new cycle starts today)
         if ($pricingDetails['action_mode'] === 'shift' && $pricingDetails['is_downgrade'] && $activeSubscription) {
             $eligibility = $this->planChangeService->checkDowngradeEligibility($activeSubscription, $plan);
-            if (!$eligibility['eligible']) {
+            if (! $eligibility['eligible']) {
                 $msg = $eligibility['message'] ?? 'Downgrade ineligible due to active MRU count.';
                 if ($request->wantsJson() || $request->ajax()) {
                     return response()->json([
                         'success' => false,
                         'message' => $msg,
                         'ineligible_mrus' => true,
-                        'active_mrus' => $eligibility['active_mrus']->map(fn($m) => [
+                        'active_mrus' => $eligibility['active_mrus']->map(fn ($m) => [
                             'id' => $m->id,
                             'code' => $m->code,
                             'name' => $m->name,
@@ -434,16 +445,19 @@ class SubscriptionCheckoutController extends Controller
                         'active_mrus_count' => $eligibility['active_mrus_count'],
                     ], 422);
                 }
+
                 return back()->with('error', $msg);
             }
 
             return DB::transaction(function () use ($activeSubscription, $plan, $duration, $request) {
                 $res = $this->planChangeService->downgradePlan($activeSubscription, $plan, $duration);
-                if (!$res['success']) {
+                if (! $res['success']) {
                     $msg = $res['message'] ?? 'Downgrade failed.';
+
                     return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
                 }
-                $msg = "🎉 Switched to {$plan->name} ({$duration->formatted_duration}) successfully! Prorated credit of ₹" . number_format($res['amount_credited'], 2) . " was credited to your wallet. Valid from today until " . $res['subscription']->billing_end->format('M d, Y') . ".";
+                $msg = "🎉 Switched to {$plan->name} ({$duration->formatted_duration}) successfully! Prorated credit of ₹".number_format($res['amount_credited'], 2).' was credited to your wallet. Valid from today until '.$res['subscription']->billing_end->format('M d, Y').'.';
+
                 return $request->wantsJson() ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $res['subscription']->id]) : back()->with('success', $msg);
             });
         }
@@ -467,6 +481,7 @@ class SubscriptionCheckoutController extends Controller
 
                 if ($debitResult !== DebitResult::SUCCESS) {
                     $msg = $debitResult === DebitResult::WALLET_FROZEN ? 'Wallet is frozen. Please contact admin.' : 'Insufficient wallet balance.';
+
                     return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
                 }
             }
@@ -478,25 +493,25 @@ class SubscriptionCheckoutController extends Controller
                     coupon: $couponToRedeem,
                     user: $user,
                     originalAmount: $originalAmountDue,
-                    referenceId: 'sub_' . $subscription->id
+                    referenceId: 'sub_'.$subscription->id
                 );
             }
 
             // Refer & Earn: check if referee's first subscription payment qualifies for a referral reward
             try {
-                app(\App\Services\Referral\ReferralService::class)->checkAndCreatePendingPayout(
+                app(ReferralService::class)->checkAndCreatePendingPayout(
                     user: $user,
                     paymentReferenceType: 'subscription_payment',
-                    paymentReferenceId: 'sub_' . $subscription->id,
+                    paymentReferenceId: 'sub_'.$subscription->id,
                     paymentAmount: (float) $amountDue
                 );
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error("[SubscriptionCheckout] Referral payout check error for sub #{$subscription->id}: " . $e->getMessage());
+                Log::error("[SubscriptionCheckout] Referral payout check error for sub #{$subscription->id}: ".$e->getMessage());
             }
 
             $msg = $isExtend
-                ? "🎉 Extended {$plan->name} (+{$duration->formatted_duration}) successfully! New validity until " . $subscription->billing_end->format('M d, Y') . "."
-                : "🎉 Subscribed to {$plan->name} ({$duration->formatted_duration}) successfully! Valid until " . $subscription->billing_end->format('M d, Y') . ".";
+                ? "🎉 Extended {$plan->name} (+{$duration->formatted_duration}) successfully! New validity until ".$subscription->billing_end->format('M d, Y').'.'
+                : "🎉 Subscribed to {$plan->name} ({$duration->formatted_duration}) successfully! Valid until ".$subscription->billing_end->format('M d, Y').'.';
 
             return $request->wantsJson()
                 ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $subscription->id])
@@ -513,9 +528,10 @@ class SubscriptionCheckoutController extends Controller
     {
         $basePrice = (float) $duration->final_price;
 
-        if (!$activeSub || !$activeSub->plan) {
+        if (! $activeSub || ! $activeSub->plan) {
             $now = now();
             $newEnd = $duration->calculateBillingEnd($now);
+
             return [
                 'action_type' => 'new',
                 'action_mode' => 'new',
@@ -596,6 +612,7 @@ class SubscriptionCheckoutController extends Controller
         $chosen['available_actions'] = $availableActions;
         $chosen['shift_option'] = $shiftDetails;
         $chosen['extend_option'] = $extendDetails;
+
         return $chosen;
     }
 }

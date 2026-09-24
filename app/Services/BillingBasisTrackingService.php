@@ -2,12 +2,11 @@
 
 namespace App\Services;
 
-use App\Models\BillRecord;
 use App\Models\BillingBasisHistory;
 use App\Models\BillingCycle;
+use App\Models\BillRecord;
 use App\Models\ConsumerAccount;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\DB;
 
 class BillingBasisTrackingService
 {
@@ -32,18 +31,18 @@ class BillingBasisTrackingService
         $cleanBasis = strtoupper(trim($basis ?: 'OK'));
 
         // Resolve consumer_id if missing
-        if (!$consumerId) {
+        if (! $consumerId) {
             $consumer = ConsumerAccount::where('user_id', $userId)
                 ->where('ca_number', $caNumber)
                 ->first();
             $consumerId = $consumer?->id;
-            if (!$mruId && $consumer) {
+            if (! $mruId && $consumer) {
                 $mruId = $consumer->mru_id;
             }
         }
 
         // Resolve billing_cycle_id if missing
-        if (!$billingCycleId && $mruId) {
+        if (! $billingCycleId && $mruId) {
             $cycle = BillingCycle::where('user_id', $userId)
                 ->where('mru_id', $mruId)
                 ->where('cycle_month', $month)
@@ -89,7 +88,7 @@ class BillingBasisTrackingService
         $cleanBasis = strtoupper(trim($currentBasis ?: 'OK'));
 
         // If current basis is NOT an estimate (e.g. 'OK', 'PL', 'RN'), count resets to 0
-        if (!in_array($cleanBasis, self::ESTIMATE_BASES, true)) {
+        if (! in_array($cleanBasis, self::ESTIMATE_BASES, true)) {
             return [
                 'count' => 0,
                 'is_alert' => false,
@@ -104,10 +103,10 @@ class BillingBasisTrackingService
             ->where('ca_number', $caNumber)
             ->where(function ($q) use ($currentYear, $currentMonth) {
                 $q->where('billing_year', '<', $currentYear)
-                  ->orWhere(function ($sub) use ($currentYear, $currentMonth) {
-                      $sub->where('billing_year', '=', $currentYear)
-                          ->where('billing_month', '<', $currentMonth);
-                  });
+                    ->orWhere(function ($sub) use ($currentYear, $currentMonth) {
+                        $sub->where('billing_year', '=', $currentYear)
+                            ->where('billing_month', '<', $currentMonth);
+                    });
             })
             ->orderBy('billing_year', 'desc')
             ->orderBy('billing_month', 'desc')

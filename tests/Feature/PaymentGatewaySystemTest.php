@@ -13,15 +13,16 @@ use App\Events\ManualPaymentSubmittedEvent;
 use App\Events\PaymentFailedEvent;
 use App\Events\PaymentMandateFailedEvent;
 use App\Events\PaymentSuccessEvent;
+use App\Listeners\ActivateSubscriptionOnPaymentSuccess;
 use App\Models\Payment;
 use App\Models\PaymentAuditLog;
 use App\Models\PaymentMandate;
+use App\Models\Plan;
 use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\Payment\BankTransferPaymentService;
 use App\Services\Payment\ManualUpiPaymentService;
 use App\Services\Payment\OnlinePaymentGatewayService;
-use App\Services\Payment\PaymentSettingsService;
 use App\Services\Payment\PaymentVerificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
@@ -33,7 +34,9 @@ class PaymentGatewaySystemTest extends TestCase
     use RefreshDatabase;
 
     protected User $admin;
+
     protected User $agent;
+
     protected User $otherAgent;
 
     protected function setUp(): void
@@ -90,7 +93,7 @@ class PaymentGatewaySystemTest extends TestCase
         $this->assertEquals(PaymentStatus::PENDING, $order['payment']->status);
         $this->assertEquals(500.0, (float) $order['payment']->amount);
         $this->assertStringStartsWith('cf_ord_', $order['payment']->gateway_order_id);
-        
+
         $this->assertEquals('cashfree', $order['checkout_config']['gateway']);
         $this->assertEquals('sandbox', $order['checkout_config']['environment']);
         $this->assertNotEmpty($order['checkout_config']['payment_session_id']);
@@ -123,7 +126,7 @@ class PaymentGatewaySystemTest extends TestCase
         $orderId = 'order_test_rzp_12345';
         $paymentId = 'pay_test_rzp_67890';
         $secret = 'test_razorpay_secret';
-        $signature = hash_hmac('sha256', $orderId . '|' . $paymentId, $secret);
+        $signature = hash_hmac('sha256', $orderId.'|'.$paymentId, $secret);
 
         $payment = Payment::create([
             'user_id' => $this->agent->id,
@@ -174,9 +177,9 @@ class PaymentGatewaySystemTest extends TestCase
                         'amount' => 150000,
                         'currency' => 'INR',
                         'status' => 'captured',
-                    ]
-                ]
-            ]
+                    ],
+                ],
+            ],
         ];
 
         $rawJson = json_encode($payload);
@@ -224,14 +227,14 @@ class PaymentGatewaySystemTest extends TestCase
                 ],
                 'customer_details' => [
                     'customer_id' => "user_{$this->agent->id}",
-                ]
-            ]
+                ],
+            ],
         ];
 
         $rawJson = json_encode($payload);
         $timestamp = '1787308800000';
         $secretKey = 'test_cf_secret_key_456';
-        $signature = base64_encode(hash_hmac('sha256', $timestamp . $rawJson, $secretKey, true));
+        $signature = base64_encode(hash_hmac('sha256', $timestamp.$rawJson, $secretKey, true));
 
         // Test signature validator
         $this->assertTrue($service->verifyWebhookSignature($rawJson, $signature, $timestamp));
@@ -271,8 +274,8 @@ class PaymentGatewaySystemTest extends TestCase
                     'cf_payment_id' => 11223344,
                     'payment_status' => 'FAILED',
                     'payment_message' => 'Bank server timed out during OTP entry',
-                ]
-            ]
+                ],
+            ],
         ];
 
         $result = $service->processWebhook($payload);
@@ -303,9 +306,9 @@ class PaymentGatewaySystemTest extends TestCase
                 'payment' => [
                     'entity' => [
                         'error_description' => 'Insufficient funds in bank account for auto-debit',
-                    ]
-                ]
-            ]
+                    ],
+                ],
+            ],
         ];
 
         $result = $service->processWebhook($payload);
@@ -529,7 +532,7 @@ class PaymentGatewaySystemTest extends TestCase
 
     public function test_activate_subscription_on_payment_success_is_idempotent(): void
     {
-        $plan = \App\Models\Plan::create([
+        $plan = Plan::create([
             'name' => 'Idempotent Plan',
             'included_mrus' => 2,
             'included_consumers' => 2000,
@@ -558,7 +561,7 @@ class PaymentGatewaySystemTest extends TestCase
             ],
         ]);
 
-        $listener = app(\App\Listeners\ActivateSubscriptionOnPaymentSuccess::class);
+        $listener = app(ActivateSubscriptionOnPaymentSuccess::class);
 
         // First dispatch
         $listener->handle(new PaymentSuccessEvent($payment));

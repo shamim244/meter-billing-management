@@ -6,7 +6,6 @@ use App\Models\BillRecord;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\User;
-use Illuminate\Support\Facades\Storage;
 use ZipArchive;
 
 class AgentWorkspaceExportService
@@ -14,13 +13,13 @@ class AgentWorkspaceExportService
     /**
      * Create a complete, tenant-isolated workspace export ZIP archive for a specific agent.
      *
-     * @param User $agent The billing agent user
-     * @param string $outputPath Path to save the final ZIP
+     * @param  User  $agent  The billing agent user
+     * @param  string  $outputPath  Path to save the final ZIP
      * @return array Summary of exported records and files
      */
     public function export(User $agent, string $outputPath): array
     {
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         if ($zip->open($outputPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             throw new \RuntimeException("Cannot create agent export zip archive at: {$outputPath}");
         }
@@ -78,12 +77,12 @@ class AgentWorkspaceExportService
         fputcsv($billCsv, [
             'ID', 'MRU Code', 'Billing Month', 'Billing Year', 'Label', 'CA Number', 'Consumer Name',
             'Box 1 Working Reading', 'Box 2 DB Previous', 'Box 3 Smart Avg Units', 'Box 4 Official PDF Reading',
-            'Billing Basis', 'Tariff', 'Due Amount', 'Review Status', 'Review Tag', 'Remark', 'Has PDF File', 'Created At'
+            'Billing Basis', 'Tariff', 'Due Amount', 'Review Status', 'Review Tag', 'Remark', 'Has PDF File', 'Created At',
         ]);
 
         $pdfCount = 0;
         foreach ($bills as $b) {
-            $hasPdf = ! empty($b->pdf_path) && file_exists(storage_path('app/' . $b->pdf_path));
+            $hasPdf = ! empty($b->pdf_path) && file_exists(storage_path('app/'.$b->pdf_path));
             $mruCode = $b->mru?->code ?? $b->mru_code ?? 'MRU_DEFAULT';
 
             fputcsv($billCsv, [
@@ -110,7 +109,7 @@ class AgentWorkspaceExportService
 
             // Add PDF file into ZIP if present
             if ($hasPdf) {
-                $absolutePdf = storage_path('app/' . $b->pdf_path);
+                $absolutePdf = storage_path('app/'.$b->pdf_path);
                 $zipRelativePath = "bills/{$mruCode}/{$b->billing_year}-{$b->billing_month}/{$b->ca_number}.pdf";
                 $zip->addFile($absolutePdf, $zipRelativePath);
                 $pdfCount++;

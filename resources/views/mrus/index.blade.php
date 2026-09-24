@@ -203,17 +203,60 @@
                     </div>
 
                     <form @submit.prevent="submitCreateMru(false)" class="overflow-y-auto p-4 sm:p-6 space-y-4">
-                        <div x-show="createMruError" class="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-semibold rounded-xl" x-text="createMruError"></div>
+                        <div x-show="createMruError && !mruOverageRequired" class="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-semibold rounded-xl" x-text="createMruError"></div>
 
-                        <!-- Overage Confirmation Alert -->
-                        <div x-show="mruOverageRequired" class="p-4 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/80 rounded-2xl space-y-2">
-                            <div class="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-xs">
-                                <span>⚠️</span> Plan Quota Notice
+                        <!-- Overage & Insufficient Balance Confirmation Alert -->
+                        <div x-show="mruOverageRequired" class="p-4 rounded-2xl space-y-3 transition border" :class="mruOverageInsufficient ? 'bg-rose-50/90 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800/80' : 'bg-amber-50 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700/80'">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2 font-bold text-xs" :class="mruOverageInsufficient ? 'text-rose-800 dark:text-rose-300' : 'text-amber-800 dark:text-amber-300'">
+                                    <span x-text="mruOverageInsufficient ? '⛔' : '⚠️'"></span>
+                                    <span x-text="mruOverageInsufficient ? 'Insufficient Wallet Balance' : 'Plan Quota Notice'"></span>
+                                </div>
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase" :class="mruOverageInsufficient ? 'bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300' : 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300'">
+                                    Overage ₹<span x-text="mruOverageAmount"></span>
+                                </span>
                             </div>
-                            <p class="text-xs text-amber-900 dark:text-amber-200" x-text="mruOverageMessage"></p>
-                            <button type="button" @click="submitCreateMru(true)" :disabled="isSubmittingMru" class="w-full mt-2 py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow transition flex items-center justify-center gap-1.5">
-                                <span>✓</span> Confirm & Pay ₹<span x-text="mruOverageAmount"></span> from Wallet
-                            </button>
+
+                            <p class="text-xs leading-relaxed" :class="mruOverageInsufficient ? 'text-rose-900 dark:text-rose-200' : 'text-amber-900 dark:text-amber-200'" x-text="mruOverageMessage"></p>
+
+                            <!-- Balance comparison strip -->
+                            <div class="flex items-center justify-between text-xs py-2 px-3 rounded-xl border" :class="mruOverageInsufficient ? 'bg-white/80 dark:bg-slate-900/80 border-rose-200/80 dark:border-rose-900/60' : 'bg-amber-100/60 dark:bg-amber-900/40 border-amber-200 dark:border-amber-800/60'">
+                                <span class="text-slate-600 dark:text-slate-400">Creation Fee: <strong class="font-mono text-slate-900 dark:text-white">₹<span x-text="mruOverageAmount"></span></strong></span>
+                                <span>Wallet Balance: <strong class="font-mono font-bold" :class="mruOverageInsufficient ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'">₹<span x-text="Number(mruOverageWalletBalance).toFixed(2)"></span></strong></span>
+                            </div>
+
+                            <!-- Case A: Balance is Sufficient -> Confirm & Pay Button -->
+                            <template x-if="!mruOverageInsufficient">
+                                <div class="space-y-2 pt-1">
+                                    <button type="button" @click="submitCreateMru(true)" :disabled="isSubmittingMru" class="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow transition flex items-center justify-center gap-1.5">
+                                        <svg x-show="isSubmittingMru" class="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        <span>✓ Confirm & Pay ₹<span x-text="mruOverageAmount"></span> from Wallet</span>
+                                    </button>
+                                    <div class="text-center">
+                                        <a :href="mruUpgradeUrl || '{{ route('user-panel.subscription') }}'" class="text-[11px] text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-cyan-400 underline transition">
+                                            Or upgrade your plan to increase included MRUs →
+                                        </a>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- Case B: Balance is Insufficient -> Direct Links to Top Up & Upgrade -->
+                            <template x-if="mruOverageInsufficient">
+                                <div class="space-y-2 pt-1">
+                                    <div class="flex flex-col sm:flex-row gap-2">
+                                        <a :href="mruTopupUrl || '{{ route('wallet.index') }}'" target="_blank" class="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold text-center shadow-sm transition flex items-center justify-center gap-1.5">
+                                            <span>💳</span> Add Funds / Top Up Wallet
+                                        </a>
+                                        <a :href="mruUpgradeUrl || '{{ route('user-panel.subscription') }}'" class="flex-1 py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold text-center shadow-sm transition flex items-center justify-center gap-1.5">
+                                            <span>⚡</span> Upgrade Plan
+                                        </a>
+                                    </div>
+                                    <button type="button" @click="submitCreateMru(true)" :disabled="isSubmittingMru" class="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5">
+                                        <svg x-show="isSubmittingMru" class="animate-spin h-3.5 w-3.5 text-slate-600 dark:text-slate-300" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        <span>🔄 I've Added Funds — Retry Creation</span>
+                                    </button>
+                                </div>
+                            </template>
                         </div>
 
                         <div>
@@ -376,14 +419,57 @@
                         </div>
 
                         <!-- Cycle Overage Confirmation Alert -->
-                        <div x-show="cycleOverageRequired" class="p-4 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/80 rounded-2xl space-y-2">
-                            <div class="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-xs">
-                                <span>⚠️</span> Consumer Quota Notice
+                        <div x-show="cycleOverageRequired" class="p-4 rounded-2xl space-y-3 transition border" :class="cycleOverageInsufficient ? 'bg-rose-50/90 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800/80' : 'bg-amber-50 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700/80'">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2 font-bold text-xs" :class="cycleOverageInsufficient ? 'text-rose-800 dark:text-rose-300' : 'text-amber-800 dark:text-amber-300'">
+                                    <span x-text="cycleOverageInsufficient ? '⛔' : '⚠️'"></span>
+                                    <span x-text="cycleOverageInsufficient ? 'Insufficient Wallet Balance' : 'Consumer Quota Notice'"></span>
+                                </div>
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase" :class="cycleOverageInsufficient ? 'bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300' : 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300'">
+                                    Overage ₹<span x-text="cycleOverageAmount"></span>
+                                </span>
                             </div>
-                            <p class="text-xs text-amber-900 dark:text-amber-200" x-text="cycleOverageMessage"></p>
-                            <button type="button" @click="launchBillingCycle(executingAction, true)" :disabled="cycleInProgress" class="w-full mt-2 py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow transition flex items-center justify-center gap-1.5">
-                                <span>✓</span> Confirm & Pay ₹<span x-text="cycleOverageAmount"></span> from Wallet
-                            </button>
+
+                            <p class="text-xs leading-relaxed" :class="cycleOverageInsufficient ? 'text-rose-900 dark:text-rose-200' : 'text-amber-900 dark:text-amber-200'" x-text="cycleOverageMessage"></p>
+
+                            <!-- Balance comparison strip -->
+                            <div class="flex items-center justify-between text-xs py-2 px-3 rounded-xl border" :class="cycleOverageInsufficient ? 'bg-white/80 dark:bg-slate-900/80 border-rose-200/80 dark:border-rose-900/60' : 'bg-amber-100/60 dark:bg-amber-900/40 border-amber-200 dark:border-amber-800/60'">
+                                <span class="text-slate-600 dark:text-slate-400">Overage Fee: <strong class="font-mono text-slate-900 dark:text-white">₹<span x-text="cycleOverageAmount"></span></strong></span>
+                                <span>Wallet Balance: <strong class="font-mono font-bold" :class="cycleOverageInsufficient ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'">₹<span x-text="Number(cycleOverageWalletBalance).toFixed(2)"></span></strong></span>
+                            </div>
+
+                            <!-- Case A: Balance is Sufficient -> Confirm & Pay Button -->
+                            <template x-if="!cycleOverageInsufficient">
+                                <div class="space-y-2 pt-1">
+                                    <button type="button" @click="launchBillingCycle(executingAction, true)" :disabled="cycleInProgress" class="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow transition flex items-center justify-center gap-1.5">
+                                        <svg x-show="cycleInProgress" class="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        <span>✓ Confirm & Pay ₹<span x-text="cycleOverageAmount"></span> from Wallet</span>
+                                    </button>
+                                    <div class="text-center">
+                                        <a :href="cycleUpgradeUrl || '{{ route('user-panel.subscription') }}'" class="text-[11px] text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-cyan-400 underline transition">
+                                            Or upgrade your plan to increase consumer quota →
+                                        </a>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- Case B: Balance is Insufficient -> Direct Links to Top Up & Upgrade -->
+                            <template x-if="cycleOverageInsufficient">
+                                <div class="space-y-2 pt-1">
+                                    <div class="flex flex-col sm:flex-row gap-2">
+                                        <a :href="cycleTopupUrl || '{{ route('wallet.index') }}'" target="_blank" class="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold text-center shadow-sm transition flex items-center justify-center gap-1.5">
+                                            <span>💳</span> Add Funds / Top Up Wallet
+                                        </a>
+                                        <a :href="cycleUpgradeUrl || '{{ route('user-panel.subscription') }}'" class="flex-1 py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold text-center shadow-sm transition flex items-center justify-center gap-1.5">
+                                            <span>⚡</span> Upgrade Plan
+                                        </a>
+                                    </div>
+                                    <button type="button" @click="launchBillingCycle(executingAction, true)" :disabled="cycleInProgress" class="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5">
+                                        <svg x-show="cycleInProgress" class="animate-spin h-3.5 w-3.5 text-slate-600 dark:text-slate-300" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        <span>🔄 I've Added Funds — Retry Cycle</span>
+                                    </button>
+                                </div>
+                            </template>
                         </div>
 
                         <!-- Result notification -->
@@ -521,12 +607,20 @@
                 createMruError: null,
                 mruOverageRequired: false,
                 mruOverageAmount: 0,
+                mruOverageWalletBalance: 0,
+                mruOverageInsufficient: false,
                 mruOverageMessage: '',
+                mruTopupUrl: '{{ route('wallet.index') }}',
+                mruUpgradeUrl: '{{ route('user-panel.subscription') }}',
 
                 // Cycle Overage State
                 cycleOverageRequired: false,
                 cycleOverageAmount: 0,
+                cycleOverageWalletBalance: 0,
+                cycleOverageInsufficient: false,
                 cycleOverageMessage: '',
+                cycleTopupUrl: '{{ route('wallet.index') }}',
+                cycleUpgradeUrl: '{{ route('user-panel.subscription') }}',
 
                 get filteredMrus() {
                     return this.mruList.filter(m => {
@@ -548,7 +642,11 @@
                     this.createMruError = null;
                     this.mruOverageRequired = false;
                     this.mruOverageAmount = 0;
+                    this.mruOverageWalletBalance = 0;
+                    this.mruOverageInsufficient = false;
                     this.mruOverageMessage = '';
+                    this.mruTopupUrl = '{{ route('wallet.index') }}';
+                    this.mruUpgradeUrl = '{{ route('user-panel.subscription') }}';
                     this.showCreateModal = true;
                 },
 
@@ -577,19 +675,24 @@
                         if (res.status === 402 && data.requires_overage) {
                             this.mruOverageRequired = true;
                             this.mruOverageAmount = data.amount_due || 0;
+                            this.mruOverageWalletBalance = data.wallet_balance ?? 0;
+                            this.mruOverageInsufficient = !!data.is_insufficient_balance || (this.mruOverageWalletBalance < this.mruOverageAmount);
                             this.mruOverageMessage = data.message || 'Plan MRU limit exceeded. Wallet deduction required.';
-                            throw new Error(data.message);
+                            this.mruTopupUrl = data.topup_url || '{{ route('wallet.index') }}';
+                            this.mruUpgradeUrl = data.upgrade_url || '{{ route('user-panel.subscription') }}';
+                            return null;
                         }
                         if (!res.ok) {
                             if (data.requires_subscription && data.redirect_url) {
                                 window.location.href = data.redirect_url;
-                                return;
+                                return null;
                             }
                             throw new Error(data.message || 'Server error occurred');
                         }
                         return data;
                     })
                     .then(data => {
+                        if (!data) return;
                         if (data.already_exists) {
                             this.showCreateModal = false;
                             this.existingMruData = data.mru;
@@ -617,7 +720,11 @@
                     this.cycleResult = null;
                     this.cycleOverageRequired = false;
                     this.cycleOverageAmount = 0;
+                    this.cycleOverageWalletBalance = 0;
+                    this.cycleOverageInsufficient = false;
                     this.cycleOverageMessage = '';
+                    this.cycleTopupUrl = '{{ route('wallet.index') }}';
+                    this.cycleUpgradeUrl = '{{ route('user-panel.subscription') }}';
                     this.showCycleModal = true;
                 },
 
@@ -647,19 +754,24 @@
                         if (res.status === 402 && data.requires_overage) {
                             this.cycleOverageRequired = true;
                             this.cycleOverageAmount = data.amount_due || 0;
+                            this.cycleOverageWalletBalance = data.wallet_balance ?? 0;
+                            this.cycleOverageInsufficient = !!data.is_insufficient_balance || (this.cycleOverageWalletBalance < this.cycleOverageAmount);
                             this.cycleOverageMessage = data.message || 'Consumer quota exceeded. Wallet deduction required.';
-                            throw new Error(data.message);
+                            this.cycleTopupUrl = data.topup_url || '{{ route('wallet.index') }}';
+                            this.cycleUpgradeUrl = data.upgrade_url || '{{ route('user-panel.subscription') }}';
+                            return null;
                         }
                         if (!res.ok) {
                             if (data.requires_subscription) {
                                 this.cycleResult = data;
-                                return;
+                                return null;
                             }
                             throw new Error(data.message || 'Server returned an error');
                         }
                         return data;
                     })
                     .then(json => {
+                        if (!json) return;
                         this.cycleResult = json;
                         if (json.success) {
                             setTimeout(() => {

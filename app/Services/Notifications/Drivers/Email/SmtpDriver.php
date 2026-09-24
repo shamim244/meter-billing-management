@@ -28,10 +28,10 @@ class SmtpDriver implements EmailProviderDriverInterface
 
         $transport = new EsmtpTransport($host, $port, $isTls);
 
-        if (!empty($username)) {
+        if (! empty($username)) {
             $transport->setUsername($username);
         }
-        if (!empty($password)) {
+        if (! empty($password)) {
             $transport->setPassword($password);
         }
 
@@ -40,7 +40,7 @@ class SmtpDriver implements EmailProviderDriverInterface
         $fromAddress = $config['from_address'] ?? config('mail.from.address', 'notifications@nexgenhub.site');
         $fromName = $config['from_name'] ?? config('mail.from.name', 'NBPDCL Billing Platform');
 
-        $email = (new Email())
+        $email = (new Email)
             ->from(new Address($fromAddress, $fromName))
             ->to($to)
             ->subject($subject)
@@ -48,9 +48,10 @@ class SmtpDriver implements EmailProviderDriverInterface
 
         try {
             @$mailer->send($email);
+
             return true;
         } catch (\Throwable $e) {
-            throw new \RuntimeException("SMTP connection failed: " . $e->getMessage(), 0, $e);
+            throw new \RuntimeException('SMTP connection failed: '.$e->getMessage(), 0, $e);
         }
     }
 }

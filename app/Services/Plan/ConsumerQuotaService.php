@@ -25,6 +25,7 @@ class ConsumerQuotaService
     public function getActiveSubscription(User|int $user): ?AgentSubscription
     {
         $userId = $user instanceof User ? $user->id : $user;
+
         return AgentSubscription::where('user_id', $userId)
             ->where('status', 'active')
             ->whereIn('lifecycle_status', ['active', 'renewal_due', 'grace_period'])
@@ -40,7 +41,7 @@ class ConsumerQuotaService
         $userId = $user instanceof User ? $user->id : $user;
         $subscription = $this->getActiveSubscription($userId);
 
-        if (!$subscription) {
+        if (! $subscription) {
             return 0;
         }
 
@@ -69,7 +70,7 @@ class ConsumerQuotaService
         $userModel = $user instanceof User ? $user : User::findOrFail($user);
         $subscription = $this->getActiveSubscription($userModel);
 
-        if (!$subscription) {
+        if (! $subscription) {
             return [
                 'allowed' => false,
                 'requires_subscription' => true,
@@ -129,16 +130,20 @@ class ConsumerQuotaService
         $extraRate = (float) $subscription->extra_consumer_rate_locked;
         $extraCharge = round($extraCount * $extraRate, 2);
 
-        if (!$payOverage) {
+        if (! $payOverage) {
+            $walletBalance = (float) $this->walletService->getBalance($userModel);
+
             return [
                 'allowed' => false,
                 'requires_payment' => true,
+                'is_insufficient_balance' => ($walletBalance < $extraCharge),
+                'wallet_balance' => $walletBalance,
                 'consumer_count' => $consumerCount,
                 'remaining_quota' => $availableQuota,
                 'extra_count' => $extraCount,
                 'rate_per_consumer' => $extraRate,
                 'amount_due' => $extraCharge,
-                'reason' => "This cycle has {$consumerCount} consumers, but you have {$availableQuota} remaining in your quota. Pay ₹" . number_format($extraCharge, 2) . " to continue.",
+                'reason' => "This cycle has {$consumerCount} consumers, but you have {$availableQuota} remaining in your quota. Pay ₹".number_format($extraCharge, 2).' to continue.',
             ];
         }
 
@@ -154,9 +159,13 @@ class ConsumerQuotaService
             );
 
             if ($debitResult !== DebitResult::SUCCESS) {
+                $walletBalance = (float) $this->walletService->getBalance($userModel);
+
                 return [
                     'allowed' => false,
                     'requires_payment' => true,
+                    'is_insufficient_balance' => ($debitResult === DebitResult::INSUFFICIENT_BALANCE),
+                    'wallet_balance' => $walletBalance,
                     'debit_result' => $debitResult->value,
                     'amount_due' => $extraCharge,
                     'message' => $debitResult === DebitResult::WALLET_FROZEN
@@ -185,7 +194,7 @@ class ConsumerQuotaService
                 'reference_type' => 'billing_cycle',
                 'reference_id' => (string) $cycle->id,
                 'amount' => $extraCharge,
-                'wallet_transaction_id' => $latestTx?->id ? (string)$latestTx->id : null,
+                'wallet_transaction_id' => $latestTx?->id ? (string) $latestTx->id : null,
                 'created_at' => now(),
             ]);
 
@@ -230,7 +239,7 @@ class ConsumerQuotaService
         $extraRate = $subscription ? (float) $subscription->extra_consumer_rate_locked : 0.0;
         $additionalCharge = round($diff * $extraRate, 2);
 
-        if (!$payOverage) {
+        if (! $payOverage) {
             return [
                 'synced' => false,
                 'requires_payment' => true,
@@ -238,7 +247,7 @@ class ConsumerQuotaService
                 'current_count' => $currentCount,
                 'diff' => $diff,
                 'amount_due' => $additionalCharge,
-                'reason' => "Consumer count increased by {$diff}. Pay ₹" . number_format($additionalCharge, 2) . " to sync.",
+                'reason' => "Consumer count increased by {$diff}. Pay ₹".number_format($additionalCharge, 2).' to sync.',
             ];
         }
 
@@ -272,7 +281,7 @@ class ConsumerQuotaService
                     'reference_type' => 'billing_cycle',
                     'reference_id' => (string) $cycle->id,
                     'amount' => $additionalCharge,
-                    'wallet_transaction_id' => $latestTx?->id ? (string)$latestTx->id : null,
+                    'wallet_transaction_id' => $latestTx?->id ? (string) $latestTx->id : null,
                     'created_at' => now(),
                 ]);
             }

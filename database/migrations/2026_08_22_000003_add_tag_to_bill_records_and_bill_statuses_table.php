@@ -13,7 +13,7 @@ return new class extends Migration
     {
         if (Schema::hasTable('bill_records')) {
             Schema::table('bill_records', function (Blueprint $table) {
-                if (!Schema::hasColumn('bill_records', 'tag')) {
+                if (! Schema::hasColumn('bill_records', 'tag')) {
                     $table->string('tag', 64)->default('OK')->index()->after('remark');
                 }
             });
@@ -21,7 +21,7 @@ return new class extends Migration
 
         if (Schema::hasTable('bill_statuses')) {
             Schema::table('bill_statuses', function (Blueprint $table) {
-                if (!Schema::hasColumn('bill_statuses', 'tag')) {
+                if (! Schema::hasColumn('bill_statuses', 'tag')) {
                     $table->string('tag', 64)->nullable()->index()->after('remark');
                 }
             });

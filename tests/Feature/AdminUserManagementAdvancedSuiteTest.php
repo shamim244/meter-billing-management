@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\AgentSubscription;
 use App\Models\Notification;
 use App\Models\Plan;
 use App\Models\PlanDuration;
@@ -18,9 +17,13 @@ class AdminUserManagementAdvancedSuiteTest extends TestCase
     use RefreshDatabase;
 
     protected User $adminUser;
+
     protected User $operator1;
+
     protected User $operator2;
+
     protected Plan $proPlan;
+
     protected PlanDuration $proDuration;
 
     protected function setUp(): void
@@ -83,7 +86,7 @@ class AdminUserManagementAdvancedSuiteTest extends TestCase
 
         $response->assertOk();
         $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
-        
+
         $content = $response->streamedContent();
         $this->assertStringContainsString('Operator One', $content);
         $this->assertStringContainsString('operator1@nbpdcl-saas.com', $content);

@@ -9,10 +9,14 @@ use App\Events\PlanUpgradedEvent;
 use App\Models\AgentSubscription;
 use App\Models\Mru;
 use App\Models\Plan;
+use App\Models\PlanDuration;
 use App\Models\PlanUpgradeLog;
 use App\Services\Plan\MruQuotaService;
+use App\Services\Referral\ReferralService;
 use App\Services\Wallet\WalletService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 
 class PlanChangeService
@@ -34,7 +38,7 @@ class PlanChangeService
         $sub = $subscription instanceof AgentSubscription ? $subscription : AgentSubscription::findOrFail($subscription);
         $targetPlan = $newPlan instanceof Plan ? $newPlan : Plan::findOrFail($newPlan);
 
-        if ($durationMonths instanceof \App\Models\PlanDuration) {
+        if ($durationMonths instanceof PlanDuration) {
             $targetDuration = $durationMonths;
             $duration = (int) ($targetDuration->duration_value ?: $targetDuration->duration_months ?: 1);
         } elseif (is_numeric($durationMonths)) {
@@ -51,9 +55,9 @@ class PlanChangeService
             ? (float) $targetDuration->final_price
             : round((float) $targetPlan->base_price * $duration, 2);
 
-        $start = $sub->billing_start ? \Carbon\Carbon::parse($sub->billing_start) : now();
-        $end = $sub->billing_end 
-            ? \Carbon\Carbon::parse($sub->billing_end) 
+        $start = $sub->billing_start ? Carbon::parse($sub->billing_start) : now();
+        $end = $sub->billing_end
+            ? Carbon::parse($sub->billing_end)
             : ($targetDuration ? $targetDuration->calculateBillingEnd($start) : ($sub->calculateNewEnd($start) ?? now()->addMonth()));
 
         $totalDaysInCycle = max(1, (int) round($start->floatDiffInDays($end)));
@@ -137,7 +141,7 @@ class PlanChangeService
 
             $durationValue = $targetDuration ? ($targetDuration->duration_value ?: $targetDuration->duration_months ?: 1) : 1;
             $durationUnit = $targetDuration ? ($targetDuration->duration_unit ?: 'month') : 'month';
-            $durationMonths = $durationUnit === 'month' ? $durationValue : max(1, (int)ceil($durationValue / 30));
+            $durationMonths = $durationUnit === 'month' ? $durationValue : max(1, (int) ceil($durationValue / 30));
 
             $newSubscription = AgentSubscription::create([
                 'user_id' => $user->id,
@@ -240,7 +244,7 @@ class PlanChangeService
             'new_plan_quota' => $newQuota,
             'excess_mrus' => $activeCount - $newQuota,
             'active_mrus' => $activeMrus,
-            'message' => "You have {$activeCount} active MRUs, but the target plan only includes {$newQuota}. Lock or delete at least " . ($activeCount - $newQuota) . " MRU(s) to proceed.",
+            'message' => "You have {$activeCount} active MRUs, but the target plan only includes {$newQuota}. Lock or delete at least ".($activeCount - $newQuota).' MRU(s) to proceed.',
         ];
     }
 
@@ -256,7 +260,7 @@ class PlanChangeService
 
         // Server-side eligibility validation
         $eligibility = $this->checkDowngradeEligibility($sub, $targetPlan);
-        if (!$eligibility['eligible']) {
+        if (! $eligibility['eligible']) {
             throw new InvalidArgumentException($eligibility['message']);
         }
 
@@ -294,7 +298,7 @@ class PlanChangeService
 
             $durationValue = $targetDuration ? ($targetDuration->duration_value ?: $targetDuration->duration_months ?: 1) : 1;
             $durationUnit = $targetDuration ? ($targetDuration->duration_unit ?: 'month') : 'month';
-            $durationMonths = $durationUnit === 'month' ? $durationValue : max(1, (int)ceil($durationValue / 30));
+            $durationMonths = $durationUnit === 'month' ? $durationValue : max(1, (int) ceil($durationValue / 30));
 
             $newSubscription = AgentSubscription::create([
                 'user_id' => $user->id,
@@ -333,13 +337,13 @@ class PlanChangeService
 
             // Refer & Earn: Clawback any pending or paid referral reward tied to the downgraded subscription
             try {
-                app(\App\Services\Referral\ReferralService::class)->handleClawback(
+                app(ReferralService::class)->handleClawback(
                     paymentReferenceType: 'subscription_payment',
-                    paymentReferenceId: 'sub_' . $sub->id,
+                    paymentReferenceId: 'sub_'.$sub->id,
                     reason: "Mid-cycle plan downgrade from {$oldPlan?->name} to {$targetPlan->name}"
                 );
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error("[PlanDowngrade] Referral clawback error for sub #{$sub->id}: " . $e->getMessage());
+                Log::error("[PlanDowngrade] Referral clawback error for sub #{$sub->id}: ".$e->getMessage());
             }
 
             return [

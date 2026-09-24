@@ -194,7 +194,7 @@
                                     {{ Auth::user()->hasRole('admin') ? '👑 Administrator' : '⚡ Operator' }}
                                 </span>
                                 <span class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-600 dark:text-cyan-400 border border-brand-500/20">
-                                    {{ strtoupper(Auth::user()->plan_tier ?? 'Free') }}
+                                    {{ strtoupper(Auth::user()->current_plan_name ?? Auth::user()->plan_tier ?? 'Free') }}
                                 </span>
                             </div>
                         </div>
@@ -239,6 +239,11 @@
                             <x-dropdown-link :href="route('user-panel.preferences')">
                                 <span>⚙️</span>
                                 <span>General Preferences</span>
+                            </x-dropdown-link>
+
+                            <x-dropdown-link :href="route('user-panel.api-keys')">
+                                <span>🔑</span>
+                                <span>API Keys & Integrations</span>
                             </x-dropdown-link>
 
                             @if(Auth::user()->hasRole('admin'))
@@ -403,6 +408,11 @@
                 <x-responsive-nav-link :href="route('user-panel.profile')">
                     <span>👤</span>
                     <span>Profile & Security</span>
+                </x-responsive-nav-link>
+
+                <x-responsive-nav-link :href="route('user-panel.api-keys')">
+                    <span>🔑</span>
+                    <span>API Keys & Integrations</span>
                 </x-responsive-nav-link>
 
                 <form method="POST" action="{{ route('logout') }}">

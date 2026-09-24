@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class PlanOverageCharge extends Model
 {
-    use HasFactory, BelongsToUser;
+    use BelongsToUser, HasFactory;
 
     public $timestamps = false;
 

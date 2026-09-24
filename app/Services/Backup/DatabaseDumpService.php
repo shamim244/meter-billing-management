@@ -11,7 +11,7 @@ class DatabaseDumpService
     /**
      * Dump the configured database directly to a gzipped file path.
      *
-     * @param string $outputPath Absolute path to output .sql.gz file
+     * @param  string  $outputPath  Absolute path to output .sql.gz file
      * @return array Metadata about tables and rows dumped
      */
     public function dump(string $outputPath): array
@@ -39,6 +39,7 @@ class DatabaseDumpService
         try {
             $process = Process::fromShellCommandline('mysqldump --version');
             $process->run();
+
             return $process->isSuccessful();
         } catch (\Throwable $e) {
             return false;
@@ -57,14 +58,14 @@ class DatabaseDumpService
         $username = config("database.connections.{$connection}.username");
         $password = config("database.connections.{$connection}.password", '');
 
-        $tempSql = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'dump_' . uniqid() . '.sql';
+        $tempSql = sys_get_temp_dir().DIRECTORY_SEPARATOR.'dump_'.uniqid().'.sql';
 
         $cmd = sprintf(
             'mysqldump --host=%s --port=%s --user=%s %s --single-transaction --quick --skip-lock-tables --routines --triggers %s > %s',
             escapeshellarg($host),
             escapeshellarg($port),
             escapeshellarg($username),
-            $password !== '' ? '--password=' . escapeshellarg($password) : '',
+            $password !== '' ? '--password='.escapeshellarg($password) : '',
             escapeshellarg($database),
             escapeshellarg($tempSql)
         );
@@ -109,7 +110,7 @@ class DatabaseDumpService
         $databaseName = config("database.connections.{$connection}.database");
 
         $header = "-- NBPDCL SaaS Pro Database Backup\n";
-        $header .= "-- Generated at: " . date('Y-m-d H:i:s T') . "\n";
+        $header .= '-- Generated at: '.date('Y-m-d H:i:s T')."\n";
         $header .= "-- Database: {$databaseName} ({$driver})\n";
         $header .= "-- ------------------------------------------------------\n\n";
         $header .= "SET FOREIGN_KEY_CHECKS=0;\n\n";
@@ -123,7 +124,7 @@ class DatabaseDumpService
             $ddl = $this->getTableCreateSql($table, $driver);
             gzwrite($gz, "\n-- Table structure for `{$table}`\n");
             gzwrite($gz, "DROP TABLE IF EXISTS `{$table}`;\n");
-            gzwrite($gz, $ddl . ";\n\n");
+            gzwrite($gz, $ddl.";\n\n");
 
             // Stream Table Rows in chunks of 1,000
             gzwrite($gz, "-- Dumping data for `{$table}`\n");
@@ -146,15 +147,15 @@ class DatabaseDumpService
                             $values[] = $val;
                         } else {
                             $escaped = str_replace(
-                                ["\\", "\0", "\n", "\r", "'", "\x1a"],
-                                ["\\\\", "\\0", "\\n", "\\r", "''", "\\Z"],
+                                ['\\', "\0", "\n", "\r", "'", "\x1a"],
+                                ['\\\\', '\\0', '\\n', '\\r', "''", '\\Z'],
                                 (string) $val
                             );
-                            $values[] = "'" . $escaped . "'";
+                            $values[] = "'".$escaped."'";
                         }
                     }
 
-                    $insertSql = "INSERT INTO `{$table}` (`{$columnList}`) VALUES (" . implode(', ', $values) . ");\n";
+                    $insertSql = "INSERT INTO `{$table}` (`{$columnList}`) VALUES (".implode(', ', $values).");\n";
                     gzwrite($gz, $insertSql);
                     $rowCount++;
                 }
@@ -180,13 +181,15 @@ class DatabaseDumpService
 
         if ($driver === 'sqlite') {
             $results = DB::select("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
-            return array_map(fn($r) => $r->name, $results);
+
+            return array_map(fn ($r) => $r->name, $results);
         }
 
         if ($driver === 'mysql') {
             $database = config("database.connections.{$connection}.database");
-            $results = DB::select("SELECT table_name FROM information_schema.tables WHERE table_schema = ?", [$database]);
-            return array_map(fn($r) => $r->table_name ?? $r->TABLE_NAME, $results);
+            $results = DB::select('SELECT table_name FROM information_schema.tables WHERE table_schema = ?', [$database]);
+
+            return array_map(fn ($r) => $r->table_name ?? $r->TABLE_NAME, $results);
         }
 
         return Schema::getTableListing();
@@ -199,6 +202,7 @@ class DatabaseDumpService
     {
         if ($driver === 'sqlite') {
             $res = DB::selectOne("SELECT sql FROM sqlite_master WHERE type='table' AND name = ?", [$table]);
+
             return $res ? $res->sql : "CREATE TABLE `{$table}` (id INTEGER PRIMARY KEY)";
         }
 
@@ -206,6 +210,7 @@ class DatabaseDumpService
             $res = DB::selectOne("SHOW CREATE TABLE `{$table}`");
             if ($res) {
                 $array = (array) $res;
+
                 return $array['Create Table'] ?? array_values($array)[1] ?? '';
             }
         }
@@ -226,6 +231,7 @@ class DatabaseDumpService
                 $summary[$table] = 0;
             }
         }
+
         return $summary;
     }
 

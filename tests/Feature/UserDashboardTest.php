@@ -4,9 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\BillRecord;
 use App\Models\BillStatus;
-use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\User;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -17,7 +17,7 @@ class UserDashboardTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
     }
 
     public function test_guest_is_redirected_to_login(): void
@@ -60,13 +60,13 @@ class UserDashboardTest extends TestCase
         ]);
 
         $response = $this->actingAs($user)->getJson('/dashboard/data?month=4&year=2026');
-        
+
         $response->assertStatus(200);
         $response->assertJson([
             'success' => true,
             'pagination' => [
                 'total' => 1,
-            ]
+            ],
         ]);
         $response->assertJsonFragment([
             'ca_number' => '10230099999',
@@ -356,7 +356,7 @@ class UserDashboardTest extends TestCase
         for ($i = 1; $i <= 60; $i++) {
             BillRecord::create([
                 'user_id' => $user->id,
-                'ca_number' => '1023009' . str_pad((string) $i, 4, '0', STR_PAD_LEFT),
+                'ca_number' => '1023009'.str_pad((string) $i, 4, '0', STR_PAD_LEFT),
                 'mru_id' => $mru->id,
                 'billing_month' => 4,
                 'billing_year' => 2026,
@@ -378,7 +378,7 @@ class UserDashboardTest extends TestCase
                 'per_page' => 1000,
                 'current_page' => 1,
                 'last_page' => 1,
-            ]
+            ],
         ]);
         $this->assertCount(60, $responseAll->json('data'));
 
@@ -392,10 +392,8 @@ class UserDashboardTest extends TestCase
                 'per_page' => 500,
                 'current_page' => 1,
                 'last_page' => 1,
-            ]
+            ],
         ]);
         $this->assertCount(60, $response500->json('data'));
     }
 }
-
-

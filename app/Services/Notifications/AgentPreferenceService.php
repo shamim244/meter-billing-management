@@ -66,6 +66,7 @@ class AgentPreferenceService
             if (strtolower($priority) === 'critical') {
                 return true;
             }
+
             return true; // Routine in-app is also enabled by default
         }
 

@@ -10,6 +10,13 @@ class SystemSetting extends Model
 {
     use HasFactory;
 
+    /**
+     * In-memory runtime cache for the active request lifecycle.
+     *
+     * @var array<string, mixed>
+     */
+    protected static array $runtimeCache = [];
+
     protected $fillable = [
         'key',
         'value',
@@ -27,9 +34,21 @@ class SystemSetting extends Model
      */
     public static function get(string $key, mixed $default = null): mixed
     {
+        if (array_key_exists($key, static::$runtimeCache)) {
+            return static::$runtimeCache[$key];
+        }
+
         try {
-            $setting = static::where('key', $key)->first();
-            return $setting ? $setting->value : $default;
+            $value = Cache::remember("system_setting_{$key}", 3600, function () use ($key) {
+                $setting = static::where('key', $key)->first();
+
+                return $setting ? $setting->value : null;
+            });
+
+            $result = $value !== null ? $value : $default;
+            static::$runtimeCache[$key] = $result;
+
+            return $result;
         } catch (\Throwable $e) {
             return $default;
         }
@@ -45,8 +64,17 @@ class SystemSetting extends Model
             ['value' => $value]
         );
 
+        static::$runtimeCache[$key] = $value;
         Cache::forget("system_setting_{$key}");
 
         return $setting;
+    }
+
+    /**
+     * Clear runtime in-memory cache.
+     */
+    public static function clearRuntimeCache(): void
+    {
+        static::$runtimeCache = [];
     }
 }

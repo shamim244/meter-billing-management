@@ -62,16 +62,16 @@ return new class extends Migration
 
         // 4. Alter MRUs Table to Add Quota & Lock Tracking Columns
         Schema::table('mrus', function (Blueprint $table) {
-            if (!Schema::hasColumn('mrus', 'locked_reason')) {
+            if (! Schema::hasColumn('mrus', 'locked_reason')) {
                 $table->string('locked_reason', 100)->nullable()->after('status');
             }
-            if (!Schema::hasColumn('mrus', 'locked_at')) {
+            if (! Schema::hasColumn('mrus', 'locked_at')) {
                 $table->timestamp('locked_at')->nullable()->after('locked_reason');
             }
-            if (!Schema::hasColumn('mrus', 'unlocked_at')) {
+            if (! Schema::hasColumn('mrus', 'unlocked_at')) {
                 $table->timestamp('unlocked_at')->nullable()->after('locked_at');
             }
-            if (!Schema::hasColumn('mrus', 'is_over_quota')) {
+            if (! Schema::hasColumn('mrus', 'is_over_quota')) {
                 $table->boolean('is_over_quota')->default(false)->after('unlocked_at');
             }
         });

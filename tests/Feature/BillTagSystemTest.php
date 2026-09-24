@@ -3,11 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\BillRecord;
-use App\Models\BillStatus;
 use App\Models\Mru;
-use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\BillTagService;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -16,13 +15,15 @@ class BillTagSystemTest extends TestCase
     use RefreshDatabase;
 
     protected User $admin;
+
     protected User $agent;
+
     protected BillTagService $tagService;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
 
         $this->admin = User::where('email', 'admin@nbpdcl-saas.com')->first();
         $this->agent = User::where('email', 'test@example.com')->first();

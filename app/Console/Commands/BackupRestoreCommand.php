@@ -6,6 +6,7 @@ use App\Models\SystemBackup;
 use App\Services\Backup\BackupService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\Process\Process;
 
@@ -31,12 +32,14 @@ class BackupRestoreCommand extends Command
 
         if (! $backup) {
             $this->error("Backup [{$identifier}] not found in database.");
+
             return self::FAILURE;
         }
 
         $storagePath = $backup->getStoragePath();
         if (! Storage::disk($backup->disk)->exists($storagePath)) {
             $this->error("Physical archive file is missing from disk: {$storagePath}");
+
             return self::FAILURE;
         }
 
@@ -48,27 +51,30 @@ class BackupRestoreCommand extends Command
             $actualHash = hash_file('sha256', $localAbsPath);
             if ($backup->sha256_hash && $actualHash !== $backup->sha256_hash) {
                 $this->error("❌ Integrity Check FAILED! Checksum mismatch. Expected: {$backup->sha256_hash}, Got: {$actualHash}");
+
                 return self::FAILURE;
             }
             $this->info("✓ SHA-256 Checksum verified ({$actualHash})");
         }
 
         if ($dryRun) {
-            $this->info("✓ Dry-run completed. Archive is valid and ready for restore.");
+            $this->info('✓ Dry-run completed. Archive is valid and ready for restore.');
+
             return self::SUCCESS;
         }
 
-        if (! $force && ! $this->confirm("⚠️ DANGER: Restoring this backup will overwrite current data. Do you wish to continue?")) {
-            $this->warn("Restore canceled.");
+        if (! $force && ! $this->confirm('⚠️ DANGER: Restoring this backup will overwrite current data. Do you wish to continue?')) {
+            $this->warn('Restore canceled.');
+
             return self::SUCCESS;
         }
 
-        $this->info("1. Taking automatic pre-restore safety snapshot of current database...");
+        $this->info('1. Taking automatic pre-restore safety snapshot of current database...');
         try {
             $preSnapshot = $backupService->createBackup('db_only', null);
             $this->info("✓ Pre-restore snapshot created: {$preSnapshot->filename}");
         } catch (\Throwable $e) {
-            $this->warn("Warning: Could not create pre-restore snapshot: " . $e->getMessage());
+            $this->warn('Warning: Could not create pre-restore snapshot: '.$e->getMessage());
         }
 
         $this->info("2. Executing restoration for [{$backup->type_label}]...");
@@ -81,9 +87,11 @@ class BackupRestoreCommand extends Command
             }
 
             $this->info("🎉 Backup [{$backup->filename}] restored successfully!");
+
             return self::SUCCESS;
         } catch (\Throwable $e) {
-            $this->error("❌ Restore execution failed: " . $e->getMessage());
+            $this->error('❌ Restore execution failed: '.$e->getMessage());
+
             return self::FAILURE;
         }
     }
@@ -93,8 +101,8 @@ class BackupRestoreCommand extends Command
         $connection = config('database.default');
         $driver = config("database.connections.{$connection}.driver");
 
-        $tempSql = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'restore_' . uniqid() . '.sql';
-        
+        $tempSql = sys_get_temp_dir().DIRECTORY_SEPARATOR.'restore_'.uniqid().'.sql';
+
         // Decompress GZ
         $gz = gzopen($gzPath, 'rb');
         $out = fopen($tempSql, 'wb');
@@ -116,7 +124,7 @@ class BackupRestoreCommand extends Command
                 escapeshellarg($host),
                 escapeshellarg($port),
                 escapeshellarg($username),
-                $password !== '' ? '--password=' . escapeshellarg($password) : '',
+                $password !== '' ? '--password='.escapeshellarg($password) : '',
                 escapeshellarg($database),
                 escapeshellarg($tempSql)
             );
@@ -128,7 +136,7 @@ class BackupRestoreCommand extends Command
             @unlink($tempSql);
 
             if (! $process->isSuccessful()) {
-                throw new \RuntimeException("mysql client restore failed: " . $process->getErrorOutput());
+                throw new \RuntimeException('mysql client restore failed: '.$process->getErrorOutput());
             }
         } else {
             // SQLite / Fallback direct multi-query execution
@@ -140,27 +148,27 @@ class BackupRestoreCommand extends Command
 
     protected function restoreZip(string $zipPath): void
     {
-        $zip = new \ZipArchive();
+        $zip = new \ZipArchive;
         if ($zip->open($zipPath) === true) {
-            $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'restore_zip_' . uniqid();
+            $tempDir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'restore_zip_'.uniqid();
             $zip->extractTo($tempDir);
             $zip->close();
 
-            $dbFile = $tempDir . DIRECTORY_SEPARATOR . 'database.sql.gz';
+            $dbFile = $tempDir.DIRECTORY_SEPARATOR.'database.sql.gz';
             if (file_exists($dbFile)) {
                 $this->restoreSqlGz($dbFile);
             }
 
-            $storageZip = $tempDir . DIRECTORY_SEPARATOR . 'storage.zip';
+            $storageZip = $tempDir.DIRECTORY_SEPARATOR.'storage.zip';
             if (file_exists($storageZip)) {
-                $sZip = new \ZipArchive();
+                $sZip = new \ZipArchive;
                 if ($sZip->open($storageZip) === true) {
                     $sZip->extractTo(storage_path('app'));
                     $sZip->close();
                 }
             }
 
-            \Illuminate\Support\Facades\File::deleteDirectory($tempDir);
+            File::deleteDirectory($tempDir);
         }
     }
 }

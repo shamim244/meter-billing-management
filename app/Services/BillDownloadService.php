@@ -18,8 +18,8 @@ class BillDownloadService
         $concurrency = $concurrency ?: (int) config('nbpdcl.concurrency', 10);
         $apiUrl = config('nbpdcl.api_url', 'https://api.bsphcl.co.in/nbWSMobileApp/ViewBill.asmx/GetViewBill?strCANumber=');
 
-        $this->appendLog($userId, "==================================================");
-        $this->appendLog($userId, sprintf("Initiating task: Bill Downloader (Period: %02d/%04d, Accounts: %d)...", $month, $year, count($caNumbers)));
+        $this->appendLog($userId, '==================================================');
+        $this->appendLog($userId, sprintf('Initiating task: Bill Downloader (Period: %02d/%04d, Accounts: %d)...', $month, $year, count($caNumbers)));
 
         $results = [
             'total' => count($caNumbers),
@@ -36,6 +36,7 @@ class BillDownloadService
             $this->appendLog($userId, $msg);
             $results['failed'] = count($caNumbers);
             $results['error'] = $msg;
+
             return $results;
         }
 
@@ -46,7 +47,8 @@ class BillDownloadService
         Storage::disk('local')->makeDirectory($storageDir);
 
         if (empty($caNumbers)) {
-            $this->appendLog($userId, "No accounts to download.");
+            $this->appendLog($userId, 'No accounts to download.');
+
             return $results;
         }
 
@@ -59,14 +61,14 @@ class BillDownloadService
 
         $addHandle = function (string $ca) use ($mh, &$activeRequests, $apiUrl) {
             $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $apiUrl . urlencode(trim($ca)));
+            curl_setopt($ch, CURLOPT_URL, $apiUrl.urlencode(trim($ca)));
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_TIMEOUT, 60);
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
             curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-            curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
 
             curl_multi_add_handle($mh, $ch);
             $activeRequests[(int) $ch] = [
@@ -76,7 +78,7 @@ class BillDownloadService
         };
 
         // Populate initial batch
-        while (count($activeRequests) < $concurrency && !empty($queue)) {
+        while (count($activeRequests) < $concurrency && ! empty($queue)) {
             $addHandle(array_shift($queue));
         }
 
@@ -104,7 +106,7 @@ class BillDownloadService
                         $content = substr($content, $pos);
                     }
 
-                    $isValidPdf = ($httpCode === 200 && !empty($content) && str_starts_with($content, '%PDF'));
+                    $isValidPdf = ($httpCode === 200 && ! empty($content) && str_starts_with($content, '%PDF'));
 
                     if ($isValidPdf) {
                         $results['success']++;
@@ -152,16 +154,16 @@ class BillDownloadService
                     unset($activeRequests[$id]);
 
                     // Feed next handle from queue
-                    if (!empty($queue)) {
+                    if (! empty($queue)) {
                         $addHandle(array_shift($queue));
                     }
                 }
             }
-        } while ($running || !empty($activeRequests));
+        } while ($running || ! empty($activeRequests));
 
         curl_multi_close($mh);
 
-        $this->appendLog($userId, "==================================================");
+        $this->appendLog($userId, '==================================================');
         $this->appendLog($userId, "Task Completed: {$results['success']} downloaded, {$results['failed']} failed.");
 
         return $results;

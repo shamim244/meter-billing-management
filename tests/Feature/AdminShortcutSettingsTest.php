@@ -13,6 +13,7 @@ class AdminShortcutSettingsTest extends TestCase
     use RefreshDatabase;
 
     protected User $adminUser;
+
     protected User $operatorUser;
 
     protected function setUp(): void

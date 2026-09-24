@@ -15,7 +15,7 @@ class PaymentWebhookController extends Controller
     public function handle(Request $request, OnlinePaymentGatewayService $gatewayService): JsonResponse
     {
         $rawPayload = $request->getContent();
-        
+
         // Cashfree & Razorpay webhook signature headers
         $signature = $request->header('x-webhook-signature')
             ?? $request->header('X-Webhook-Signature')
@@ -30,13 +30,14 @@ class PaymentWebhookController extends Controller
         $hasSecret = $gatewayService->hasConfiguredWebhookSecret();
 
         // Enforce mandatory signature verification
-        if (!$isTesting || $signature !== null || $hasSecret) {
-            if (empty($signature) || !$gatewayService->verifyWebhookSignature($rawPayload, (string) $signature, $timestamp)) {
+        if (! $isTesting || $signature !== null || $hasSecret) {
+            if (empty($signature) || ! $gatewayService->verifyWebhookSignature($rawPayload, (string) $signature, $timestamp)) {
                 Log::warning('Payment webhook rejected: signature verification failed or signature missing', [
                     'ip' => $request->ip(),
-                    'has_signature' => !empty($signature),
+                    'has_signature' => ! empty($signature),
                     'timestamp' => $timestamp,
                 ]);
+
                 return response()->json(['error' => 'Invalid or missing webhook signature.'], 400);
             }
         }
@@ -48,12 +49,13 @@ class PaymentWebhookController extends Controller
 
         try {
             $result = $gatewayService->processWebhook($payload);
+
             return response()->json([
                 'success' => true,
                 'result' => $result,
             ]);
         } catch (\Throwable $e) {
-            Log::error('Cashfree payment webhook processing error: ' . $e->getMessage(), [
+            Log::error('Cashfree payment webhook processing error: '.$e->getMessage(), [
                 'exception' => $e,
                 'payload' => $payload,
             ]);

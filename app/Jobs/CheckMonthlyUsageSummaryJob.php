@@ -27,7 +27,7 @@ class CheckMonthlyUsageSummaryJob implements ShouldQueue
         $targetMonth = (int) $targetDate->month;
         $targetYear = (int) $targetDate->year;
 
-        $agents = User::whereDoesntHave('roles', fn($q) => $q->where('name', 'admin'))->get();
+        $agents = User::whereDoesntHave('roles', fn ($q) => $q->where('name', 'admin'))->get();
 
         foreach ($agents as $agent) {
             $summary = $summaryService->getMonthlySummary($agent->id, $targetMonth, $targetYear);
@@ -44,7 +44,7 @@ class CheckMonthlyUsageSummaryJob implements ShouldQueue
                 ->whereJsonContains('data->year', (string) $targetYear)
                 ->exists();
 
-            if (!$alreadyNotified) {
+            if (! $alreadyNotified) {
                 $dispatcher->dispatch('usage.monthly_summary_ready', $agent, [
                     'month' => $targetMonth,
                     'year' => $targetYear,

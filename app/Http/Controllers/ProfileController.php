@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Models\BillRecord;
+use App\Models\ConsumerAccount;
+use App\Models\Mru;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -20,9 +23,9 @@ class ProfileController extends Controller
         $isAdmin = $user->hasRole('admin');
 
         $stats = [
-            'mru_count' => $isAdmin ? \App\Models\Mru::count() : \App\Models\Mru::where('user_id', $user->id)->count(),
-            'consumer_count' => $isAdmin ? \App\Models\ConsumerAccount::count() : $user->consumerAccounts()->count(),
-            'bills_count' => $isAdmin ? \App\Models\BillRecord::count() : \App\Models\BillRecord::where('user_id', $user->id)->count(),
+            'mru_count' => $isAdmin ? Mru::count() : Mru::where('user_id', $user->id)->count(),
+            'consumer_count' => $isAdmin ? ConsumerAccount::count() : $user->consumerAccounts()->count(),
+            'bills_count' => $isAdmin ? BillRecord::count() : BillRecord::where('user_id', $user->id)->count(),
             'role' => $user->getRoleNames()->first() ?? 'user',
             'created_at' => $user->created_at?->format('M d, Y') ?? 'N/A',
         ];

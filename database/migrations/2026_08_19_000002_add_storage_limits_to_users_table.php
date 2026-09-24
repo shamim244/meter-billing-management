@@ -12,10 +12,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            if (!Schema::hasColumn('users', 'storage_limit_mb')) {
+            if (! Schema::hasColumn('users', 'storage_limit_mb')) {
                 $table->unsignedInteger('storage_limit_mb')->default(100)->after('shortcuts');
             }
-            if (!Schema::hasColumn('users', 'plan_tier')) {
+            if (! Schema::hasColumn('users', 'plan_tier')) {
                 $table->string('plan_tier')->default('free')->after('storage_limit_mb');
             }
         });

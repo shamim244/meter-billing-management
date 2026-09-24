@@ -54,8 +54,30 @@
                         <span>⚡</span> Quick Pull CA
                     </button>
 
+                    <!-- Average Adjustment & Sequential Compounding Tuning Controls -->
+                    <div class="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs shadow-2xs">
+                        <button type="button" @click="openTuningModal()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition active:scale-95"
+                                :class="(avgTuningSteps.length > 0 || avgAdjustmentPercent !== 0) ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-400' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'"
+                                title="Click to open Smart Average Tuning & Sequential Compounding calculator">
+                            <span>⚡</span>
+                            <template x-if="avgTuningSteps.length > 0">
+                                <span x-text="'Tuned: ' + getCompoundedUnits(50) + ' kWh (' + (getNetTuningPercent(50) >= 0 ? '+' : '') + getNetTuningPercent(50) + '%)'"></span>
+                            </template>
+                            <template x-if="avgTuningSteps.length === 0 && avgAdjustmentPercent !== 0">
+                                <span x-text="'Tuned: ' + (avgAdjustmentPercent > 0 ? '+' : '') + avgAdjustmentPercent + '%'"></span>
+                            </template>
+                            <template x-if="avgTuningSteps.length === 0 && avgAdjustmentPercent === 0">
+                                <span>⚡ Avg Tuning</span>
+                            </template>
+                        </button>
+
+                        <button type="button" @click="openTuningModal()" class="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition" title="Adjust compounding percentages">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                        </button>
+                    </div>
+
                     <!-- Bulk Auto-Fill Readings Button -->
-                    <button @click="bulkAutoProjectAll()" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-bold border border-indigo-200 dark:border-indigo-800/80 transition active:scale-95" title="Auto-project working readings with Previous + Average for all accounts in this cycle">
+                    <button @click="bulkAutoProjectAll()" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-bold border border-indigo-200 dark:border-indigo-800/80 transition active:scale-95" title="Auto-project working readings with Previous + Adjusted Average for all accounts in this cycle">
                         <span>⚡</span> Auto-Fill (Prev + Avg)
                     </button>
 
@@ -631,8 +653,13 @@
                                     </td>
 
                                     <!-- 📊 Average Usage (Avg kWh) -->
-                                    <td class="py-3 px-2 text-center font-mono text-xs">
-                                        <span class="font-bold text-slate-800 dark:text-slate-200" x-text="(bill.smart_avg_units ?? 50) + ' k'"></span>
+                                    <td class="py-3 px-2 text-center font-mono text-xs cursor-pointer hover:bg-indigo-50/60 dark:hover:bg-indigo-950/40 transition group rounded-xl"
+                                        @click="openMeterHistoryModal(bill.ca_number, bill.consumer_name)"
+                                        title="Click to view 2D Monthly Reading History & calculation breakdown">
+                                        <div class="font-bold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-cyan-400 transition" x-text="(bill.smart_avg_units ?? 50) + ' k'"></div>
+                                        <div class="text-[9px] text-indigo-500 font-semibold opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-0.5">
+                                            <span>📊</span> History
+                                        </div>
                                     </td>
 
                                     <!-- 📄 Official PDF Reading -->
@@ -929,9 +956,12 @@
                                         </div>
 
                                         <!-- Box 3: 📊 Average Usage (Avg kWh) -->
-                                        <div class="bg-white dark:bg-slate-800 p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm flex flex-col justify-between">
-                                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">📊 Avg Usage</span>
-                                            <div class="text-base sm:text-lg font-black text-slate-800 dark:text-white my-0.5 sm:my-1 font-mono text-center" x-text="(bill.smart_avg_units ?? 50) + ' kWh'"></div>
+                                        <div @click="openMeterHistoryModal(bill.ca_number, bill.consumer_name)" class="bg-white dark:bg-slate-800 p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm flex flex-col justify-between cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-500 transition group" title="Click to view 2D Monthly Reading History & calculation audit">
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">📊 Avg Usage</span>
+                                                <span class="text-[9px] text-indigo-500 font-bold opacity-70 group-hover:opacity-100 transition">History ↗</span>
+                                            </div>
+                                            <div class="text-base sm:text-lg font-black text-slate-800 dark:text-white my-0.5 sm:my-1 font-mono text-center group-hover:text-indigo-600 dark:group-hover:text-cyan-400 transition" x-text="(bill.smart_avg_units ?? 50) + ' kWh'"></div>
                                             <div class="text-[9px] sm:text-[10px] text-slate-400 border-t border-slate-100 dark:border-slate-700/60 pt-1 truncate" x-text="bill.smart_avg_label || 'History Avg'"></div>
                                         </div>
 
@@ -1172,7 +1202,7 @@
                         <button @click="showCreateMruModal = false" :disabled="isSubmittingMru" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 disabled:opacity-40 p-1">✕</button>
                     </div>
 
-                    <form @submit.prevent="submitCreateMru()" class="overflow-y-auto p-4 sm:p-6 space-y-4">
+                    <form @submit.prevent="submitCreateMru(false)" class="overflow-y-auto p-4 sm:p-6 space-y-4">
                         @if(!$activeSubscription)
                             <div class="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/80 text-amber-800 dark:text-amber-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-sm">
                                 <div class="flex items-center gap-2">
@@ -1185,7 +1215,61 @@
                             </div>
                         @endif
 
-                        <div x-show="createMruError" class="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-semibold rounded-xl" x-text="createMruError"></div>
+                        <div x-show="createMruError && !mruOverageRequired" class="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-semibold rounded-xl" x-text="createMruError"></div>
+
+                        <!-- Overage & Insufficient Balance Confirmation Alert -->
+                        <div x-show="mruOverageRequired" class="p-4 rounded-2xl space-y-3 transition border" :class="mruOverageInsufficient ? 'bg-rose-50/90 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800/80' : 'bg-amber-50 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700/80'">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2 font-bold text-xs" :class="mruOverageInsufficient ? 'text-rose-800 dark:text-rose-300' : 'text-amber-800 dark:text-amber-300'">
+                                    <span x-text="mruOverageInsufficient ? '⛔' : '⚠️'"></span>
+                                    <span x-text="mruOverageInsufficient ? 'Insufficient Wallet Balance' : 'Plan Quota Notice'"></span>
+                                </div>
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase" :class="mruOverageInsufficient ? 'bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300' : 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300'">
+                                    Overage ₹<span x-text="mruOverageAmount"></span>
+                                </span>
+                            </div>
+
+                            <p class="text-xs leading-relaxed" :class="mruOverageInsufficient ? 'text-rose-900 dark:text-rose-200' : 'text-amber-900 dark:text-amber-200'" x-text="mruOverageMessage"></p>
+
+                            <!-- Balance comparison strip -->
+                            <div class="flex items-center justify-between text-xs py-2 px-3 rounded-xl border" :class="mruOverageInsufficient ? 'bg-white/80 dark:bg-slate-900/80 border-rose-200/80 dark:border-rose-900/60' : 'bg-amber-100/60 dark:bg-amber-900/40 border-amber-200 dark:border-amber-800/60'">
+                                <span class="text-slate-600 dark:text-slate-400">Creation Fee: <strong class="font-mono text-slate-900 dark:text-white">₹<span x-text="mruOverageAmount"></span></strong></span>
+                                <span>Wallet Balance: <strong class="font-mono font-bold" :class="mruOverageInsufficient ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'">₹<span x-text="Number(mruOverageWalletBalance).toFixed(2)"></span></strong></span>
+                            </div>
+
+                            <!-- Case A: Balance is Sufficient -> Confirm & Pay Button -->
+                            <template x-if="!mruOverageInsufficient">
+                                <div class="space-y-2 pt-1">
+                                    <button type="button" @click="submitCreateMru(true)" :disabled="isSubmittingMru" class="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow transition flex items-center justify-center gap-1.5">
+                                        <svg x-show="isSubmittingMru" class="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        <span>✓ Confirm & Pay ₹<span x-text="mruOverageAmount"></span> from Wallet</span>
+                                    </button>
+                                    <div class="text-center">
+                                        <a :href="mruUpgradeUrl || '{{ route('user-panel.subscription') }}'" class="text-[11px] text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-cyan-400 underline transition">
+                                            Or upgrade your plan to increase included MRUs →
+                                        </a>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- Case B: Balance is Insufficient -> Direct Links to Top Up & Upgrade -->
+                            <template x-if="mruOverageInsufficient">
+                                <div class="space-y-2 pt-1">
+                                    <div class="flex flex-col sm:flex-row gap-2">
+                                        <a :href="mruTopupUrl || '{{ route('wallet.index') }}'" target="_blank" class="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold text-center shadow-sm transition flex items-center justify-center gap-1.5">
+                                            <span>💳</span> Add Funds / Top Up Wallet
+                                        </a>
+                                        <a :href="mruUpgradeUrl || '{{ route('user-panel.subscription') }}'" class="flex-1 py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold text-center shadow-sm transition flex items-center justify-center gap-1.5">
+                                            <span>⚡</span> Upgrade Plan
+                                        </a>
+                                    </div>
+                                    <button type="button" @click="submitCreateMru(true)" :disabled="isSubmittingMru" class="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5">
+                                        <svg x-show="isSubmittingMru" class="animate-spin h-3.5 w-3.5 text-slate-600 dark:text-slate-300" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        <span>🔄 I've Added Funds — Retry Creation</span>
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
 
                         <div>
                             <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">MRU Code *</label>
@@ -1207,7 +1291,7 @@
                             <button type="button" @click="showCreateMruModal = false" :disabled="isSubmittingMru" class="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-center">
                                 Cancel
                             </button>
-                            <button type="submit" :disabled="isSubmittingMru" class="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition flex items-center justify-center gap-1.5">
+                            <button x-show="!mruOverageRequired" type="submit" :disabled="isSubmittingMru" class="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition flex items-center justify-center gap-1.5">
                                 <svg x-show="isSubmittingMru" class="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                                 <span x-text="isSubmittingMru ? 'Verifying...' : 'Create Workspace'"></span>
                             </button>
@@ -1581,6 +1665,286 @@
                 </div>
             </div>
 
+            <!-- ⚡ SMART AVERAGE TUNING & SEQUENTIAL COMPOUNDING MODAL -->
+            <div x-show="showTuningModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+                <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-xl w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-150" @click.away="showTuningModal = false">
+                    <!-- Modal Header -->
+                    <div class="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-cyan-400 flex items-center justify-center text-xl font-bold shadow-inner">
+                                ⚡
+                            </div>
+                            <div>
+                                <h3 class="text-base sm:text-lg font-black text-slate-900 dark:text-white">Smart Average Tuning</h3>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">Sequential compounding percentage adjustments</p>
+                            </div>
+                        </div>
+                        <button type="button" @click="showTuningModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+                            ✕
+                        </button>
+                    </div>
+
+                    <!-- Modal Body -->
+                    <div class="p-5 sm:p-6 space-y-5">
+                        <!-- Compounding Simulation Display -->
+                        <div class="bg-gradient-to-br from-indigo-50/70 via-slate-50 to-indigo-50/40 dark:from-indigo-950/40 dark:via-slate-900 dark:to-indigo-950/20 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/60 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Compounded Yield Preview</span>
+                                <div class="flex items-center gap-2">
+                                    <label class="text-[11px] font-semibold text-slate-500">Base:</label>
+                                    <input type="number" x-model.number="tuningBaseUnits" class="w-16 py-0.5 px-2 text-center text-xs font-bold font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200" />
+                                    <span class="text-xs font-bold text-slate-400">kWh</span>
+                                </div>
+                            </div>
+
+                            <!-- Sequential Chain Visualization -->
+                            <div class="flex flex-wrap items-center gap-2 font-mono text-xs">
+                                <span class="px-2.5 py-1 rounded-xl bg-slate-200/80 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">
+                                    <span x-text="tuningBaseUnits"></span> kWh (Base)
+                                </span>
+
+                                <template x-for="(st, idx) in getCompoundedStepsDetails(tuningBaseUnits)" :key="idx">
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-slate-400 font-bold">→</span>
+                                        <span class="px-2 py-1 rounded-xl font-bold border flex items-center gap-1"
+                                              :class="st.percent < 0 ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800' : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'">
+                                            <span x-text="(st.percent > 0 ? '+' : '') + st.percent + '%'"></span>
+                                            <span class="text-[10px] opacity-75 font-normal" x-text="'(' + st.after + ' kWh)'"></span>
+                                        </span>
+                                    </div>
+                                </template>
+                            </div>
+
+                            <!-- Net Result Box -->
+                            <div class="pt-2 border-t border-indigo-100 dark:border-indigo-900/60 flex items-center justify-between">
+                                <div>
+                                    <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Effective Tuned Average:</span>
+                                    <div class="text-xl font-black text-indigo-700 dark:text-cyan-400 font-mono">
+                                        <span x-text="getCompoundedUnits(tuningBaseUnits)"></span> kWh
+                                        <span class="text-xs font-bold text-slate-500 dark:text-slate-400 font-sans"
+                                              x-text="'(' + (getNetTuningPercent(tuningBaseUnits) >= 0 ? '+' : '') + getNetTuningPercent(tuningBaseUnits) + '% net)'"></span>
+                                    </div>
+                                </div>
+                                <template x-if="avgTuningSteps.length > 1">
+                                    <span class="px-2.5 py-1 text-[10px] font-black uppercase rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-cyan-300 border border-indigo-200 dark:border-indigo-700">
+                                        Sequential Compounding Active
+                                    </span>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Add Compounding Steps -->
+                        <div class="space-y-2">
+                            <label class="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                                Quick Step Additions (Click to chain sequentially):
+                            </label>
+                            <div class="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+                                <button type="button" @click="addTuningStep(-30)" class="py-1.5 px-1 bg-slate-100 dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-amber-950/70 text-slate-700 dark:text-slate-300 hover:text-amber-700 rounded-xl text-xs font-bold font-mono transition">-30%</button>
+                                <button type="button" @click="addTuningStep(-20)" class="py-1.5 px-1 bg-slate-100 dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-amber-950/70 text-slate-700 dark:text-slate-300 hover:text-amber-700 rounded-xl text-xs font-bold font-mono transition">-20%</button>
+                                <button type="button" @click="addTuningStep(-10)" class="py-1.5 px-1 bg-slate-100 dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-amber-950/70 text-slate-700 dark:text-slate-300 hover:text-amber-700 rounded-xl text-xs font-bold font-mono transition">-10%</button>
+                                <button type="button" @click="addTuningStep(-5)" class="py-1.5 px-1 bg-slate-100 dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-amber-950/70 text-slate-700 dark:text-slate-300 hover:text-amber-700 rounded-xl text-xs font-bold font-mono transition">-5%</button>
+                                <button type="button" @click="addTuningStep(5)" class="py-1.5 px-1 bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-emerald-950/70 text-slate-700 dark:text-slate-300 hover:text-emerald-700 rounded-xl text-xs font-bold font-mono transition">+5%</button>
+                                <button type="button" @click="addTuningStep(10)" class="py-1.5 px-1 bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-emerald-950/70 text-slate-700 dark:text-slate-300 hover:text-emerald-700 rounded-xl text-xs font-bold font-mono transition">+10%</button>
+                                <button type="button" @click="addTuningStep(20)" class="py-1.5 px-1 bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-emerald-950/70 text-slate-700 dark:text-slate-300 hover:text-emerald-700 rounded-xl text-xs font-bold font-mono transition">+20%</button>
+                                <button type="button" @click="addTuningStep(30)" class="py-1.5 px-1 bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-emerald-950/70 text-slate-700 dark:text-slate-300 hover:text-emerald-700 rounded-xl text-xs font-bold font-mono transition">+30%</button>
+                            </div>
+
+                            <!-- Custom Percentage Step -->
+                            <div class="flex items-center gap-2 pt-2">
+                                <span class="text-xs font-medium text-slate-500">Custom Step:</span>
+                                <input type="number" x-model.number="customTuningStep" placeholder="10" class="w-20 py-1 px-2.5 text-xs font-bold font-mono rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500" />
+                                <span class="text-xs font-bold text-slate-400">%</span>
+                                <button type="button" @click="addTuningStep(customTuningStep)" class="px-3 py-1 bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 text-indigo-700 dark:text-cyan-300 font-bold text-xs rounded-xl border border-indigo-200 dark:border-indigo-800 transition">
+                                    + Add Step
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Active Steps List -->
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between">
+                                <label class="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                    Current Compounding Sequence (<span x-text="avgTuningSteps.length"></span> steps):
+                                </label>
+                                <button type="button" @click="clearTuning()" class="text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:underline">
+                                    ↺ Clear / Reset to Normal
+                                </button>
+                            </div>
+
+                            <template x-if="avgTuningSteps.length === 0">
+                                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-xs text-slate-400 italic text-center">
+                                    No percentage adjustments added. The baseline average (Normal 0%) will be used.
+                                </div>
+                            </template>
+
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <template x-for="(st, idx) in avgTuningSteps" :key="idx">
+                                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-mono font-bold border"
+                                          :class="st < 0 ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800' : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'">
+                                        <span x-text="'Step ' + (idx + 1) + ': ' + (st > 0 ? '+' : '') + st + '%'"></span>
+                                        <button type="button" @click="removeTuningStep(idx)" class="hover:text-rose-600 font-sans font-black text-xs leading-none">✕</button>
+                                    </span>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Modal Footer -->
+                    <div class="p-4 sm:p-6 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <button type="button" @click="clearTuning(); showTuningModal = false; fetchData(1);" class="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-bold">
+                            Reset to Normal (0%)
+                        </button>
+                        <div class="flex items-center gap-2">
+                            <button type="button" @click="showTuningModal = false" class="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition">
+                                Cancel
+                            </button>
+                            <button type="button" @click="applyTuningAndFetch()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-500/20 transition">
+                                ⚡ Apply & Recalculate
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 📊 2D METER READING HISTORY MODAL -->
+            <div x-show="showMeterHistoryModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+                <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-150" @click.away="showMeterHistoryModal = false">
+                    <!-- Modal Header -->
+                    <div class="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/80 text-blue-600 dark:text-cyan-400 flex items-center justify-center text-xl font-bold shadow-inner">
+                                📊
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <h3 class="text-base sm:text-lg font-black text-slate-900 dark:text-white" x-text="activeHistoryConsumerName || 'Consumer Reading History'"></h3>
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-cyan-300 border border-indigo-200 dark:border-indigo-800">
+                                        2D Matrix
+                                    </span>
+                                </div>
+                                <p class="text-xs text-slate-500 dark:text-slate-400 font-mono" x-text="'CA: ' + activeHistoryCa"></p>
+                            </div>
+                        </div>
+                        <button type="button" @click="showMeterHistoryModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+                            ✕
+                        </button>
+                    </div>
+
+                    <!-- Modal Body -->
+                    <div class="p-5 sm:p-6 space-y-4">
+                        <!-- Loading Indicator -->
+                        <div x-show="meterHistoryLoading" class="py-12 flex flex-col items-center justify-center gap-3 text-slate-400">
+                            <div class="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                            <span class="text-xs font-semibold">Loading 2D reading history...</span>
+                        </div>
+
+                        <!-- Content when loaded -->
+                        <div x-show="!meterHistoryLoading && meterHistoryData">
+                            <!-- Summary Bar -->
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                                <div class="p-3 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 text-center">
+                                    <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-500 block">Smart Avg Basis</span>
+                                    <span class="text-base font-black text-indigo-700 dark:text-cyan-400 font-mono" x-text="(meterHistoryData?.average_units || 50) + ' kWh'"></span>
+                                </div>
+                                <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-center">
+                                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Recorded Periods</span>
+                                    <span class="text-base font-black text-slate-800 dark:text-slate-200 font-mono" x-text="meterHistoryData?.periods_count || 0"></span>
+                                </div>
+                                <div class="p-3 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/60 text-center">
+                                    <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-600 block">Calculation Priority</span>
+                                    <span class="text-xs font-bold text-emerald-700 dark:text-emerald-300">Working > PDF</span>
+                                </div>
+                                <div class="p-3 rounded-2xl bg-blue-50/60 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/60 text-center">
+                                    <span class="text-[10px] font-bold uppercase tracking-wider text-blue-600 block">Full Ledger View</span>
+                                    <a :href="'/bills/history/' + activeHistoryCa" target="_blank" class="text-xs font-bold text-blue-600 dark:text-cyan-400 hover:underline">
+                                        Open Page ↗
+                                    </a>
+                                </div>
+                            </div>
+
+                            <!-- 2D Table -->
+                            <div class="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+                                <table class="w-full text-left text-sm text-slate-600 dark:text-slate-300">
+                                    <thead class="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400">
+                                        <tr>
+                                            <th class="py-3 px-3">Month</th>
+                                            <th class="py-3 px-3 text-center">Official PDF Reading</th>
+                                            <th class="py-3 px-3 text-center">PDF Units</th>
+                                            <th class="py-3 px-3 text-center">Working Reading</th>
+                                            <th class="py-3 px-3 text-center">Working Units</th>
+                                            <th class="py-3 px-3 text-center">Smart Avg Used</th>
+                                            <th class="py-3 px-3 text-center">Basis</th>
+                                            <th class="py-3 px-3 text-center">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-xs">
+                                        <template x-for="row in (meterHistoryData?.periods || [])" :key="row.year + '_' + row.month">
+                                            <tr class="hover:bg-slate-50/60 dark:hover:bg-slate-800/50 transition">
+                                                <td class="py-2.5 px-3 font-bold font-mono text-slate-900 dark:text-white" x-text="row.month_name"></td>
+                                                <td class="py-2.5 px-3 text-center font-mono">
+                                                    <span x-show="row.has_pdf" class="font-semibold text-slate-800 dark:text-slate-200" x-text="row.pdf_reading || '—'"></span>
+                                                    <span x-show="!row.has_pdf" class="text-slate-400 italic">—</span>
+                                                </td>
+                                                <td class="py-2.5 px-3 text-center font-mono">
+                                                    <span x-show="row.pdf_units !== null" class="font-bold text-slate-700 dark:text-slate-300" x-text="row.pdf_units + ' kWh'"></span>
+                                                    <span x-show="row.pdf_units === null" class="text-slate-400">—</span>
+                                                </td>
+                                                <td class="py-2.5 px-3 text-center font-mono">
+                                                    <span x-show="row.has_working" class="font-black text-blue-600 dark:text-cyan-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-lg border border-blue-100 dark:border-blue-900" x-text="row.working_reading"></span>
+                                                    <span x-show="!row.has_working" class="text-slate-400 italic">Not entered</span>
+                                                </td>
+                                                <td class="py-2.5 px-3 text-center font-mono">
+                                                    <span x-show="row.working_units !== null" class="font-bold text-blue-600 dark:text-cyan-400" x-text="row.working_units + ' kWh'"></span>
+                                                    <span x-show="row.working_units === null" class="text-slate-400">—</span>
+                                                </td>
+                                                <td class="py-2.5 px-3 text-center font-mono">
+                                                    <span class="font-black px-2 py-0.5 rounded"
+                                                          :class="row.has_working ? 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-cyan-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'"
+                                                          x-text="row.effective_units + ' kWh'"></span>
+                                                    <span x-show="row.delta_formula" class="block text-[10px] text-slate-400 font-mono mt-0.5" x-text="row.delta_formula"></span>
+                                                </td>
+                                                <td class="py-2.5 px-3 text-center font-mono">
+                                                    <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase"
+                                                          :class="{
+                                                              'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300': row.billing_basis === 'OK',
+                                                              'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300': row.billing_basis === 'LK',
+                                                              'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300': row.billing_basis === 'MD',
+                                                              'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400': !row.billing_basis
+                                                          }"
+                                                          x-text="row.billing_basis || 'OK'"></span>
+                                                </td>
+                                                <td class="py-2.5 px-3 text-center">
+                                                    <span x-show="row.is_closed" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300">
+                                                        <span>🔒</span> Closed
+                                                    </span>
+                                                    <span x-show="!row.is_closed" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-cyan-300">
+                                                        <span>📝</span> Active
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                        <template x-if="!meterHistoryData?.periods || meterHistoryData.periods.length === 0">
+                                            <tr>
+                                                <td colspan="8" class="py-6 text-center text-slate-400 text-xs italic">
+                                                    No monthly readings recorded for this consumer yet.
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Modal Footer -->
+                    <div class="p-4 sm:p-6 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                        <button type="button" @click="showMeterHistoryModal = false" class="px-5 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white text-xs font-bold rounded-xl transition">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -1623,6 +1987,13 @@
                 newMruIdentifier: '',
                 isSubmittingMru: false,
                 createMruError: null,
+                mruOverageRequired: false,
+                mruOverageAmount: 0,
+                mruOverageWalletBalance: 0,
+                mruOverageInsufficient: false,
+                mruOverageMessage: '',
+                mruTopupUrl: '{{ route('wallet.index') }}',
+                mruUpgradeUrl: '{{ route('user-panel.subscription') }}',
                 showNewCycleModal: false,
                 showPdfViewerModal: false,
                 activePdfBill: null,
@@ -1695,6 +2066,20 @@
                 sortOption: localStorage.getItem('dashboard_sort_option') || 'ca_number_asc',
                 sortCol: 'ca_number',
                 sortAsc: true,
+                avgAdjustmentPercent: parseInt(localStorage.getItem('dashboard_avg_adjustment') || '0'),
+                avgTuningSteps: (function() {
+                    try {
+                        return JSON.parse(localStorage.getItem('dashboard_avg_tuning_steps') || '[]');
+                    } catch(e) { return []; }
+                })(),
+                showTuningModal: false,
+                tuningBaseUnits: 50,
+                customTuningStep: 10,
+                showMeterHistoryModal: false,
+                activeHistoryCa: '',
+                activeHistoryConsumerName: '',
+                meterHistoryLoading: false,
+                meterHistoryData: null,
 
                 // Dynamic Counts & Stats
                 counts: {
@@ -1836,8 +2221,8 @@
                         }
                     }
 
-                    // 2. Fetch authoritative server data
-                    await this.fetchData(this.pagination.current_page || 1);
+                    // 2. Fetch authoritative server data (silent — no preloader, preserve card position)
+                    await this.fetchData(this.pagination.current_page || 1, false, true);
                     this.lastSyncedAt = new Date();
                     this.isSyncing = false;
                 },
@@ -1865,12 +2250,18 @@
                             this.isOnline = true;
                             this.isServerReachable = true;
 
-                            if (wasDisconnected || isManual || (this.offlineQueue && this.offlineQueue.length > 0)) {
+                            if (isManual) {
+                                // User clicked manual sync — full refresh with toast
                                 await this.syncOfflineQueueAndRefresh();
-                                if (isManual) {
-                                    this.showToastNotification('🟢', 'Connected! Data refreshed from server.');
-                                }
+                                this.showToastNotification('🟢', 'Connected! Data refreshed from server.');
+                            } else if (wasDisconnected) {
+                                // Just reconnected after being offline — sync silently
+                                await this.syncOfflineQueueAndRefresh();
+                            } else if (this.offlineQueue && this.offlineQueue.length > 0) {
+                                // Online but have pending queue items — drain queue only, NO full data refresh
+                                await this.syncOfflineQueueAndRefresh();
                             }
+                            // Otherwise: routine heartbeat while online with no queue — do nothing (just CSRF refresh above)
                         } else {
                             this.isServerReachable = false;
                             if (isManual) {
@@ -1893,11 +2284,21 @@
 
                 initNetworkListeners() {
                     this.updatePendingCaSet();
+                    this._lastConnectionCheckAt = Date.now();
+
+                    // Helper: is user actively typing/interacting with form controls?
+                    const isUserBusy = () => {
+                        const el = document.activeElement;
+                        if (!el) return false;
+                        const tag = el.tagName.toLowerCase();
+                        return (tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable);
+                    };
 
                     // 1. Browser online/offline events
                     window.addEventListener('online', () => {
                         this.isOnline = true;
                         this.checkServerConnection(false);
+                        this._lastConnectionCheckAt = Date.now();
                     });
 
                     window.addEventListener('offline', () => {
@@ -1906,25 +2307,32 @@
                         this.showToastNotification('📡', 'Connection lost. Working offline safely — changes saved locally.');
                     });
 
-                    // 2. Tab focus / screen wakeup
+                    // 2. Tab focus / screen wakeup — only ping if away for 30+ seconds AND user is not mid-input
                     document.addEventListener('visibilitychange', () => {
                         if (document.visibilityState === 'visible') {
-                            this.checkServerConnection(false);
+                            const elapsed = Date.now() - (this._lastConnectionCheckAt || 0);
+                            if (elapsed > 30000 && !isUserBusy()) {
+                                this.checkServerConnection(false);
+                                this._lastConnectionCheckAt = Date.now();
+                            }
                         }
                     });
 
-                    // 3. Heartbeat retry intervals
+                    // 3. Offline queue retry — every 15s (was 5s) only when disconnected or queue has items
                     setInterval(() => {
-                        if (!this.isOnline || !this.isServerReachable || (this.offlineQueue && this.offlineQueue.length > 0)) {
+                        if ((!this.isOnline || !this.isServerReachable || (this.offlineQueue && this.offlineQueue.length > 0)) && !isUserBusy()) {
                             this.checkServerConnection(false);
+                            this._lastConnectionCheckAt = Date.now();
                         }
-                    }, 5000);
+                    }, 15000);
 
+                    // 4. General heartbeat — every 5 min (was 60s) just to keep CSRF fresh, NOT to reload data
                     setInterval(() => {
-                        if (this.isOnline && this.isServerReachable && !this.isSyncing) {
+                        if (this.isOnline && this.isServerReachable && !this.isSyncing && !isUserBusy()) {
                             this.checkServerConnection(false);
+                            this._lastConnectionCheckAt = Date.now();
                         }
-                    }, 60000);
+                    }, 300000);
                 },
 
                 setViewMode(mode) {
@@ -2039,14 +2447,19 @@
                     this.sortAsc = (dir === 'asc');
                 },
 
-                fetchData(page = 1, append = false) {
-                    if (page === 1 && !append) {
+                fetchData(page = 1, append = false, silent = false) {
+                    // Track the active card's CA so we can restore position after silent refresh
+                    const _silentActiveCa = silent && this.items.length > 0
+                        ? (this.items[this.currentCardIndex] || {}).ca_number
+                        : null;
+
+                    if (page === 1 && !append && !silent) {
                         this.currentCardIndex = 0;
                     }
 
                     if (append) {
                         this.loadingMoreCards = true;
-                    } else {
+                    } else if (!silent) {
                         this.loading = true;
                     }
 
@@ -2062,6 +2475,10 @@
                     url.searchParams.append('status_sort', this.statusSort);
                     url.searchParams.append('sort_col', this.sortCol);
                     url.searchParams.append('sort_asc', this.sortAsc ? 'true' : 'false');
+                    if (this.avgAdjustmentPercent) url.searchParams.append('adjustment_percent', this.avgAdjustmentPercent);
+                    if (this.avgTuningSteps && this.avgTuningSteps.length > 0) {
+                        url.searchParams.append('tuning_steps', JSON.stringify(this.avgTuningSteps));
+                    }
 
                     // If in card view and loading page 1 fresh, fetch up to 500 records so all cards are immediately available
                     if (this.viewMode === 'card' && !append) {
@@ -2112,6 +2529,18 @@
                                     this.items = [...this.items, ...freshItems];
                                 } else {
                                     this.items = mappedIncoming;
+                                }
+
+                                // Restore card position after silent background refresh
+                                if (_silentActiveCa && this.items.length > 0) {
+                                    const restoredIdx = this.items.findIndex(b => b.ca_number === _silentActiveCa);
+                                    if (restoredIdx !== -1) {
+                                        this.currentCardIndex = restoredIdx;
+                                    }
+                                    // If CA no longer in list (e.g. filter change), keep current index clamped
+                                    else if (this.currentCardIndex >= this.items.length) {
+                                        this.currentCardIndex = Math.max(0, this.items.length - 1);
+                                    }
                                 }
 
                                 this.updatePendingCaSet();
@@ -2485,8 +2914,10 @@
                     }
 
                     const prev = parseInt(bill.db_prev_reading) || parseInt(bill.previous_reading) || 0;
-                    const avg = parseInt(bill.smart_avg_units) || 50;
-                    let target = parseInt(bill.projected_reading) || (prev > 0 ? (prev + avg) : avg);
+                    const baseAvg = parseInt(bill.base_avg_units) || parseInt(bill.smart_avg_units) || 50;
+                    const effectiveAvg = this.getCompoundedUnits(baseAvg);
+                    const netPercent = this.getNetTuningPercent(baseAvg);
+                    let target = parseInt(bill.projected_reading) || (prev > 0 ? (prev + effectiveAvg) : effectiveAvg);
 
                     const pdfNum = parseInt(bill.official_pdf_reading);
                     if (!isNaN(pdfNum) && target < pdfNum) {
@@ -2500,7 +2931,8 @@
                     // ONLY prompt if the user explicitly set this bill as manual!
                     const isManualUserEntry = (bill.reading_source === 'manual' || bill.is_manual);
                     if (isManualUserEntry && currentVal !== '' && currentVal !== targetStr) {
-                        const confirmMsg = `This account currently has a manual reading of ${currentVal} kWh.\n\nAre you sure you want to replace it with auto-fill ${targetStr} kWh (Prev ${prev} + Avg ${avg})?`;
+                        const adjText = netPercent !== 0 ? ` [${netPercent > 0 ? '+' : ''}${netPercent}% tuning = ${effectiveAvg} kWh]` : '';
+                        const confirmMsg = `This account currently has a manual reading of ${currentVal} kWh.\n\nAre you sure you want to replace it with auto-fill ${targetStr} kWh (Prev ${prev} + Base ${baseAvg}${adjText})?`;
                         if (!confirm(confirmMsg)) {
                             return;
                         }
@@ -2546,7 +2978,9 @@
                         body: JSON.stringify({
                             month: this.selectedMonth,
                             year: this.selectedYear,
-                            mru_id: this.filterMru || null
+                            mru_id: this.filterMru || null,
+                            adjustment_percent: this.avgAdjustmentPercent || 0,
+                            tuning_steps: this.avgTuningSteps || []
                         })
                     })
                     .then(r => r.json())
@@ -2557,6 +2991,116 @@
                         }
                     })
                     .catch(err => console.error(err));
+                },
+
+                // --- SMART AVERAGE TUNING & SEQUENTIAL COMPOUNDING ---
+                openTuningModal() {
+                    this.showTuningModal = true;
+                },
+
+                addTuningStep(pct) {
+                    const val = parseFloat(pct);
+                    if (!isNaN(val) && val !== 0) {
+                        this.avgTuningSteps.push(val);
+                        localStorage.setItem('dashboard_avg_tuning_steps', JSON.stringify(this.avgTuningSteps));
+                    }
+                },
+
+                removeTuningStep(idx) {
+                    this.avgTuningSteps.splice(idx, 1);
+                    localStorage.setItem('dashboard_avg_tuning_steps', JSON.stringify(this.avgTuningSteps));
+                },
+
+                clearTuning() {
+                    this.avgTuningSteps = [];
+                    this.avgAdjustmentPercent = 0;
+                    localStorage.removeItem('dashboard_avg_tuning_steps');
+                    localStorage.setItem('dashboard_avg_adjustment', '0');
+                    fetch('/dashboard/tuning/reset', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': this.getCsrfToken(),
+                            'Accept': 'application/json'
+                        }
+                    }).catch(e => console.error(e));
+                },
+
+                applyTuningAndFetch() {
+                    this.showTuningModal = false;
+                    localStorage.setItem('dashboard_avg_tuning_steps', JSON.stringify(this.avgTuningSteps));
+                    localStorage.setItem('dashboard_avg_adjustment', String(this.getNetTuningPercent(this.tuningBaseUnits)));
+
+                    // Save to server session
+                    fetch('/dashboard/tuning', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': this.getCsrfToken(),
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            steps: this.avgTuningSteps,
+                            percent: this.getNetTuningPercent(this.tuningBaseUnits),
+                            base_units: this.tuningBaseUnits
+                        })
+                    }).catch(e => console.error(e));
+
+                    this.fetchData(1);
+                    this.showToastNotification('⚡', `Tuned average applied: ${this.getCompoundedUnits(this.tuningBaseUnits)} kWh (${(this.getNetTuningPercent(this.tuningBaseUnits) >= 0 ? '+' : '')}${this.getNetTuningPercent(this.tuningBaseUnits)}%)`);
+                },
+
+                getCompoundedStepsDetails(base = 50) {
+                    let cur = base;
+                    const details = [];
+                    for (const step of this.avgTuningSteps) {
+                        const before = cur;
+                        cur = cur * (1 + (step / 100));
+                        details.push({
+                            percent: step,
+                            before: Math.round(before * 10) / 10,
+                            after: Math.round(cur * 10) / 10
+                        });
+                    }
+                    return details;
+                },
+
+                getCompoundedUnits(base = 50) {
+                    let cur = base;
+                    for (const step of this.avgTuningSteps) {
+                        cur = cur * (1 + (step / 100));
+                    }
+                    return Math.max(1, Math.round(cur));
+                },
+
+                getNetTuningPercent(base = 50) {
+                    if (this.avgTuningSteps.length === 0) {
+                        return this.avgAdjustmentPercent || 0;
+                    }
+                    const tuned = this.getCompoundedUnits(base);
+                    return Math.round(((tuned - base) / base) * 100);
+                },
+
+                // --- 2D METER READING HISTORY MODAL ---
+                openMeterHistoryModal(caNumber, consumerName = '') {
+                    this.activeHistoryCa = caNumber;
+                    this.activeHistoryConsumerName = consumerName;
+                    this.showMeterHistoryModal = true;
+                    this.meterHistoryLoading = true;
+                    this.meterHistoryData = null;
+
+                    fetch(`/bills/matrix/${caNumber}`)
+                        .then(r => r.json())
+                        .then(res => {
+                            this.meterHistoryLoading = false;
+                            if (res.success && res.data) {
+                                this.meterHistoryData = res.data;
+                            }
+                        })
+                        .catch(err => {
+                            this.meterHistoryLoading = false;
+                            console.error(err);
+                        });
                 },
 
                 launchBillingCycle(actionType = 'download_all') {
@@ -3389,16 +3933,21 @@
                         return;
                     }
 
-                    // 5. Next Card (Configured shortcut OR un-modified arrow keys)
-                    const isNextArrow = !e.ctrlKey && !e.altKey && !e.metaKey && (e.key === 'ArrowRight' || e.key === 'ArrowDown');
+                    // Unmodified ArrowUp / ArrowDown are reserved exclusively for natural vertical page scrolling
+                    if (!e.ctrlKey && !e.altKey && !e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                        return; // Let browser scroll naturally
+                    }
+
+                    // 5. Next Card (Configured shortcut OR un-modified ArrowRight)
+                    const isNextArrow = !e.ctrlKey && !e.altKey && !e.metaKey && (e.key === 'ArrowRight');
                     if ((ks && ks.matches(e, this.shortcuts.next_card)) || isNextArrow) {
                         e.preventDefault();
                         this.nextCard();
                         return;
                     }
 
-                    // 6. Previous Card (Configured shortcut OR un-modified arrow keys)
-                    const isPrevArrow = !e.ctrlKey && !e.altKey && !e.metaKey && (e.key === 'ArrowLeft' || e.key === 'ArrowUp');
+                    // 6. Previous Card (Configured shortcut OR un-modified ArrowLeft)
+                    const isPrevArrow = !e.ctrlKey && !e.altKey && !e.metaKey && (e.key === 'ArrowLeft');
                     if ((ks && ks.matches(e, this.shortcuts.prev_card)) || isPrevArrow) {
                         e.preventDefault();
                         this.prevCard();
@@ -3448,10 +3997,17 @@
                     this.newMruName = '';
                     this.newMruIdentifier = '';
                     this.createMruError = null;
+                    this.mruOverageRequired = false;
+                    this.mruOverageAmount = 0;
+                    this.mruOverageWalletBalance = 0;
+                    this.mruOverageInsufficient = false;
+                    this.mruOverageMessage = '';
+                    this.mruTopupUrl = '{{ route('wallet.index') }}';
+                    this.mruUpgradeUrl = '{{ route('user-panel.subscription') }}';
                     this.showCreateMruModal = true;
                 },
 
-                submitCreateMru() {
+                submitCreateMru(payOverage = false) {
                     if (!this.newMruCode.trim() || !this.newMruName.trim()) return;
 
                     this.isSubmittingMru = true;
@@ -3467,21 +4023,33 @@
                         body: JSON.stringify({
                             code: this.newMruCode,
                             name: this.newMruName,
-                            full_identifier: this.newMruIdentifier
+                            full_identifier: this.newMruIdentifier,
+                            pay_overage: payOverage ? 1 : 0
                         })
                     })
                     .then(async res => {
                         const data = await res.json();
+                        if (res.status === 402 && data.requires_overage) {
+                            this.mruOverageRequired = true;
+                            this.mruOverageAmount = data.amount_due || 0;
+                            this.mruOverageWalletBalance = data.wallet_balance ?? 0;
+                            this.mruOverageInsufficient = !!data.is_insufficient_balance || (this.mruOverageWalletBalance < this.mruOverageAmount);
+                            this.mruOverageMessage = data.message || 'Plan MRU limit exceeded. Wallet deduction required.';
+                            this.mruTopupUrl = data.topup_url || '{{ route('wallet.index') }}';
+                            this.mruUpgradeUrl = data.upgrade_url || '{{ route('user-panel.subscription') }}';
+                            return null;
+                        }
                         if (!res.ok) {
                             if (data.requires_subscription && data.redirect_url) {
                                 window.location.href = data.redirect_url;
-                                return;
+                                return null;
                             }
                             throw new Error(data.message || 'Server error occurred');
                         }
                         return data;
                     })
                     .then(data => {
+                        if (!data) return;
                         if (data.already_exists) {
                             this.showCreateMruModal = false;
                             this.existingMruData = data.mru;

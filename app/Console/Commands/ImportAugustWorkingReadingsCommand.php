@@ -35,20 +35,22 @@ class ImportAugustWorkingReadingsCommand extends Command
         $month = (int) $this->option('month');
         $year = (int) $this->option('year');
 
-        if (!file_exists($filePath)) {
+        if (! file_exists($filePath)) {
             $this->error("JSON data file not found at: {$filePath}");
+
             return Command::FAILURE;
         }
 
         $rawJson = file_get_contents($filePath);
         $data = json_decode($rawJson, true);
 
-        if (!is_array($data) || empty($data)) {
+        if (! is_array($data) || empty($data)) {
             $this->error("Invalid or empty JSON data in: {$filePath}");
+
             return Command::FAILURE;
         }
 
-        $this->info("Importing " . count($data) . " working readings for Month: {$month}, Year: {$year}...");
+        $this->info('Importing '.count($data)." working readings for Month: {$month}, Year: {$year}...");
 
         $billsUpdated = 0;
         $consumersUpdated = 0;
@@ -62,7 +64,7 @@ class ImportAugustWorkingReadingsCommand extends Command
                 // 1. Find all matching BillRecords for this CA and month
                 $bills = BillRecord::where('ca_number', $caStr)
                     ->where('billing_month', $month)
-                    ->when($year > 0, fn($q) => $q->where('billing_year', $year))
+                    ->when($year > 0, fn ($q) => $q->where('billing_year', $year))
                     ->get();
 
                 if ($bills->isEmpty()) {
@@ -85,10 +87,10 @@ class ImportAugustWorkingReadingsCommand extends Command
                             ->where('ca_number', $bill->ca_number)
                             ->where(function ($q) use ($bill) {
                                 $q->where('billing_year', '>', $bill->billing_year)
-                                  ->orWhere(function ($q2) use ($bill) {
-                                      $q2->where('billing_year', $bill->billing_year)
-                                         ->where('billing_month', '>', $bill->billing_month);
-                                  });
+                                    ->orWhere(function ($q2) use ($bill) {
+                                        $q2->where('billing_year', $bill->billing_year)
+                                            ->where('billing_month', '>', $bill->billing_month);
+                                    });
                             })
                             ->orderBy('billing_year', 'asc')
                             ->orderBy('billing_month', 'asc')
@@ -104,7 +106,7 @@ class ImportAugustWorkingReadingsCommand extends Command
                             $futureBill->previous_reading = (string) $currentChainReading;
                             $avgUnits = $futureBill->units_consumed ?: 50;
                             $newProjected = $currentChainReading + $avgUnits;
-                            if (!empty($futureBill->current_reading) && is_numeric($futureBill->current_reading)) {
+                            if (! empty($futureBill->current_reading) && is_numeric($futureBill->current_reading)) {
                                 $pdfReading = (int) $futureBill->current_reading;
                                 if ($newProjected < $pdfReading) {
                                     $newProjected = $pdfReading;
@@ -132,8 +134,8 @@ class ImportAugustWorkingReadingsCommand extends Command
         $this->info("✅ Successfully updated {$billsUpdated} BillRecord(s) with August working readings.");
         $this->info("✅ Successfully updated {$consumersUpdated} ConsumerAccount ledger(s).");
 
-        if (!empty($missingBills)) {
-            $this->warn("⚠️ " . count($missingBills) . " CAs had no August BillRecord: " . implode(', ', $missingBills));
+        if (! empty($missingBills)) {
+            $this->warn('⚠️ '.count($missingBills).' CAs had no August BillRecord: '.implode(', ', $missingBills));
         }
 
         return Command::SUCCESS;

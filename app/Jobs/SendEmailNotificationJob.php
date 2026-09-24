@@ -39,7 +39,7 @@ class SendEmailNotificationJob implements ShouldQueue
     public function handle(EmailChannelDriver $emailDriver): void
     {
         $delivery = NotificationDelivery::with(['notification.user'])->find($this->deliveryId);
-        if (!$delivery || !$delivery->notification) {
+        if (! $delivery || ! $delivery->notification) {
             return;
         }
 
@@ -49,7 +49,7 @@ class SendEmailNotificationJob implements ShouldQueue
 
         $result = $emailDriver->send($notification, $delivery);
 
-        if (!$result->success) {
+        if (! $result->success) {
             $isFinalAttempt = ($this->attempts() >= $this->tries) || (app()->environment('testing') && config('queue.default') === 'sync');
 
             if ($isFinalAttempt) {

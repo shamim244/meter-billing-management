@@ -2,28 +2,23 @@
 
 namespace Tests\Feature;
 
-use App\Events\AgentPlanMigratedEvent;
 use App\Events\AgentSubscribedEvent;
 use App\Events\ConsumerOverageChargedEvent;
-use App\Events\MruLockedEvent;
 use App\Events\MruOverageChargedEvent;
 use App\Events\MruUnlockedEvent;
 use App\Events\PlanCreatedEvent;
-use App\Events\PlanDeletedEvent;
 use App\Events\PlanUpdatedEvent;
-use App\Models\AgentSubscription;
 use App\Models\BillingCycle;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\Plan;
-use App\Models\PlanDuration;
-use App\Models\PlanOverageCharge;
 use App\Models\User;
 use App\Services\Plan\ConsumerQuotaService;
 use App\Services\Plan\MruQuotaService;
 use App\Services\Plan\PlanService;
 use App\Services\Plan\RenewalService;
 use App\Services\Wallet\WalletService;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use InvalidArgumentException;
@@ -34,17 +29,23 @@ class PlanManagementSystemTest extends TestCase
     use RefreshDatabase;
 
     protected User $admin;
+
     protected User $agent;
+
     protected PlanService $planService;
+
     protected MruQuotaService $mruQuotaService;
+
     protected ConsumerQuotaService $consumerQuotaService;
+
     protected RenewalService $renewalService;
+
     protected WalletService $walletService;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
+        $this->seed(RoleAndPermissionSeeder::class);
 
         $this->admin = User::where('email', 'admin@nbpdcl-saas.com')->first();
         $this->agent = User::where('email', 'test@example.com')->first();
@@ -80,11 +81,11 @@ class PlanManagementSystemTest extends TestCase
         // 2. Agent subscribes to the plan
         $subscription = $this->planService->subscribeAgent($this->agent, $plan, $duration);
 
-        $this->assertEquals(399.00, (float)$subscription->base_price_paid);
+        $this->assertEquals(399.00, (float) $subscription->base_price_paid);
         $this->assertEquals(5, $subscription->included_mrus_locked);
         $this->assertEquals(2000, $subscription->included_consumers_locked);
-        $this->assertEquals(100.00, (float)$subscription->extra_mru_rate_locked);
-        $this->assertEquals(0.25, (float)$subscription->extra_consumer_rate_locked);
+        $this->assertEquals(100.00, (float) $subscription->extra_mru_rate_locked);
+        $this->assertEquals(0.25, (float) $subscription->extra_consumer_rate_locked);
 
         // 3. Admin modifies the Plan (doubles price and halves quotas)
         $this->planService->updatePlan($plan, [
@@ -98,11 +99,11 @@ class PlanManagementSystemTest extends TestCase
 
         // 4. Verify that existing subscriber's locked record remains completely unchanged
         $freshSub = $subscription->fresh();
-        $this->assertEquals(399.00, (float)$freshSub->base_price_paid);
+        $this->assertEquals(399.00, (float) $freshSub->base_price_paid);
         $this->assertEquals(5, $freshSub->included_mrus_locked);
         $this->assertEquals(2000, $freshSub->included_consumers_locked);
-        $this->assertEquals(100.00, (float)$freshSub->extra_mru_rate_locked);
-        $this->assertEquals(0.25, (float)$freshSub->extra_consumer_rate_locked);
+        $this->assertEquals(100.00, (float) $freshSub->extra_mru_rate_locked);
+        $this->assertEquals(0.25, (float) $freshSub->extra_consumer_rate_locked);
     }
 
     /**

@@ -7,6 +7,7 @@ use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
+use Smalot\PdfParser\Parser;
 use Symfony\Component\Process\Process;
 
 class EngineService
@@ -19,43 +20,43 @@ class EngineService
         $defaultMonth = $targetMonth ?: now()->month;
         $defaultYear = $targetYear ?: now()->year;
 
-        $runId = uniqid('run_' . time() . '_');
-        $tempPath = storage_path('app/temp_runs/' . $runId);
-        
+        $runId = uniqid('run_'.time().'_');
+        $tempPath = storage_path('app/temp_runs/'.$runId);
+
         // Create temp directories
         File::ensureDirectoryExists($tempPath);
-        File::ensureDirectoryExists($tempPath . '/bills');
-        File::ensureDirectoryExists($tempPath . '/logs');
-        File::ensureDirectoryExists($tempPath . '/vendor');
+        File::ensureDirectoryExists($tempPath.'/bills');
+        File::ensureDirectoryExists($tempPath.'/logs');
+        File::ensureDirectoryExists($tempPath.'/vendor');
 
         // Write ca.txt
-        File::put($tempPath . '/ca.txt', implode("\n", $caNumbers));
+        File::put($tempPath.'/ca.txt', implode("\n", $caNumbers));
 
         // Create vendor/autoload.php to point to original vendor autoload
         $originalVendorAutoload = base_path('../vendor/autoload.php');
-        File::put($tempPath . '/vendor/autoload.php', "<?php\nrequire_once '" . str_replace('\\', '/', $originalVendorAutoload) . "';\n");
+        File::put($tempPath.'/vendor/autoload.php', "<?php\nrequire_once '".str_replace('\\', '/', $originalVendorAutoload)."';\n");
 
         // Write config.php
         $configContent = sprintf(
-            "<?php\nreturn [\n" .
-            "    'ca_file' => '%s',\n" .
-            "    'bills_dir' => '%s',\n" .
-            "    'bill_data_file' => '%s',\n" .
-            "    'status_file' => '%s',\n" .
-            "    'api_url' => 'https://api.bsphcl.co.in/nbWSMobileApp/ViewBill.asmx/GetViewBill?strCANumber=',\n" .
-            "    'log_file' => '%s',\n" .
+            "<?php\nreturn [\n".
+            "    'ca_file' => '%s',\n".
+            "    'bills_dir' => '%s',\n".
+            "    'bill_data_file' => '%s',\n".
+            "    'status_file' => '%s',\n".
+            "    'api_url' => 'https://api.bsphcl.co.in/nbWSMobileApp/ViewBill.asmx/GetViewBill?strCANumber=',\n".
+            "    'log_file' => '%s',\n".
             "];\n",
-            str_replace('\\', '/', $tempPath . '/ca.txt'),
-            str_replace('\\', '/', $tempPath . '/bills'),
-            str_replace('\\', '/', $tempPath . '/bill_data.json'),
-            str_replace('\\', '/', $tempPath . '/statuses.json'),
-            str_replace('\\', '/', $tempPath . '/logs/process.log')
+            str_replace('\\', '/', $tempPath.'/ca.txt'),
+            str_replace('\\', '/', $tempPath.'/bills'),
+            str_replace('\\', '/', $tempPath.'/bill_data.json'),
+            str_replace('\\', '/', $tempPath.'/statuses.json'),
+            str_replace('\\', '/', $tempPath.'/logs/process.log')
         );
-        File::put($tempPath . '/config.php', $configContent);
+        File::put($tempPath.'/config.php', $configContent);
 
         // Copy main.php and info.php
-        File::copy(base_path('../main.php'), $tempPath . '/main.php');
-        File::copy(base_path('../info.php'), $tempPath . '/info.php');
+        File::copy(base_path('../main.php'), $tempPath.'/main.php');
+        File::copy(base_path('../info.php'), $tempPath.'/info.php');
 
         $results = [
             'total' => count($caNumbers),
@@ -73,15 +74,15 @@ class EngineService
 
         try {
             // Run main.php (downloader)
-            $downloaderProcess = new Process(['php', $tempPath . '/main.php']);
+            $downloaderProcess = new Process(['php', $tempPath.'/main.php']);
             $downloaderProcess->setTimeout(300);
             $downloaderProcess->run();
 
             // Check for local fixture fallbacks if remote download missed any
             foreach ($caNumbers as $ca) {
-                $pdfFile = $tempPath . '/bills/' . $ca . '.pdf';
-                if (!File::exists($pdfFile) || File::size($pdfFile) === 0) {
-                    $localFixture = base_path('../bills/' . $ca . '.pdf');
+                $pdfFile = $tempPath.'/bills/'.$ca.'.pdf';
+                if (! File::exists($pdfFile) || File::size($pdfFile) === 0) {
+                    $localFixture = base_path('../bills/'.$ca.'.pdf');
                     if (File::exists($localFixture) && File::size($localFixture) > 0) {
                         File::copy($localFixture, $pdfFile);
                     }
@@ -89,21 +90,21 @@ class EngineService
             }
 
             // Run info.php (parser)
-            $parserProcess = new Process(['php', $tempPath . '/info.php']);
+            $parserProcess = new Process(['php', $tempPath.'/info.php']);
             $parserProcess->setTimeout(300);
             $parserProcess->run();
 
             // Read parsed data
             $parsedData = [];
-            if (File::exists($tempPath . '/bill_data.json')) {
-                $parsedData = json_decode(File::get($tempPath . '/bill_data.json'), true) ?: [];
+            if (File::exists($tempPath.'/bill_data.json')) {
+                $parsedData = json_decode(File::get($tempPath.'/bill_data.json'), true) ?: [];
             }
 
             foreach ($caNumbers as $ca) {
-                $pdfFile = $tempPath . '/bills/' . $ca . '.pdf';
+                $pdfFile = $tempPath.'/bills/'.$ca.'.pdf';
                 $assignedMruId = $targetMruId ?: ($consumerMruMap[$ca] ?? null);
 
-                if (!File::exists($pdfFile) || File::size($pdfFile) === 0) {
+                if (! File::exists($pdfFile) || File::size($pdfFile) === 0) {
                     // Download failed
                     $results['failed_download']++;
                     $results['details'][$ca] = [
@@ -123,11 +124,12 @@ class EngineService
                         'error_message' => 'Download failed',
                         'processing_date' => now(),
                     ]);
+
                     continue;
                 }
 
                 // Check if parse data exists
-                if (!isset($parsedData[$ca]) || empty($parsedData[$ca]['consumer_name'])) {
+                if (! isset($parsedData[$ca]) || empty($parsedData[$ca]['consumer_name'])) {
                     // Try to extract at least some raw data or mark as failed parse
                     $results['failed_parse']++;
                     $results['details'][$ca] = [
@@ -147,6 +149,7 @@ class EngineService
                         'error_message' => 'Parsing failed',
                         'processing_date' => now(),
                     ]);
+
                     continue;
                 }
 
@@ -156,11 +159,11 @@ class EngineService
                 $mruCode = 'UNKNOWN';
                 try {
                     require_once base_path('../vendor/autoload.php');
-                    $pdfParser = new \Smalot\PdfParser\Parser();
+                    $pdfParser = new Parser;
                     $pdfObj = $pdfParser->parseFile($pdfFile);
                     $pdfText = $pdfObj->getText();
                     if (preg_match('/,e vkj ;q\s*\n\s*([A-Z_]+(?:\s*\n\s*[A-Z_]+)*)/u', $pdfText, $mruMatches)) {
-                        $mruCode = str_replace(["\r", "\n", " "], "", $mruMatches[1]);
+                        $mruCode = str_replace(["\r", "\n", ' '], '', $mruMatches[1]);
                     }
                 } catch (\Exception $e) {
                     // fallback
@@ -172,7 +175,7 @@ class EngineService
                 if ($targetMruId) {
                     $mru = Mru::find($targetMruId);
                 }
-                if (!$mru) {
+                if (! $mru) {
                     $mru = Mru::firstOrCreate(
                         ['user_id' => $userId, 'code' => $mruCode],
                         ['name' => $mruName, 'full_identifier' => $mruCode, 'status' => 'active']
@@ -185,7 +188,7 @@ class EngineService
                     [
                         'mru_id' => $mru->id,
                         'consumer_name' => $data['consumer_name'] ?? null,
-                        'status' => 'active'
+                        'status' => 'active',
                     ]
                 );
 
@@ -195,10 +198,10 @@ class EngineService
                 $year = now()->year;
                 if (preg_match('/([A-Z]+),\s*(\d{4})/i', $billMonthStr, $periodMatches)) {
                     $monthName = strtoupper(trim($periodMatches[1]));
-                    $year = (int)$periodMatches[2];
+                    $year = (int) $periodMatches[2];
                     $monthMap = [
                         'JAN' => 1, 'FEB' => 2, 'MAR' => 3, 'APR' => 4, 'MAY' => 5, 'JUN' => 6,
-                        'JUL' => 7, 'AUG' => 8, 'SEP' => 9, 'OCT' => 10, 'NOV' => 11, 'DEC' => 12
+                        'JUL' => 7, 'AUG' => 8, 'SEP' => 9, 'OCT' => 10, 'NOV' => 11, 'DEC' => 12,
                     ];
                     $month = $monthMap[substr($monthName, 0, 3)] ?? $month;
                 }
@@ -207,7 +210,7 @@ class EngineService
                 $storageDir = "users/{$userId}/pdfs/{$year}/{$month}/{$mruCode}";
                 $storageFilename = "{$ca}.pdf";
                 $storagePath = "{$storageDir}/{$storageFilename}";
-                
+
                 Storage::disk('local')->makeDirectory($storageDir);
                 Storage::disk('local')->put($storagePath, File::get($pdfFile));
 
