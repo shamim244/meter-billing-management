@@ -16,7 +16,8 @@ class BillDownloadService
     public function download(array $caNumbers, int $userId, int $month, int $year, ?int $mruId = null, ?int $concurrency = null): array
     {
         $concurrency = $concurrency ?: (int) config('nbpdcl.concurrency', 10);
-        $apiUrl = config('nbpdcl.api_url', 'https://api.bsphcl.co.in/nbWSMobileApp/ViewBill.asmx/GetViewBill?strCANumber=');
+        $wssUrl = config('nbpdcl.wss_url', 'https://wss.nbpdcl.co.in/fgweb/web/json/plugin/com.fluentgrid.cp.api.NscUploadBridgeService/service?&rtype=DOWNLOAD');
+        $aesKey = config('nbpdcl.aes_key', 'fgwebcp@2020');
 
         $this->appendLog($userId, '==================================================');
         $this->appendLog($userId, sprintf('Initiating task: Bill Downloader (Period: %02d/%04d, Accounts: %d)...', $month, $year, count($caNumbers)));
@@ -59,16 +60,43 @@ class BillDownloadService
         $mh = curl_multi_init();
         $activeRequests = [];
 
-        $addHandle = function (string $ca) use ($mh, &$activeRequests, $apiUrl) {
+        $monthStr = sprintf('%02d', $month);
+        $yearStr = (string) $year;
+
+        $addHandle = function (string $ca) use ($mh, &$activeRequests, $wssUrl, $aesKey, $monthStr, $yearStr) {
             $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $apiUrl.urlencode(trim($ca)));
+
+            $payload = [
+                'req' => [
+                    'billMonth' => $monthStr,
+                    'billYear' => $yearStr,
+                    'scno' => trim($ca),
+                    'lang' => 'H',
+                    'printtype' => 'PDF',
+                    'modulename' => 'WSS',
+                    'genPDF' => 'N',
+                    'finalflag' => 'X',
+                ],
+                'action' => 'billing/getviewbillprint',
+                'method' => 'POST',
+                'auth' => 'TOKEN',
+            ];
+
+            $encryptedBody = $this->encryptCryptoJS(json_encode($payload), $aesKey);
+
+            curl_setopt($ch, CURLOPT_URL, $wssUrl);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $encryptedBody);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: text/plain',
+                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            ]);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_TIMEOUT, 60);
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
             curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
 
             curl_multi_add_handle($mh, $ch);
             $activeRequests[(int) $ch] = [
@@ -179,5 +207,23 @@ class BillDownloadService
         $logPath = "{$logDir}/process.log";
         $timestamp = date('Y-m-d H:i:s');
         File::append($logPath, "[{$timestamp}] {$message}\n");
+    }
+
+    /**
+     * Encrypt plaintext into CryptoJS AES-256-CBC compatible format with OpenSSL EVP_BytesToKey.
+     */
+    public function encryptCryptoJS(string $plaintext, string $passphrase): string
+    {
+        $salt = openssl_random_pseudo_bytes(8);
+        $hash1 = md5($passphrase.$salt, true);
+        $hash2 = md5($hash1.$passphrase.$salt, true);
+        $hash3 = md5($hash2.$passphrase.$salt, true);
+
+        $key = $hash1.$hash2;
+        $iv = substr($hash3, 0, 16);
+
+        $encrypted = openssl_encrypt($plaintext, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
+
+        return base64_encode('Salted__'.$salt.$encrypted);
     }
 }

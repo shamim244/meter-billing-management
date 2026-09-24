@@ -136,6 +136,27 @@
                 </div>
             </div>
 
+            <!-- ⚠️ PERSISTENT FAILED SYNC DRAWER / BANNER -->
+            <div x-show="syncErrors.length > 0" x-cloak class="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-rose-500/15 via-rose-500/10 to-amber-500/15 border border-rose-500/80 dark:border-rose-600/80 text-rose-950 dark:text-rose-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200">
+                <div class="flex items-center gap-2.5 text-xs font-bold">
+                    <span class="text-base">⚠️</span>
+                    <span>
+                        <strong x-text="syncErrors.length + (syncErrors.length === 1 ? ' update' : ' updates')"></strong> was rejected by the server and reverted. Click to review:
+                    </span>
+                </div>
+                <div class="flex items-center gap-2 shrink-0 flex-wrap">
+                    <template x-for="err in syncErrors" :key="err.ca_number + '_' + err.field">
+                        <button type="button" @click="jumpToCa(err.ca_number)" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95 flex items-center gap-1 cursor-pointer">
+                            <span x-text="'CA: ' + err.ca_number"></span>
+                            <span class="text-[9px] opacity-80" x-text="'(' + err.field + ')'"></span>
+                        </button>
+                    </template>
+                    <button type="button" @click="syncErrors = []" class="text-xs text-rose-700 dark:text-rose-300 hover:underline px-1 font-semibold cursor-pointer">
+                        Dismiss
+                    </button>
+                </div>
+            </div>
+
             <!-- Flash Alerts -->
             @if(session('success'))
                 <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center justify-between shadow-sm">
@@ -558,10 +579,11 @@
                         </thead>
                         <tbody class="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
                             <template x-for="(bill, index) in items" :key="bill.id">
-                                <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition duration-150" :class="{
-                                    'bg-emerald-50/30 dark:bg-emerald-950/25': bill.review_status === 'submitted',
-                                    'bg-rose-50/30 dark:bg-rose-950/25': bill.review_status === 'critical',
-                                    'bg-amber-50/30 dark:bg-amber-950/25': bill.review_status === 'doubt'
+                                <tr :id="'row-' + bill.ca_number" class="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition duration-150" :class="{
+                                    'ring-2 ring-rose-500 bg-rose-50/50 dark:bg-rose-950/40': bill._syncError,
+                                    'bg-emerald-50/30 dark:bg-emerald-950/25': bill.review_status === 'submitted' && !bill._syncError,
+                                    'bg-rose-50/30 dark:bg-rose-950/25': bill.review_status === 'critical' && !bill._syncError,
+                                    'bg-amber-50/30 dark:bg-amber-950/25': bill.review_status === 'doubt' && !bill._syncError
                                 }">
                                     <!-- Consumer CA & Name -->
                                     <td class="py-3 px-3">
@@ -589,6 +611,11 @@
                                                     <template x-if="isCaPendingSync(bill.ca_number)">
                                                         <span class="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-800" title="Changes saved locally on device, waiting to sync with server">
                                                             ☁️ Offline
+                                                        </span>
+                                                    </template>
+                                                    <template x-if="bill._syncError">
+                                                        <span class="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-rose-600 text-white shadow-2xs animate-pulse" :title="bill._syncErrorMsg || 'Server rejected update'">
+                                                            ⚠️ Reverted
                                                         </span>
                                                     </template>
                                                 </div>
@@ -1994,6 +2021,23 @@
                         delete this.inFlightControllers[key];
                     }
                 },
+                syncErrors: [],
+
+                jumpToCa(caNumber) {
+                    if (!caNumber) return;
+                    const idx = this.items.findIndex(b => String(b.ca_number) === String(caNumber));
+                    if (idx !== -1) {
+                        if (this.viewMode === 'card') {
+                            this.currentCardIndex = idx;
+                        } else {
+                            const row = document.getElementById(`row-${caNumber}`);
+                            if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    } else {
+                        this.searchQuery = String(caNumber);
+                        this.fetchData(1);
+                    }
+                },
 
                 // Modals
                 showCreateMruModal: false,
@@ -2139,6 +2183,18 @@
 
                     this.parseSortOption();
                     this.initNetworkListeners();
+
+                    // 🛡️ Data Loss Prevention: BeforeUnload Tab Close / Refresh Shield
+                    window.addEventListener('beforeunload', (e) => {
+                        const hasInFlight = this.inFlightControllers && Object.keys(this.inFlightControllers).length > 0;
+                        const hasPendingOffline = this.offlineQueue && this.offlineQueue.length > 0;
+                        if (hasInFlight || hasPendingOffline) {
+                            e.preventDefault();
+                            e.returnValue = 'You have unsaved or pending changes syncing to the server. Are you sure you want to leave?';
+                            return e.returnValue;
+                        }
+                    });
+
                     this.fetchData(1);
                 },
 
@@ -2225,6 +2281,15 @@
                                         successCount++;
                                         this.offlineQueue = this.offlineQueue.filter(q => !(q.type === item.type && (q.ca_number === item.ca_number || (item.id && q.id === item.id))));
                                         localStorage.setItem('nbpdcl_offline_queue_v1', JSON.stringify(this.offlineQueue));
+                                    } else {
+                                        const errJson = await res.json().catch(() => ({}));
+                                        if (res.status === 422 || res.status === 400) {
+                                            this.offlineQueue = this.offlineQueue.filter(q => !(q.type === item.type && (q.ca_number === item.ca_number || (item.id && q.id === item.id))));
+                                            localStorage.setItem('nbpdcl_offline_queue_v1', JSON.stringify(this.offlineQueue));
+                                            if (item.ca_number && !this.syncErrors.some(e => e.ca_number === item.ca_number && e.field === item.type)) {
+                                                this.syncErrors.push({ ca_number: item.ca_number, field: item.type, msg: errJson.message || 'Offline sync rejected' });
+                                            }
+                                        }
                                     }
                                 }
                             } catch (e) {
@@ -2894,6 +2959,7 @@
 
                     fetch('/bills/update-working-reading', {
                         method: 'POST',
+                        keepalive: true,
                         signal: controller.signal,
                         headers: {
                             'Content-Type': 'application/json',
@@ -2929,6 +2995,7 @@
                             bill._savedWorkingReading = bill.working_reading;
                             bill._syncError = false;
                             bill._syncErrorMsg = null;
+                            this.syncErrors = this.syncErrors.filter(e => !(e.ca_number === bill.ca_number && e.field === 'Reading'));
                             if (data.reading_source) {
                                 bill.reading_source = data.reading_source;
                                 bill.is_manual = (data.reading_source === 'manual');
@@ -2954,6 +3021,9 @@
                             bill.pdf_delta = snapshot.pdf_delta;
                             bill._syncError = true;
                             bill._syncErrorMsg = err.message || 'Rejected by server';
+                            if (!this.syncErrors.some(e => e.ca_number === bill.ca_number && e.field === 'Reading')) {
+                                this.syncErrors.push({ ca_number: bill.ca_number, field: 'Reading', msg: bill._syncErrorMsg });
+                            }
                             this.showToastNotification('⚠️', `Failed to update reading: ${err.message || 'Validation rejected'} (Reverted).`);
                             return;
                         }
@@ -3354,6 +3424,7 @@
                     // Send API request
                     fetch('/bills/status', {
                         method: 'POST',
+                        keepalive: true,
                         signal: controller.signal,
                         headers: {
                             'Content-Type': 'application/json',
@@ -3377,6 +3448,7 @@
                         if (json.success) {
                             bill._syncError = false;
                             bill._syncErrorMsg = null;
+                            this.syncErrors = this.syncErrors.filter(e => !(e.ca_number === bill.ca_number && e.field === 'Status'));
                         } else {
                             throw new Error(json.message || 'Server rejected status update');
                         }
@@ -3405,6 +3477,9 @@
                         bill._unlocked = snapshot._unlocked;
                         bill._syncError = true;
                         bill._syncErrorMsg = err.message || 'Server rejected status update';
+                        if (!this.syncErrors.some(e => e.ca_number === bill.ca_number && e.field === 'Status')) {
+                            this.syncErrors.push({ ca_number: bill.ca_number, field: 'Status', msg: bill._syncErrorMsg });
+                        }
 
                         // Restore counts
                         if (this.counts[newStatus] !== undefined) {
@@ -3478,6 +3553,7 @@
 
                     fetch('/bills/remark', {
                         method: 'POST',
+                        keepalive: true,
                         signal: controller.signal,
                         headers: {
                             'Content-Type': 'application/json',
@@ -3498,6 +3574,7 @@
                     .then(json => {
                         if (json.success) {
                             bill._syncError = false;
+                            this.syncErrors = this.syncErrors.filter(e => !(e.ca_number === bill.ca_number && e.field === 'Remark'));
                             this.showToastNotification(
                                 '💬',
                                 current.trim() ? `Saved note for CA ${bill.ca_number}` : `Cleared note for CA ${bill.ca_number}`,
@@ -3535,6 +3612,9 @@
                         bill._lastSavedRemark = prev;
                         bill._syncError = true;
                         bill._syncErrorMsg = err.message || 'Failed to save note';
+                        if (!this.syncErrors.some(e => e.ca_number === bill.ca_number && e.field === 'Remark')) {
+                            this.syncErrors.push({ ca_number: bill.ca_number, field: 'Remark', msg: bill._syncErrorMsg });
+                        }
                         this.showToastNotification('⚠️', `Failed to save note for CA ${bill.ca_number} (Reverted).`);
                     })
                     .finally(() => {
@@ -3583,6 +3663,7 @@
 
                     fetch('/bills/tag', {
                         method: 'POST',
+                        keepalive: true,
                         signal: controller.signal,
                         headers: {
                             'Content-Type': 'application/json',
@@ -3604,6 +3685,7 @@
                     .then(json => {
                         if (json.success) {
                             bill._syncError = false;
+                            this.syncErrors = this.syncErrors.filter(e => !(e.ca_number === bill.ca_number && e.field === 'Tag'));
                             this.showToastNotification(
                                 '🏷️',
                                 `Tag for CA ${bill.ca_number} set to ${json.display_tag}`,
@@ -3642,6 +3724,9 @@
                         bill.full_tag = this.getTagFullLabel(prevTag);
                         bill._syncError = true;
                         bill._syncErrorMsg = err.message || 'Failed to save tag';
+                        if (!this.syncErrors.some(e => e.ca_number === bill.ca_number && e.field === 'Tag')) {
+                            this.syncErrors.push({ ca_number: bill.ca_number, field: 'Tag', msg: bill._syncErrorMsg });
+                        }
                         this.showToastNotification('⚠️', `Failed to set tag for CA ${bill.ca_number} (Reverted).`);
                     })
                     .finally(() => {
