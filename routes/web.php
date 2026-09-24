@@ -210,6 +210,10 @@ Route::middleware(['auth', 'admin.restore_impersonation', 'role:admin', 'active'
     Route::get('/wallets/{user}/export', [AdminWalletController::class, 'export'])->name('wallets.export');
 
     Route::get('/bills', [AdminBillController::class, 'index'])->name('bills.index');
+    Route::get('/bills/engine-settings', [AdminBillController::class, 'engineSettings'])->name('bills.engine-settings');
+    Route::post('/bills/engine-settings', [AdminBillController::class, 'updateEngineSettings'])->name('bills.engine-settings.update');
+    Route::post('/bills/engine-settings/reset', [AdminBillController::class, 'resetEngineSettings'])->name('bills.engine-settings.reset');
+    Route::post('/bills/engine-settings/diagnostic', [AdminBillController::class, 'testEngineDiagnostic'])->name('bills.engine-settings.diagnostic');
 
     Route::get('/mrus', [AdminMruController::class, 'index'])->name('mrus.index');
     Route::patch('/mrus/{mru}', [AdminMruController::class, 'update'])->name('mrus.update');

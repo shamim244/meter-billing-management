@@ -2,6 +2,8 @@
 
 namespace App\Services\Extraction;
 
+use App\Models\SystemSetting;
+
 class BillExtractionManager
 {
     protected array $extractors;
@@ -21,14 +23,14 @@ class BillExtractionManager
      */
     public function detectFormat(string $text): string
     {
-        // 1. Check for modern JasperReports / Unicode Devanagari markers
-        if ($this->jasperExtractor->supports($text)) {
-            return 'jasper_unicode';
-        }
-
-        // 2. Check for legacy Kruti Dev / iText markers
+        // 1. Check for legacy Kruti Dev / iText markers
         if ($this->legacyExtractor->supports($text)) {
             return 'legacy_krutidev';
+        }
+
+        // 2. Check for modern JasperReports / Unicode Devanagari markers
+        if ($this->jasperExtractor->supports($text)) {
+            return 'jasper_unicode';
         }
 
         // 3. Heuristic analysis if ambiguous
@@ -53,7 +55,7 @@ class BillExtractionManager
      */
     public function extract(string $text, ?string $pdfPath = null): array
     {
-        $settingMode = \App\Models\SystemSetting::get('nbpdcl_extraction_engine', config('nbpdcl.extraction_engine', 'auto'));
+        $settingMode = SystemSetting::get('nbpdcl_extraction_engine', config('nbpdcl.extraction_engine', 'auto'));
 
         if (in_array($settingMode, ['jasper_unicode', 'legacy_krutidev'], true)) {
             $detectedFormat = $settingMode;

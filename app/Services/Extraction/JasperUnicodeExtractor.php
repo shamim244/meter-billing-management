@@ -15,12 +15,13 @@ class JasperUnicodeExtractor implements BillExtractorInterface
     public function supports(string $text): bool
     {
         return str_contains($text, 'विधुत') ||
+               str_contains($text, 'विद्युत') ||
                str_contains($text, 'बिल माह') ||
                str_contains($text, 'स्मार्ट प्रीपेड') ||
                str_contains($text, 'JasperReports') ||
-               str_contains($text, 'KWH') ||
-               str_contains($text, 'BARSOI_NEW') ||
-               str_contains($text, 'बिल का आधार');
+               str_contains($text, 'बिल का आधार') ||
+               str_contains($text, 'विपत्र') ||
+               (preg_match_all('/[\x{0900}-\x{097F}]/u', $text) > 10);
     }
 
     /**
@@ -66,7 +67,7 @@ class JasperUnicodeExtractor implements BillExtractorInterface
         // 2. Father / Relative Name
         if (preg_match('/पिता का नाम[\t\s]*:[\t\s]*([^:\r\n]+)/u', $cleanText, $m)) {
             $f = trim(preg_replace('/\s+/', ' ', $m[1]));
-            if (! empty($f) && $f !== '-') {
+            if (! empty($f) && $f !== '-' && ! str_contains($f, 'कनेक्शन') && ! str_contains($f, 'विवरणी')) {
                 $data['father_name'] = $f;
             }
         }
