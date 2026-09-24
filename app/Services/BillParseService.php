@@ -190,7 +190,41 @@ class BillParseService
                     $initialWorking = (string) $extracted['current_reading'];
                 }
 
+                // Resolve MRU from extracted bill data if missing on record
+                $mruId = $record->mru_id;
+                $newPdfPath = $record->pdf_path;
+                if (! empty($extracted['mru'])) {
+                    $rawMru = trim($extracted['mru']);
+                    $mruCode = str_contains($rawMru, '/') ? trim(substr(strrchr($rawMru, '/'), 1)) : $rawMru;
+                    $mruName = str_replace('_', ' ', $mruCode);
+                    if (! $mruId) {
+                        $mru = Mru::firstOrCreate(
+                            ['user_id' => $userId, 'code' => $mruCode],
+                            ['name' => $mruName, 'full_identifier' => $rawMru, 'status' => 'active']
+                        );
+                        $mruId = $mru->id;
+                    }
+
+                    // Relocate PDF from GENERAL folder to identified MRU folder
+                    if ($record->pdf_path && str_contains($record->pdf_path, '/GENERAL/')) {
+                        $targetDir = "users/{$userId}/pdfs/{$record->billing_year}/{$record->billing_month}/{$mruCode}";
+                        $targetPath = "{$targetDir}/{$ca}.pdf";
+                        Storage::disk('local')->makeDirectory($targetDir);
+                        if (Storage::disk('local')->exists($record->pdf_path)) {
+                            Storage::disk('local')->move($record->pdf_path, $targetPath);
+                            $newPdfPath = $targetPath;
+                        }
+                    }
+                }
+
+                if ($mruId && $masterAccount && ! $masterAccount->mru_id) {
+                    $masterAccount->mru_id = $mruId;
+                    $masterAccount->save();
+                }
+
                 $record->update([
+                    'mru_id' => $mruId ?: $record->mru_id,
+                    'pdf_path' => $newPdfPath,
                     'bill_month_label' => $extracted['bill_month'] ?: $record->bill_month_label,
                     'consumer_name' => $finalConsumerName,
                     'total_amount' => $extracted['total_amount'],
@@ -363,7 +397,41 @@ class BillParseService
                     $initialWorking = (string) $extracted['current_reading'];
                 }
 
+                // Resolve MRU from extracted bill data if missing on record
+                $mruId = $record->mru_id;
+                $newPdfPath = $record->pdf_path;
+                if (! empty($extracted['mru'])) {
+                    $rawMru = trim($extracted['mru']);
+                    $mruCode = str_contains($rawMru, '/') ? trim(substr(strrchr($rawMru, '/'), 1)) : $rawMru;
+                    $mruName = str_replace('_', ' ', $mruCode);
+                    if (! $mruId) {
+                        $mru = Mru::firstOrCreate(
+                            ['user_id' => $userId, 'code' => $mruCode],
+                            ['name' => $mruName, 'full_identifier' => $rawMru, 'status' => 'active']
+                        );
+                        $mruId = $mru->id;
+                    }
+
+                    // Relocate PDF from GENERAL folder to identified MRU folder
+                    if ($record->pdf_path && str_contains($record->pdf_path, '/GENERAL/')) {
+                        $targetDir = "users/{$userId}/pdfs/{$record->billing_year}/{$record->billing_month}/{$mruCode}";
+                        $targetPath = "{$targetDir}/{$ca}.pdf";
+                        Storage::disk('local')->makeDirectory($targetDir);
+                        if (Storage::disk('local')->exists($record->pdf_path)) {
+                            Storage::disk('local')->move($record->pdf_path, $targetPath);
+                            $newPdfPath = $targetPath;
+                        }
+                    }
+                }
+
+                if ($mruId && $masterAccount && ! $masterAccount->mru_id) {
+                    $masterAccount->mru_id = $mruId;
+                    $masterAccount->save();
+                }
+
                 $record->update([
+                    'mru_id' => $mruId ?: $record->mru_id,
+                    'pdf_path' => $newPdfPath,
                     'bill_month_label' => $extracted['bill_month'] ?: $record->bill_month_label,
                     'consumer_name' => $finalConsumerName,
                     'total_amount' => $extracted['total_amount'],

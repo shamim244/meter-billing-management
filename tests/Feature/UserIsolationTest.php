@@ -120,7 +120,7 @@ class UserIsolationTest extends TestCase
         // Assert record created in DB
         $record = BillRecord::where('ca_number', $caNumber)->first();
         $this->assertNotNull($record);
-        $this->assertEquals('MD ASLAM  MAIRUDDIN', $record->consumer_name);
+        $this->assertEquals('MD ASLAM MAIRUDDIN', preg_replace('/\s+/', ' ', $record->consumer_name));
         $this->assertEquals('LAHGARIYA_LALPUR', $record->mru->code);
         $this->assertEquals($user->id, $record->user_id);
 

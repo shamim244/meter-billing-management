@@ -7,9 +7,12 @@ use App\Models\BillRecord;
 class EngineService
 {
     public function __construct(
-        protected BillDownloadService $downloadService,
-        protected BillParseService $parseService
-    ) {}
+        protected ?BillDownloadService $downloadService = null,
+        protected ?BillParseService $parseService = null
+    ) {
+        $this->downloadService = $downloadService ?: app(BillDownloadService::class);
+        $this->parseService = $parseService ?: app(BillParseService::class);
+    }
 
     /**
      * Download and parse bills using native multi-driver download & dual extraction engine.
