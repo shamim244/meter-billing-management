@@ -46,6 +46,11 @@ fi
 if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
     echo "Running database migrations automatically..."
     php artisan migrate --force --no-interaction || true
+    if [ ! -f "/var/www/storage/installed.lock" ]; then
+        echo "Creating installation lock file..."
+        echo '{"installed":true,"method":"docker_auto","installed_at":"'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'"}' > /var/www/storage/installed.lock
+        chown www-data:www-data /var/www/storage/installed.lock 2>/dev/null || true
+    fi
 fi
 
 # Cache configuration, routes, and views if APP_ENV is production and CACHE_ON_STARTUP is enabled

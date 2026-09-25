@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AuthenticateApiKeyOrToken;
+use App\Http\Middleware\CheckApplicationInstalled;
 use App\Http\Middleware\EnforceApiFeatureToggles;
 use App\Http\Middleware\EnsureCompressedResponse;
 use App\Http\Middleware\EnsureMruNotLocked;
@@ -34,6 +35,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->web(append: [
+            CheckApplicationInstalled::class,
+        ]);
+
         $middleware->api(append: [
             EnsureCompressedResponse::class,
         ]);

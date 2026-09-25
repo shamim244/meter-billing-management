@@ -28,6 +28,7 @@ use App\Http\Controllers\AgentReferralController;
 use App\Http\Controllers\BillController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocsController;
+use App\Http\Controllers\Install\InstallerController;
 use App\Http\Controllers\IssueReportController;
 use App\Http\Controllers\MruController;
 use App\Http\Controllers\NotificationController;
@@ -49,6 +50,19 @@ Route::get('/', function () {
 });
 
 Route::get('/docs/api', [DocsController::class, 'api'])->name('docs.api');
+
+// Universal Server & Web Installation Wizard (Public when uninstalled, locked once installed)
+Route::prefix('install')->name('install.')->group(function () {
+    Route::get('/', [InstallerController::class, 'index'])->name('index');
+    Route::get('/step-1', [InstallerController::class, 'step1'])->name('step1');
+    Route::get('/step-2', [InstallerController::class, 'step2'])->name('step2');
+    Route::post('/test-db', [InstallerController::class, 'testDatabase'])->name('test_db');
+    Route::post('/save-db', [InstallerController::class, 'saveDatabase'])->name('save_db');
+    Route::get('/step-3', [InstallerController::class, 'step3'])->name('step3');
+    Route::post('/run-clean', [InstallerController::class, 'runCleanInstall'])->name('run_clean');
+    Route::post('/run-restore', [InstallerController::class, 'runRestoreInstall'])->name('run_restore');
+    Route::get('/complete', [InstallerController::class, 'complete'])->name('complete');
+});
 
 // Lightweight health-check ping for real-time connectivity detection & CSRF refresh
 Route::get('/dashboard/ping', [DashboardController::class, 'ping'])->name('dashboard.ping');
