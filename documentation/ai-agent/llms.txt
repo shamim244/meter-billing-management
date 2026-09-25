@@ -1,0 +1,51 @@
+# NBPDCL Meter Billing & Management System — LLM Context Map (llms.txt)
+# https://github.com/shamim244/meter-billing-management
+
+> Architecture and operational context map for AI Agents (Antigravity, Cursor, Claude, Copilot, ChatGPT).
+
+## Project Overview
+- Application: Enterprise Electricity Meter Billing & Extraction SaaS
+- Target Entity: North Bihar Power Distribution Company Limited (NBPDCL)
+- Stack: Laravel 13, PHP 8.4, MySQL 8.0, Redis 7, Tailwind CSS, Alpine.js
+- Repository Root: /php/laravel
+
+## Permanent Project Rules (Non-Negotiable)
+1. REAL DATA PROTECTION: Anything created, updated, or touched by the user is STRICTLY PROTECTED.
+   - User ID 9 (shamim244d@gmail.com) is permanently protected. Never edit, delete, or test with this account.
+   - Production billing records, consumer accounts, and MRU assignments are protected.
+   - Never run destructive migrations (migrate:fresh, db:wipe) on live MySQL databases.
+2. TESTING ISOLATION:
+   - Automated tests run exclusively on SQLite In-Memory (:memory:) configured in phpunit.xml.
+   - When creating test models, use factories or isolated test accounts (e.g. User ID 8 / isolated test MRU).
+3. PINT CODE FORMATTING:
+   - Modified PHP files MUST be formatted with `vendor/bin/pint --dirty --format agent` before finalizing changes.
+
+## Core Services Reference
+- ServerMigrationService: app/Services/Migration/ServerMigrationService.php
+  - createMigrationPackage(options): exports universal .zip with database.sql.gz, storage.zip, manifest.json
+  - inspectPackage(path): validates bundle format, checksums, and manifest without restoring
+  - restoreMigrationPackage(path, options): rehydrates database, storage, and runs post-flight audit
+  - runIntegrityAudit(manifestCounts, expectedWalletSum): compares table counts & wallet ledger sum
+  - runPreflightCheck(): audits PHP 8.4+, 11 extensions, writable folders, DB & Redis connectivity
+- InstallerService: app/Services/Installation/InstallerService.php
+  - isInstalled(): checks storage/installed.lock
+  - testDatabaseConnection(config): tests PDO MySQL/SQLite connection and auto-creates MySQL database
+  - executeCleanInstall(adminData): runs migrate, seed, and creates super admin
+  - executeRestoreInstall(bundlePath): restores universal migration bundle during setup
+- DatabaseDumpService: app/Services/Backup/DatabaseDumpService.php
+  - dumpViaPdoStreaming(outputPath): constant O(1) memory chunked MySQL/SQLite streaming dumper
+- EnsureCompressedResponse: app/Http/Middleware/EnsureCompressedResponse.php
+  - High-performance compression negotiator supporting Brotli, Zstandard, and Gzip
+
+## Key CLI Commands
+- `php artisan app:preflight-check` -> Formatted server health audit
+- `php artisan app:migration-pack [--skip-storage]` -> Export cross-cloud migration bundle
+- `php artisan app:migration-unpack {path} [--skip-storage]` -> Restore & verify migration bundle
+- `php artisan app:install [--headless] [--package=...]` -> Universal server installation command
+
+## Key Routes & Controllers
+- `/install/*` -> App\Http\Controllers\Install\InstallerController (4-step setup wizard)
+- `/admin/server-migration` -> App\Http\Controllers\Admin\AdminServerMigrationController
+- `/api/v1/app/config` -> App\Http\Controllers\Api\AppDiscoveryController (Flutter mobile dynamic discovery)
+- `/admin/backups` -> App\Http\Controllers\Admin\AdminBackupController
+- `/admin/compression` -> App\Http\Controllers\Admin\AdminCompressionController
