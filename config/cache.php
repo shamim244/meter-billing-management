@@ -126,11 +126,12 @@ return [
     |--------------------------------------------------------------------------
     |
     | This value determines the classes that can be unserialized from cache
-    | storage. By default, no PHP classes will be unserialized from your
-    | cache to prevent gadget chain attacks if your APP_KEY is leaked.
+    | storage. If false, no PHP classes will be unserialized from your cache.
+    | Set to true or null to allow standard deserialization, or specify an
+    | array of allowed classes for Pulse, Livewire, and framework models.
     |
     */
 
-    'serializable_classes' => false,
+    'serializable_classes' => env('CACHE_SERIALIZABLE_CLASSES', null),
 
 ];
