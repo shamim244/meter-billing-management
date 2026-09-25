@@ -27,8 +27,8 @@ class CheckApplicationInstalled
                 'cache.default' => 'file',
             ]);
 
-            // Allow installer routes and system health endpoints
-            if ($request->is('install*') || $request->is('up') || $request->is('build/*') || $request->is('favicon.ico')) {
+            // Allow installer routes and system health/docs endpoints
+            if ($request->is('install*') || $request->is('documentation*') || $request->is('up') || $request->is('build/*') || $request->is('favicon.ico')) {
                 return $next($request);
             }
 

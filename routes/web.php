@@ -27,6 +27,7 @@ use App\Http\Controllers\Admin\AdminWalletController;
 use App\Http\Controllers\AgentReferralController;
 use App\Http\Controllers\BillController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DeveloperDocumentationController;
 use App\Http\Controllers\DocsController;
 use App\Http\Controllers\Install\InstallerController;
 use App\Http\Controllers\IssueReportController;
@@ -50,6 +51,11 @@ Route::get('/', function () {
 });
 
 Route::get('/docs/api', [DocsController::class, 'api'])->name('docs.api');
+
+// Dedicated Developer & AI Architecture Documentation Portal (Docsify SPA + Markdown Streamer)
+Route::get('/documentation/{file?}', [DeveloperDocumentationController::class, 'show'])
+    ->where('file', '.*')
+    ->name('documentation.show');
 
 // Universal Server & Web Installation Wizard (Public when uninstalled, locked once installed)
 Route::prefix('install')->name('install.')->group(function () {

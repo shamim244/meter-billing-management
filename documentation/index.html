@@ -65,14 +65,29 @@
   </style>
 </head>
 <body>
+  <div id="protocol-warning" style="display:none; background: #dc2626; color: #ffffff; padding: 12px 20px; font-weight: 600; text-align: center; font-size: 13px; position: fixed; top: 0; left: 0; right: 0; z-index: 999999; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+    ⚠️ <strong>Local Browser CORS Restriction:</strong> Docsify cannot load Markdown files directly via <code>file:///</code> protocol.
+    Please open via your local server: <a href="http://127.0.0.1:8000/documentation" style="color: #fef08a; text-decoration: underline; margin-left: 8px;">http://127.0.0.1:8000/documentation</a>
+  </div>
+
   <div id="app">Loading NBPDCL Documentation Portal...</div>
+
   <script>
+    const isFileProtocol = window.location.protocol === 'file:';
+    if (isFileProtocol) {
+      document.getElementById('protocol-warning').style.display = 'block';
+    }
+
+    const isDocPath = window.location.pathname.includes('/documentation');
+
     window.$docsify = {
       name: '⚡ NBPDCL SaaS Docs',
       repo: '',
       loadSidebar: true,
       subMaxLevel: 3,
       auto2top: true,
+      homepage: 'README.md',
+      basePath: isDocPath ? '/documentation/' : './',
       search: {
         maxAge: 86400000,
         paths: 'auto',
@@ -85,7 +100,7 @@
         errorText: 'Error',
         successText: 'Copied!'
       }
-    }
+    };
   </script>
   <!-- Docsify Core -->
   <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
