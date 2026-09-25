@@ -20,7 +20,7 @@ class DeveloperDocumentationTest extends TestCase
         $response->assertStatus(200);
         $response->assertHeader('Content-Type', 'text/html; charset=UTF-8');
         $response->assertSee('NBPDCL SaaS Docs');
-        $response->assertSee('cdn.jsdelivr.net/npm/docsify');
+        $response->assertSee('docsify.min.js');
     }
 
     public function test_documentation_index_html_explicitly_serves_html(): void
@@ -115,5 +115,29 @@ class DeveloperDocumentationTest extends TestCase
                 File::put($lockPath, $savedContent);
             }
         }
+    }
+
+    public function test_documentation_serves_local_assets_with_immutable_cache(): void
+    {
+        $response = $this->get('/documentation/assets/docsify.min.js');
+
+        $response->assertStatus(200);
+        $response->assertHeader('Content-Type', 'application/javascript; charset=UTF-8');
+        $this->assertStringContainsString('max-age=604800', (string) $response->headers->get('Cache-Control'));
+        $this->assertStringContainsString('immutable', (string) $response->headers->get('Cache-Control'));
+    }
+
+    public function test_documentation_returns_304_when_etag_matches(): void
+    {
+        $initial = $this->get('/documentation/README.md');
+        $etag = $initial->headers->get('ETag');
+
+        $this->assertNotEmpty($etag);
+
+        $cachedResponse = $this->withHeaders([
+            'If-None-Match' => $etag,
+        ])->get('/documentation/README.md');
+
+        $cachedResponse->assertStatus(304);
     }
 }

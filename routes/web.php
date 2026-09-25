@@ -57,6 +57,8 @@ Route::get('/documentation/{file?}', [DeveloperDocumentationController::class, '
     ->where('file', '.*')
     ->name('documentation.show');
 
+Route::get('/_sidebar.md', fn () => redirect()->route('documentation.show', ['file' => '_sidebar.md']));
+
 // Universal Server & Web Installation Wizard (Public when uninstalled, locked once installed)
 Route::prefix('install')->name('install.')->group(function () {
     Route::get('/', [InstallerController::class, 'index'])->name('index');

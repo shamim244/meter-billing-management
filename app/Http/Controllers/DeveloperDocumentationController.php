@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -10,7 +11,7 @@ class DeveloperDocumentationController extends Controller
     /**
      * Serve developer documentation assets and markdown files.
      */
-    public function show(?string $file = null): Response
+    public function show(Request $request, ?string $file = null): Response
     {
         $baseDir = base_path('documentation');
 
@@ -47,8 +48,11 @@ class DeveloperDocumentationController extends Controller
         }
 
         if (! File::exists($fullPath)) {
-            // Check if requested file exists with .md extension
-            if (File::exists($fullPath.'.md')) {
+            // Check if Docsify requested a .txt file with .md appended
+            if (str_ends_with($fullPath, '.txt.md') && File::exists(substr($fullPath, 0, -3))) {
+                $fullPath = substr($fullPath, 0, -3);
+            } elseif (File::exists($fullPath.'.md')) {
+                // Check if requested file exists with .md extension
                 $fullPath = $fullPath.'.md';
             } elseif (File::exists($baseDir.DIRECTORY_SEPARATOR.'index.html')) {
                 // SPA fallback: return index.html for Docsify client routing
@@ -72,16 +76,35 @@ class DeveloperDocumentationController extends Controller
             default => 'text/plain; charset=UTF-8',
         };
 
-        if (in_array($extension, ['png', 'jpg', 'jpeg', 'gif', 'ico', 'webp'])) {
-            return response()->file($fullPath, [
+        // ETag verification for fast 304 revalidation
+        $mtime = filemtime($fullPath);
+        $etag = '"'.md5($fullPath.$mtime).'"';
+        $clientEtag = $request->header('If-None-Match');
+
+        if ($clientEtag && trim($clientEtag, '"') === trim($etag, '"')) {
+            return response('', 304, [
+                'ETag' => $etag,
+                'Cache-Control' => 'public, max-age=86400, must-revalidate',
+            ]);
+        }
+
+        // Static vendor assets: cache aggressively for speed
+        if (str_contains($fullPath, DIRECTORY_SEPARATOR.'assets'.DIRECTORY_SEPARATOR) || in_array($extension, ['png', 'jpg', 'jpeg', 'gif', 'ico', 'webp', 'woff2', 'woff', 'ttf'])) {
+            $response = in_array($extension, ['png', 'jpg', 'jpeg', 'gif', 'ico', 'webp', 'woff2', 'woff', 'ttf'])
+                ? response()->file($fullPath)
+                : response(File::get($fullPath), 200);
+
+            return $response->withHeaders([
                 'Content-Type' => $mimeType,
-                'Cache-Control' => 'public, max-age=86400',
+                'Cache-Control' => 'public, max-age=604800, immutable',
+                'ETag' => $etag,
             ]);
         }
 
         return response(File::get($fullPath), 200, [
             'Content-Type' => $mimeType,
-            'Cache-Control' => 'no-cache, private',
+            'Cache-Control' => 'public, max-age=300, must-revalidate',
+            'ETag' => $etag,
         ]);
     }
 }

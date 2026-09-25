@@ -7,18 +7,13 @@
   <meta name="description" content="Technical documentation and architecture reference for NBPDCL SaaS Meter Billing & Management System">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
 
-  <!-- Google Fonts: Outfit -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-
-  <!-- Docsify Dark Theme Style -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/dark.css">
+  <!-- High-Performance Local Theme -->
+  <link rel="stylesheet" href="/documentation/assets/dark.css">
 
   <style>
     :root {
-      --base-font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      --code-font-family: 'JetBrains Mono', monospace;
+      --base-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --code-font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       --theme-color: #6366f1;
       --sidebar-background: #090d16;
       --sidebar-border-color: #1e293b;
@@ -62,6 +57,82 @@
     }
     .badge-dev { background: rgba(99, 102, 241, 0.15); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.3); }
     .badge-ai { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); }
+
+    /* Next / Previous Page Navigation Styling */
+    .docsify-pagination-container {
+      margin-top: 3.5rem;
+      padding-top: 2rem;
+      border-top: 1px solid #1e293b;
+      display: flex;
+      justify-content: space-between;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .pagination-item {
+      flex: 1 1 200px;
+    }
+    .pagination-item a {
+      display: flex;
+      flex-direction: column;
+      padding: 14px 20px;
+      border-radius: 12px;
+      border: 1px solid #1e293b;
+      background: #090d16;
+      text-decoration: none !important;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+    .pagination-item--previous a {
+      align-items: flex-start;
+      text-align: left;
+    }
+    .pagination-item--next a {
+      align-items: flex-end;
+      text-align: right;
+    }
+    .pagination-item a:hover {
+      background: #0f172a;
+      border-color: #6366f1;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.25);
+    }
+    .pagination-item-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #6366f1;
+      margin-bottom: 4px;
+    }
+    .pagination-item-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #f1f5f9;
+    }
+    .pagination-item a:hover .pagination-item-title {
+      color: #ffffff;
+    }
+
+    /* Modern Pulse Spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .loader-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 70vh;
+      color: #94a3b8;
+    }
+    .loader-ring {
+      width: 44px;
+      height: 44px;
+      border: 3px solid #1e293b;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+      margin-bottom: 16px;
+    }
   </style>
 </head>
 <body>
@@ -70,33 +141,39 @@
     Please open via your local server: <a href="http://127.0.0.1:8000/documentation" style="color: #fef08a; text-decoration: underline; margin-left: 8px;">http://127.0.0.1:8000/documentation</a>
   </div>
 
-  <div id="app">Loading NBPDCL Documentation Portal...</div>
+  <div id="app">
+    <div class="loader-box">
+      <div class="loader-ring"></div>
+      <div style="font-weight:600; font-size:15px; color:#e2e8f0; animation: pulse 1.5s infinite;">⚡ Initializing Documentation Portal...</div>
+      <div style="font-size:12px; color:#64748b; margin-top:6px;">High-speed offline-first architecture suite</div>
+    </div>
+  </div>
 
   <script>
-    const isFileProtocol = window.location.protocol === 'file:';
-    if (isFileProtocol) {
+    if (window.location.protocol === 'file:') {
       document.getElementById('protocol-warning').style.display = 'block';
     }
-
-    const isDocPath = window.location.pathname.includes('/documentation');
 
     window.$docsify = {
       name: '⚡ NBPDCL SaaS Docs',
       repo: '',
       loadSidebar: true,
-      subMaxLevel: 3,
+      subMaxLevel: 2,
       auto2top: true,
       homepage: 'README.md',
-      basePath: isDocPath ? '/documentation/' : './',
-      alias: {
-        '/.*/_sidebar.md': '/_sidebar.md',
-      },
+      basePath: '/documentation/',
       search: {
         maxAge: 86400000,
         paths: 'auto',
         placeholder: 'Search documentation...',
         noData: 'No results found',
-        depth: 4
+        depth: 2
+      },
+      pagination: {
+        previousText: '← Previous Chapter',
+        nextText: 'Next Chapter →',
+        crossChapter: true,
+        crossChapterText: true,
       },
       copyCode: {
         buttonText: 'Copy',
@@ -105,15 +182,18 @@
       }
     };
   </script>
-  <!-- Docsify Core -->
-  <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/docsify-copy-code/dist/docsify-copy-code.min.js"></script>
-  <!-- Syntax Highlighting -->
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-php.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-json.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-sql.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
+
+  <!-- High-Performance Offline-First Local Assets -->
+  <script src="/documentation/assets/docsify.min.js"></script>
+  <script src="/documentation/assets/search.min.js"></script>
+  <script src="/documentation/assets/docsify-copy-code.min.js"></script>
+  <script src="/documentation/assets/docsify-pagination.min.js"></script>
+
+  <!-- Syntax Highlighting Grammars -->
+  <script src="/documentation/assets/prism-php.min.js"></script>
+  <script src="/documentation/assets/prism-bash.min.js"></script>
+  <script src="/documentation/assets/prism-json.min.js"></script>
+  <script src="/documentation/assets/prism-sql.min.js"></script>
+  <script src="/documentation/assets/prism-yaml.min.js"></script>
 </body>
 </html>
