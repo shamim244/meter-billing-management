@@ -41,6 +41,11 @@ class DeveloperDocumentationController extends Controller
             }
         }
 
+        // Fallback nested sidebar requests to root _sidebar.md
+        if (str_ends_with($fullPath, '_sidebar.md') && ! File::exists($fullPath)) {
+            $fullPath = $baseDir.DIRECTORY_SEPARATOR.'_sidebar.md';
+        }
+
         if (! File::exists($fullPath)) {
             // Check if requested file exists with .md extension
             if (File::exists($fullPath.'.md')) {

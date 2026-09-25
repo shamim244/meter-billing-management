@@ -88,6 +88,9 @@
       auto2top: true,
       homepage: 'README.md',
       basePath: isDocPath ? '/documentation/' : './',
+      alias: {
+        '/.*/_sidebar.md': '/_sidebar.md',
+      },
       search: {
         maxAge: 86400000,
         paths: 'auto',
