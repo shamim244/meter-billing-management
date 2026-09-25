@@ -1,8 +1,8 @@
 <div x-data="bugReporterComponent()" x-init="init()" class="relative z-50">
-    <!-- Floating Trigger Button (Bottom-Right) -->
+    <!-- Floating Trigger Button (Bottom-Left) -->
     <button type="button"
             @click="openModal('report')"
-            class="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full bg-slate-900/90 dark:bg-slate-800/90 hover:bg-slate-950 dark:hover:bg-slate-700 text-slate-100 text-xs font-bold shadow-xl border border-slate-700/80 backdrop-blur-md transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer group"
+            class="fixed bottom-4 left-4 z-40 inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full bg-slate-900/90 dark:bg-slate-800/90 hover:bg-slate-950 dark:hover:bg-slate-700 text-slate-100 text-xs font-bold shadow-xl border border-slate-700/80 backdrop-blur-md transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer group"
             title="Report or Track a bug or issue (Ctrl+Shift+B)">
         <span class="text-base group-hover:animate-bounce">🐞</span>
         <span class="hidden sm:inline">Report / Track Bug</span>
