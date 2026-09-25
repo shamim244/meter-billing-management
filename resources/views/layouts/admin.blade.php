@@ -274,6 +274,11 @@
                         <span class="text-base">💾</span>
                         <span>Disaster Recovery & Backups</span>
                     </a>
+
+                    <a href="{{ route('admin.server_migration.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.server_migration.*') ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">
+                        <span class="text-base">🚀</span>
+                        <span>Cloud Migration & Portability</span>
+                    </a>
                 </div>
             </nav>
         </div>

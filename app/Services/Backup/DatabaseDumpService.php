@@ -113,7 +113,11 @@ class DatabaseDumpService
         $header .= '-- Generated at: '.date('Y-m-d H:i:s T')."\n";
         $header .= "-- Database: {$databaseName} ({$driver})\n";
         $header .= "-- ------------------------------------------------------\n\n";
-        $header .= "SET FOREIGN_KEY_CHECKS=0;\n\n";
+        if ($driver === 'mysql') {
+            $header .= "SET FOREIGN_KEY_CHECKS=0;\n\n";
+        } elseif ($driver === 'sqlite') {
+            $header .= "PRAGMA foreign_keys = OFF;\n\n";
+        }
         gzwrite($gz, $header);
 
         $tables = $this->getAllTableNames();
@@ -165,7 +169,13 @@ class DatabaseDumpService
             $summary[$table] = $rowCount;
         }
 
-        gzwrite($gz, "\nSET FOREIGN_KEY_CHECKS=1;\n-- Backup Completed\n");
+        if ($driver === 'mysql') {
+            gzwrite($gz, "\nSET FOREIGN_KEY_CHECKS=1;\n-- Backup Completed\n");
+        } elseif ($driver === 'sqlite') {
+            gzwrite($gz, "\nPRAGMA foreign_keys = ON;\n-- Backup Completed\n");
+        } else {
+            gzwrite($gz, "\n-- Backup Completed\n");
+        }
         gzclose($gz);
 
         return $summary;

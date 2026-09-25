@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\ApiKeyManagementController;
+use App\Http\Controllers\Api\AppDiscoveryController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AutomationController;
 use App\Http\Controllers\Api\BillApiController;
@@ -22,6 +23,9 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::prefix('v1')->middleware(['api.analytics', 'api.feature'])->group(function () {
+
+    // Mobile App Dynamic Endpoint Discovery & Server URL Handshake
+    Route::get('/app/config', [AppDiscoveryController::class, 'config'])->name('api.app.config');
 
     // Machine-readable OpenAPI 3.0 specification for AI Agents and Swagger
     Route::get('/openapi.json', [OpenApiController::class, 'schema'])

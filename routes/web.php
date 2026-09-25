@@ -17,6 +17,7 @@ use App\Http\Controllers\Admin\AdminPlanController;
 use App\Http\Controllers\Admin\AdminPlanDurationController;
 use App\Http\Controllers\Admin\AdminRateLimitController;
 use App\Http\Controllers\Admin\AdminReferralController;
+use App\Http\Controllers\Admin\AdminServerMigrationController;
 use App\Http\Controllers\Admin\AdminShortcutController;
 use App\Http\Controllers\Admin\AdminSubscriptionController;
 use App\Http\Controllers\Admin\AdminTagController;
@@ -357,6 +358,16 @@ Route::middleware(['auth', 'admin.restore_impersonation', 'role:admin', 'active'
         Route::post('/{issue}/spam', [AdminIssueController::class, 'markSpam'])->name('spam');
         Route::post('/{issue}/resolve', [AdminIssueController::class, 'resolve'])->name('resolve');
         Route::get('/{issue}/ai-prompt', [AdminIssueController::class, 'aiPrompt'])->name('ai_prompt');
+    });
+
+    // Admin Universal Server & Cloud Migration Cockpit
+    Route::prefix('server-migration')->name('server_migration.')->group(function () {
+        Route::get('/', [AdminServerMigrationController::class, 'index'])->name('index');
+        Route::post('/export', [AdminServerMigrationController::class, 'export'])->name('export');
+        Route::post('/inspect', [AdminServerMigrationController::class, 'inspect'])->name('inspect');
+        Route::post('/import', [AdminServerMigrationController::class, 'import'])->name('import');
+        Route::get('/download/{filename}', [AdminServerMigrationController::class, 'download'])->name('download');
+        Route::delete('/{filename}', [AdminServerMigrationController::class, 'destroy'])->name('destroy');
     });
 });
 
