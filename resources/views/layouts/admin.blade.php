@@ -223,6 +223,14 @@
                         <span>Usage & Health Reports</span>
                     </a>
 
+                    <a href="{{ url('/pulse') }}" target="_blank" class="flex items-center justify-between px-3.5 py-2.5 rounded-xl transition text-slate-400 hover:text-white hover:bg-slate-900 group">
+                        <div class="flex items-center gap-3">
+                            <span class="text-base text-rose-500 animate-pulse">💓</span>
+                            <span>Pulse Monitor</span>
+                        </div>
+                        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">LIVE</span>
+                    </a>
+
                     <!-- Notification Engine Dropdown -->
                     <div x-data="{ notifNav: {{ request()->routeIs('admin.notifications.*') ? 'true' : 'false' }} }" class="space-y-1">
                         <button type="button" @click="notifNav = !notifNav" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition {{ request()->routeIs('admin.notifications.*') ? 'bg-slate-900 text-white font-bold' : 'text-slate-400 hover:text-white hover:bg-slate-900' }}">

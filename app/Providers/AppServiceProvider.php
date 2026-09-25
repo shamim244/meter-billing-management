@@ -4,11 +4,13 @@ namespace App\Providers;
 
 use App\Models\ApiKey;
 use App\Models\SystemSetting;
+use App\Models\User;
 use App\Services\Api\RateLimitService;
 use App\Services\Notifications\EmailProviderRegistryService;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Octane\Events\RequestTerminated;
@@ -34,6 +36,11 @@ class AppServiceProvider extends ServiceProvider
                 SystemSetting::clearRuntimeCache();
             });
         }
+
+        // Authorization Gate for Laravel Pulse Monitoring Dashboard
+        Gate::define('viewPulse', function (?User $user = null): bool {
+            return (bool) ($user?->hasRole('admin'));
+        });
 
         // 1. General API Rate Limiter (Reads, lookups, queue)
         RateLimiter::for('api.general', function (Request $request) {

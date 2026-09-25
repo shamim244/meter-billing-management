@@ -12,6 +12,7 @@
         "getbrevo/brevo-php": "*",
         "laravel/framework": "^13.8",
         "laravel/octane": "^2.20",
+        "laravel/pulse": "^1.8",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",
         "nyholm/psr7": "^1.8",
