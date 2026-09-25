@@ -36,3 +36,6 @@ rr
 rr.exe
 apk/
 public/VHOST-TEST.txt
+.agents/php_brotli*
+*.dll
+*.pdb

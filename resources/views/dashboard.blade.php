@@ -136,6 +136,27 @@
                 </div>
             </div>
 
+            <!-- ⚠️ PERSISTENT FAILED SYNC DRAWER / BANNER -->
+            <div x-show="syncErrors.length > 0" x-cloak class="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-rose-500/15 via-rose-500/10 to-amber-500/15 border border-rose-500/80 dark:border-rose-600/80 text-rose-950 dark:text-rose-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200">
+                <div class="flex items-center gap-2.5 text-xs font-bold">
+                    <span class="text-base">⚠️</span>
+                    <span>
+                        <strong x-text="syncErrors.length + (syncErrors.length === 1 ? ' update' : ' updates')"></strong> was rejected by the server and reverted. Click to review:
+                    </span>
+                </div>
+                <div class="flex items-center gap-2 shrink-0 flex-wrap">
+                    <template x-for="err in syncErrors" :key="err.ca_number + '_' + err.field">
+                        <button type="button" @click="jumpToCa(err.ca_number)" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95 flex items-center gap-1 cursor-pointer">
+                            <span x-text="'CA: ' + err.ca_number"></span>
+                            <span class="text-[9px] opacity-80" x-text="'(' + err.field + ')'"></span>
+                        </button>
+                    </template>
+                    <button type="button" @click="syncErrors = []" class="text-xs text-rose-700 dark:text-rose-300 hover:underline px-1 font-semibold cursor-pointer">
+                        Dismiss
+                    </button>
+                </div>
+            </div>
+
             <!-- Flash Alerts -->
             @if(session('success'))
                 <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center justify-between shadow-sm">
@@ -558,10 +579,11 @@
                         </thead>
                         <tbody class="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
                             <template x-for="(bill, index) in items" :key="bill.id">
-                                <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition duration-150" :class="{
-                                    'bg-emerald-50/30 dark:bg-emerald-950/25': bill.review_status === 'submitted',
-                                    'bg-rose-50/30 dark:bg-rose-950/25': bill.review_status === 'critical',
-                                    'bg-amber-50/30 dark:bg-amber-950/25': bill.review_status === 'doubt'
+                                <tr :id="'row-' + bill.ca_number" class="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition duration-150" :class="{
+                                    'ring-2 ring-rose-500 bg-rose-50/50 dark:bg-rose-950/40': bill._syncError,
+                                    'bg-emerald-50/30 dark:bg-emerald-950/25': bill.review_status === 'submitted' && !bill._syncError,
+                                    'bg-rose-50/30 dark:bg-rose-950/25': bill.review_status === 'critical' && !bill._syncError,
+                                    'bg-amber-50/30 dark:bg-amber-950/25': bill.review_status === 'doubt' && !bill._syncError
                                 }">
                                     <!-- Consumer CA & Name -->
                                     <td class="py-3 px-3">
@@ -589,6 +611,11 @@
                                                     <template x-if="isCaPendingSync(bill.ca_number)">
                                                         <span class="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-800" title="Changes saved locally on device, waiting to sync with server">
                                                             ☁️ Offline
+                                                        </span>
+                                                    </template>
+                                                    <template x-if="bill._syncError">
+                                                        <span class="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-rose-600 text-white shadow-2xs animate-pulse" :title="bill._syncErrorMsg || 'Server rejected update'">
+                                                            ⚠️ Reverted
                                                         </span>
                                                     </template>
                                                 </div>
@@ -790,7 +817,7 @@
                         
                         <template x-for="(bill, index) in items" :key="bill.id">
                             <div class="min-w-full w-full shrink-0 px-1 box-border">
-                                <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xl overflow-hidden">
+                                <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xl overflow-hidden transition-all duration-200" :class="{ 'ring-2 ring-rose-500 border-rose-500 shadow-rose-500/20': bill._syncError }">
                                     <!-- Top Header Bar (Mobile Responsive & Crisp) -->
                                     <div class="px-4 sm:px-5 py-3.5 sm:py-4 relative text-white" :class="{
                                         'bg-gradient-to-r from-emerald-900 to-slate-900': bill.review_status === 'submitted',
@@ -806,7 +833,7 @@
                                                     <h2 class="text-sm sm:text-base font-bold text-white tracking-tight truncate select-text" x-text="bill.consumer_name || 'CONSUMER ACCOUNT'"></h2>
                                                     <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                                         <span class="font-mono text-cyan-200 text-xs sm:text-sm font-semibold select-text select-all cursor-pointer hover:text-white transition py-0.5" 
-                                                              @click="copyText(bill.ca_number, bill.id)"
+                                                              @click="copyText(bill.ca_number, bill.id)" 
                                                               title="Tap to copy or long-press to select CA"
                                                               x-text="bill.ca_number"></span>
                                                         <button type="button" 
@@ -841,6 +868,13 @@
                                                         <div class="mt-1">
                                                             <span class="px-2 py-0.5 rounded-md text-[9px] font-bold bg-amber-400 text-slate-950 shadow-2xs inline-flex items-center gap-1 animate-pulse" title="Saved locally on device, waiting to sync with server">
                                                                 <span>☁️ Offline Saved</span>
+                                                            </span>
+                                                        </div>
+                                                    </template>
+                                                    <template x-if="bill._syncError">
+                                                        <div class="mt-1">
+                                                            <span class="px-2 py-0.5 rounded-md text-[9px] font-bold bg-rose-600 text-white shadow-2xs inline-flex items-center gap-1 animate-pulse" :title="bill._syncErrorMsg || 'Server rejected update'">
+                                                                <span>⚠️ Sync Failed (Reverted)</span>
                                                             </span>
                                                         </div>
                                                     </template>
@@ -1977,6 +2011,33 @@
                     }
                 })(),
                 pendingCaSet: {},
+                inFlightControllers: {},
+
+                abortInFlight(key) {
+                    if (this.inFlightControllers && this.inFlightControllers[key]) {
+                        try {
+                            this.inFlightControllers[key].abort();
+                        } catch (e) {}
+                        delete this.inFlightControllers[key];
+                    }
+                },
+                syncErrors: [],
+
+                jumpToCa(caNumber) {
+                    if (!caNumber) return;
+                    const idx = this.items.findIndex(b => String(b.ca_number) === String(caNumber));
+                    if (idx !== -1) {
+                        if (this.viewMode === 'card') {
+                            this.currentCardIndex = idx;
+                        } else {
+                            const row = document.getElementById(`row-${caNumber}`);
+                            if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    } else {
+                        this.searchQuery = String(caNumber);
+                        this.fetchData(1);
+                    }
+                },
 
                 // Modals
                 showCreateMruModal: false,
@@ -2122,6 +2183,18 @@
 
                     this.parseSortOption();
                     this.initNetworkListeners();
+
+                    // 🛡️ Data Loss Prevention: BeforeUnload Tab Close / Refresh Shield
+                    window.addEventListener('beforeunload', (e) => {
+                        const hasInFlight = this.inFlightControllers && Object.keys(this.inFlightControllers).length > 0;
+                        const hasPendingOffline = this.offlineQueue && this.offlineQueue.length > 0;
+                        if (hasInFlight || hasPendingOffline) {
+                            e.preventDefault();
+                            e.returnValue = 'You have unsaved or pending changes syncing to the server. Are you sure you want to leave?';
+                            return e.returnValue;
+                        }
+                    });
+
                     this.fetchData(1);
                 },
 
@@ -2208,6 +2281,15 @@
                                         successCount++;
                                         this.offlineQueue = this.offlineQueue.filter(q => !(q.type === item.type && (q.ca_number === item.ca_number || (item.id && q.id === item.id))));
                                         localStorage.setItem('nbpdcl_offline_queue_v1', JSON.stringify(this.offlineQueue));
+                                    } else {
+                                        const errJson = await res.json().catch(() => ({}));
+                                        if (res.status === 422 || res.status === 400) {
+                                            this.offlineQueue = this.offlineQueue.filter(q => !(q.type === item.type && (q.ca_number === item.ca_number || (item.id && q.id === item.id))));
+                                            localStorage.setItem('nbpdcl_offline_queue_v1', JSON.stringify(this.offlineQueue));
+                                            if (item.ca_number && !this.syncErrors.some(e => e.ca_number === item.ca_number && e.field === item.type)) {
+                                                this.syncErrors.push({ ca_number: item.ca_number, field: item.type, msg: errJson.message || 'Offline sync rejected' });
+                                            }
+                                        }
                                     }
                                 }
                             } catch (e) {
@@ -2809,11 +2891,24 @@
                 },
 
                 // ✍️ Save Working Reading via AJAX with Invariant Checks & Offline Resilience
-                saveWorkingReading(bill) {
+                // ✍️ Save Working Reading via AJAX with Invariant Checks, AbortController, Sequencing & Auto-Revert
+                saveWorkingReading(bill, forceFlag = false, source = null) {
                     if (!bill.id || bill.working_reading === undefined || bill.working_reading === null) return;
                     const prevNum = parseInt(bill.db_prev_reading) || parseInt(bill.previous_reading) || 0;
                     const workNum = parseInt(bill.working_reading) || 0;
                     const pdfNum = parseInt(bill.official_pdf_reading);
+
+                    // 1. Take Immutable Pre-Mutation Snapshot for Guaranteed Rollback
+                    const prevSavedReading = bill._savedWorkingReading !== undefined ? bill._savedWorkingReading : (bill.working_reading || '');
+                    const snapshot = {
+                        working_reading: prevSavedReading,
+                        working_diff_units: bill.working_diff_units,
+                        pdf_sync_status: bill.pdf_sync_status,
+                        pdf_delta: bill.pdf_delta,
+                        reading_source: bill.reading_source,
+                        is_manual: bill.is_manual,
+                        is_projected: bill.is_projected
+                    };
 
                     bill.working_diff_units = Math.max(0, workNum - prevNum);
 
@@ -2837,6 +2932,16 @@
                     const finalForce = forceFlag || computedForce;
                     const saveSource = source || bill.reading_source || (bill.is_manual ? 'manual' : 'auto');
 
+                    // 2. Abort any pending in-flight request for this specific CA (No Race Conditions)
+                    const abortKey = `reading_${bill.ca_number}`;
+                    this.abortInFlight(abortKey);
+                    const controller = new AbortController();
+                    this.inFlightControllers[abortKey] = controller;
+
+                    // 3. Monotonic Sequence Revision Tracking (Discards Out-of-Order Stale Responses)
+                    bill._readingSeq = (bill._readingSeq || 0) + 1;
+                    const reqSeq = bill._readingSeq;
+
                     // Check offline / server unreachable state
                     if (!this.isOnline || !this.isServerReachable) {
                         this.enqueueOfflineAction('working_reading', {
@@ -2846,12 +2951,16 @@
                             source: saveSource,
                             force: finalForce
                         });
+                        bill._savedWorkingReading = bill.working_reading;
+                        bill._syncError = false;
                         this.showToastNotification('☁️', `Reading ${bill.working_reading} saved locally (Offline mode).`);
                         return;
                     }
 
                     fetch('/bills/update-working-reading', {
                         method: 'POST',
+                        keepalive: true,
+                        signal: controller.signal,
                         headers: {
                             'Content-Type': 'application/json',
                             'X-CSRF-TOKEN': this.getCsrfToken(),
@@ -2879,7 +2988,14 @@
                         return r.json();
                     })
                     .then(data => {
+                        // Discard if a newer request was dispatched while this was flying
+                        if (bill._readingSeq !== reqSeq) return;
+
                         if (data.success) {
+                            bill._savedWorkingReading = bill.working_reading;
+                            bill._syncError = false;
+                            bill._syncErrorMsg = null;
+                            this.syncErrors = this.syncErrors.filter(e => !(e.ca_number === bill.ca_number && e.field === 'Reading'));
                             if (data.reading_source) {
                                 bill.reading_source = data.reading_source;
                                 bill.is_manual = (data.reading_source === 'manual');
@@ -2891,9 +3007,28 @@
                         }
                     })
                     .catch(err => {
+                        if (err.name === 'AbortError') {
+                            // Supressed clean abort for faster typing
+                            return;
+                        }
                         console.warn('Working reading save failed:', err);
-                        if (err.isValidationError || (err.message && (err.message.includes('locked') || err.message.includes('submitted')))) return;
 
+                        if (err.isValidationError || (err.message && (err.message.includes('locked') || err.message.includes('submitted')))) {
+                            // Guaranteed Visual Revert Alert: Roll back on server rejection
+                            bill.working_reading = snapshot.working_reading;
+                            bill.working_diff_units = snapshot.working_diff_units;
+                            bill.pdf_sync_status = snapshot.pdf_sync_status;
+                            bill.pdf_delta = snapshot.pdf_delta;
+                            bill._syncError = true;
+                            bill._syncErrorMsg = err.message || 'Rejected by server';
+                            if (!this.syncErrors.some(e => e.ca_number === bill.ca_number && e.field === 'Reading')) {
+                                this.syncErrors.push({ ca_number: bill.ca_number, field: 'Reading', msg: bill._syncErrorMsg });
+                            }
+                            this.showToastNotification('⚠️', `Failed to update reading: ${err.message || 'Validation rejected'} (Reverted).`);
+                            return;
+                        }
+
+                        // Fall back to offline queue on connection loss
                         this.isServerReachable = false;
                         this.enqueueOfflineAction('working_reading', {
                             id: bill.id,
@@ -2903,6 +3038,9 @@
                             force: finalForce
                         });
                         this.showToastNotification('☁️', `Working reading saved locally (Connection lost).`);
+                    })
+                    .finally(() => {
+                        delete this.inFlightControllers[abortKey];
                     });
                 },
 
@@ -3198,13 +3336,19 @@
                         pending: '⏳'
                     };
 
-                    // Optimistically update status
+                    // 1. Immutable Pre-Mutation Snapshot for Absolute Rollback
+                    const snapshot = {
+                        review_status: prevStatus,
+                        _unlocked: bill._unlocked
+                    };
+
+                    // 2. Optimistically update status on UI instantly
                     bill.review_status = newStatus;
                     if (newStatus !== 'submitted') {
                         bill._unlocked = false;
                     }
 
-                    // Update live global counts immediately
+                    // 3. Update live global counts immediately
                     if (prevStatus !== newStatus) {
                         if (this.counts[prevStatus] !== undefined) {
                             this.counts[prevStatus] = Math.max(0, this.counts[prevStatus] - 1);
@@ -3214,7 +3358,7 @@
                         }
                     }
 
-                    // Handle active filter view removal
+                    // 4. Handle active filter view removal with Exact Index tracking for safe re-insertion
                     let removedIndex = -1;
                     const wasFilteredOut = (this.filterStatus !== 'all' && this.filterStatus !== newStatus);
                     if (wasFilteredOut) {
@@ -3228,6 +3372,16 @@
                         }
                     }
 
+                    // 5. Abort in-flight status request for this CA (Prevents Race Conditions)
+                    const abortKey = `status_${bill.ca_number}`;
+                    this.abortInFlight(abortKey);
+                    const controller = new AbortController();
+                    this.inFlightControllers[abortKey] = controller;
+
+                    // 6. Monotonic Sequence Counter
+                    bill._statusSeq = (bill._statusSeq || 0) + 1;
+                    const reqSeq = bill._statusSeq;
+
                     // Check offline / server unreachable state
                     if (!this.isOnline || !this.isServerReachable) {
                         this.enqueueOfflineAction('status', {
@@ -3237,6 +3391,7 @@
                             billing_year: bill.billing_year || this.selectedYear,
                             status: newStatus
                         });
+                        bill._syncError = false;
                         this.showToastNotification(
                             '☁️',
                             `Marked CA ${bill.ca_number} as ${statusLabels[newStatus]} (Saved Offline)`,
@@ -3269,6 +3424,8 @@
                     // Send API request
                     fetch('/bills/status', {
                         method: 'POST',
+                        keepalive: true,
+                        signal: controller.signal,
                         headers: {
                             'Content-Type': 'application/json',
                             'X-CSRF-TOKEN': this.getCsrfToken(),
@@ -3282,26 +3439,66 @@
                         })
                     })
                     .then(res => {
-                        if (!res.ok) throw new Error('Status update failed ' + res.status);
+                        if (!res.ok) throw new Error('Status update failed (HTTP ' + res.status + ')');
                         return res.json();
                     })
                     .then(json => {
-                        if (!json.success) {
-                            // If failed, revert
-                            this.undoLastAction();
+                        if (bill._statusSeq !== reqSeq) return;
+
+                        if (json.success) {
+                            bill._syncError = false;
+                            bill._syncErrorMsg = null;
+                            this.syncErrors = this.syncErrors.filter(e => !(e.ca_number === bill.ca_number && e.field === 'Status'));
+                        } else {
+                            throw new Error(json.message || 'Server rejected status update');
                         }
                     })
                     .catch(err => {
-                        console.warn('Status update online failed, queuing offline:', err);
-                        this.isServerReachable = false;
-                        this.enqueueOfflineAction('status', {
-                            id: bill.id,
-                            ca_number: bill.ca_number,
-                            billing_month: bill.billing_month || this.selectedMonth,
-                            billing_year: bill.billing_year || this.selectedYear,
-                            status: newStatus
-                        });
-                        this.showToastNotification('☁️', `Status saved locally for CA ${bill.ca_number} (Connection lost).`);
+                        if (err.name === 'AbortError') return;
+
+                        console.warn('Status update failed, handling rollback or offline:', err);
+
+                        // If actual network offline failure
+                        if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
+                            this.isServerReachable = false;
+                            this.enqueueOfflineAction('status', {
+                                id: bill.id,
+                                ca_number: bill.ca_number,
+                                billing_month: bill.billing_month || this.selectedMonth,
+                                billing_year: bill.billing_year || this.selectedYear,
+                                status: newStatus
+                            });
+                            this.showToastNotification('☁️', `Status saved locally for CA ${bill.ca_number} (Connection lost).`);
+                            return;
+                        }
+
+                        // Guaranteed Rollback on Server Rejection
+                        bill.review_status = snapshot.review_status;
+                        bill._unlocked = snapshot._unlocked;
+                        bill._syncError = true;
+                        bill._syncErrorMsg = err.message || 'Server rejected status update';
+                        if (!this.syncErrors.some(e => e.ca_number === bill.ca_number && e.field === 'Status')) {
+                            this.syncErrors.push({ ca_number: bill.ca_number, field: 'Status', msg: bill._syncErrorMsg });
+                        }
+
+                        // Restore counts
+                        if (this.counts[newStatus] !== undefined) {
+                            this.counts[newStatus] = Math.max(0, this.counts[newStatus] - 1);
+                        }
+                        if (this.counts[prevStatus] !== undefined) {
+                            this.counts[prevStatus] = (this.counts[prevStatus] || 0) + 1;
+                        }
+
+                        // Re-insert card at exact original index if it was removed
+                        if (wasFilteredOut && removedIndex !== -1) {
+                            this.items.splice(removedIndex, 0, bill);
+                            this.pagination.total = (this.pagination.total || 0) + 1;
+                        }
+
+                        this.showToastNotification('⚠️', `Failed to mark CA ${bill.ca_number}: ${bill._syncErrorMsg} (Reverted)`);
+                    })
+                    .finally(() => {
+                        delete this.inFlightControllers[abortKey];
                     });
 
                     return wasFilteredOut;
@@ -3328,6 +3525,11 @@
                     const current = bill.remark || '';
                     bill._lastSavedRemark = current;
 
+                    const abortKey = `remark_${bill.ca_number}`;
+                    this.abortInFlight(abortKey);
+                    const controller = new AbortController();
+                    this.inFlightControllers[abortKey] = controller;
+
                     if (!this.isOnline || !this.isServerReachable) {
                         this.enqueueOfflineAction('remark', {
                             id: bill.id,
@@ -3351,6 +3553,8 @@
 
                     fetch('/bills/remark', {
                         method: 'POST',
+                        keepalive: true,
+                        signal: controller.signal,
                         headers: {
                             'Content-Type': 'application/json',
                             'X-CSRF-TOKEN': this.getCsrfToken(),
@@ -3364,11 +3568,13 @@
                         })
                     })
                     .then(res => {
-                        if (!res.ok) throw new Error('Remark save error: ' + res.status);
+                        if (!res.ok) throw new Error('Remark save error: (HTTP ' + res.status + ')');
                         return res.json();
                     })
                     .then(json => {
                         if (json.success) {
+                            bill._syncError = false;
+                            this.syncErrors = this.syncErrors.filter(e => !(e.ca_number === bill.ca_number && e.field === 'Remark'));
                             this.showToastNotification(
                                 '💬',
                                 current.trim() ? `Saved note for CA ${bill.ca_number}` : `Cleared note for CA ${bill.ca_number}`,
@@ -3379,19 +3585,40 @@
                                     newRemark: current
                                 }
                             );
+                        } else {
+                            throw new Error(json.message || 'Server rejected note');
                         }
                     })
                     .catch(err => {
-                        console.warn('Remark save failed online, queuing offline:', err);
-                        this.isServerReachable = false;
-                        this.enqueueOfflineAction('remark', {
-                            id: bill.id,
-                            ca_number: bill.ca_number,
-                            billing_month: bill.billing_month || this.selectedMonth,
-                            billing_year: bill.billing_year || this.selectedYear,
-                            remark: current
-                        });
-                        this.showToastNotification('☁️', `Note saved locally for CA ${bill.ca_number} (Connection lost).`);
+                        if (err.name === 'AbortError') return;
+
+                        console.warn('Remark save failed online, handling rollback or offline:', err);
+
+                        if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
+                            this.isServerReachable = false;
+                            this.enqueueOfflineAction('remark', {
+                                id: bill.id,
+                                ca_number: bill.ca_number,
+                                billing_month: bill.billing_month || this.selectedMonth,
+                                billing_year: bill.billing_year || this.selectedYear,
+                                remark: current
+                            });
+                            this.showToastNotification('☁️', `Note saved locally for CA ${bill.ca_number} (Connection lost).`);
+                            return;
+                        }
+
+                        // Roll back to previous remark on server error
+                        bill.remark = prev;
+                        bill._lastSavedRemark = prev;
+                        bill._syncError = true;
+                        bill._syncErrorMsg = err.message || 'Failed to save note';
+                        if (!this.syncErrors.some(e => e.ca_number === bill.ca_number && e.field === 'Remark')) {
+                            this.syncErrors.push({ ca_number: bill.ca_number, field: 'Remark', msg: bill._syncErrorMsg });
+                        }
+                        this.showToastNotification('⚠️', `Failed to save note for CA ${bill.ca_number} (Reverted).`);
+                    })
+                    .finally(() => {
+                        delete this.inFlightControllers[abortKey];
                     });
                 },
 
@@ -3407,6 +3634,11 @@
                     bill.tag = tagCode;
                     bill.display_tag = this.getTagDisplayLabel(tagCode);
                     bill.full_tag = this.getTagFullLabel(tagCode);
+
+                    const abortKey = `tag_${bill.ca_number}`;
+                    this.abortInFlight(abortKey);
+                    const controller = new AbortController();
+                    this.inFlightControllers[abortKey] = controller;
 
                     if (!this.isOnline || !this.isServerReachable) {
                         this.enqueueOfflineAction('tag', {
@@ -3431,6 +3663,8 @@
 
                     fetch('/bills/tag', {
                         method: 'POST',
+                        keepalive: true,
+                        signal: controller.signal,
                         headers: {
                             'Content-Type': 'application/json',
                             'X-CSRF-TOKEN': this.getCsrfToken(),
@@ -3445,11 +3679,13 @@
                         })
                     })
                     .then(res => {
-                        if (!res.ok) throw new Error('Tag save error: ' + res.status);
+                        if (!res.ok) throw new Error('Tag save error: (HTTP ' + res.status + ')');
                         return res.json();
                     })
                     .then(json => {
                         if (json.success) {
+                            bill._syncError = false;
+                            this.syncErrors = this.syncErrors.filter(e => !(e.ca_number === bill.ca_number && e.field === 'Tag'));
                             this.showToastNotification(
                                 '🏷️',
                                 `Tag for CA ${bill.ca_number} set to ${json.display_tag}`,
@@ -3460,19 +3696,41 @@
                                     newTag: tagCode
                                 }
                             );
+                        } else {
+                            throw new Error(json.message || 'Server rejected tag');
                         }
                     })
                     .catch(err => {
-                        console.warn('Failed to save tag online, queuing offline:', err);
-                        this.isServerReachable = false;
-                        this.enqueueOfflineAction('tag', {
-                            id: bill.id,
-                            ca_number: bill.ca_number,
-                            billing_month: bill.billing_month || this.selectedMonth,
-                            billing_year: bill.billing_year || this.selectedYear,
-                            tag: tagCode
-                        });
-                        this.showToastNotification('☁️', `Tag saved locally for CA ${bill.ca_number} (Connection lost).`);
+                        if (err.name === 'AbortError') return;
+
+                        console.warn('Failed to save tag online, handling rollback or offline:', err);
+
+                        if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
+                            this.isServerReachable = false;
+                            this.enqueueOfflineAction('tag', {
+                                id: bill.id,
+                                ca_number: bill.ca_number,
+                                billing_month: bill.billing_month || this.selectedMonth,
+                                billing_year: bill.billing_year || this.selectedYear,
+                                tag: tagCode
+                            });
+                            this.showToastNotification('☁️', `Tag saved locally for CA ${bill.ca_number} (Connection lost).`);
+                            return;
+                        }
+
+                        // Roll back tag on server rejection
+                        bill.tag = prevTag;
+                        bill.display_tag = this.getTagDisplayLabel(prevTag);
+                        bill.full_tag = this.getTagFullLabel(prevTag);
+                        bill._syncError = true;
+                        bill._syncErrorMsg = err.message || 'Failed to save tag';
+                        if (!this.syncErrors.some(e => e.ca_number === bill.ca_number && e.field === 'Tag')) {
+                            this.syncErrors.push({ ca_number: bill.ca_number, field: 'Tag', msg: bill._syncErrorMsg });
+                        }
+                        this.showToastNotification('⚠️', `Failed to set tag for CA ${bill.ca_number} (Reverted).`);
+                    })
+                    .finally(() => {
+                        delete this.inFlightControllers[abortKey];
                     });
                 },
 

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\BillRecord;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
+use App\Services\Extraction\BillExtractionManager;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -13,6 +14,13 @@ use Smalot\PdfParser\Parser;
 class BillParseService
 {
     protected ?Parser $pdfParser = null;
+
+    protected BillExtractionManager $extractionManager;
+
+    public function __construct(?BillExtractionManager $extractionManager = null)
+    {
+        $this->extractionManager = $extractionManager ?: app(BillExtractionManager::class);
+    }
 
     protected function getParser(): Parser
     {
@@ -182,7 +190,41 @@ class BillParseService
                     $initialWorking = (string) $extracted['current_reading'];
                 }
 
+                // Resolve MRU from extracted bill data if missing on record
+                $mruId = $record->mru_id;
+                $newPdfPath = $record->pdf_path;
+                if (! empty($extracted['mru'])) {
+                    $rawMru = trim($extracted['mru']);
+                    $mruCode = str_contains($rawMru, '/') ? trim(substr(strrchr($rawMru, '/'), 1)) : $rawMru;
+                    $mruName = str_replace('_', ' ', $mruCode);
+                    if (! $mruId) {
+                        $mru = Mru::firstOrCreate(
+                            ['user_id' => $userId, 'code' => $mruCode],
+                            ['name' => $mruName, 'full_identifier' => $rawMru, 'status' => 'active']
+                        );
+                        $mruId = $mru->id;
+                    }
+
+                    // Relocate PDF from GENERAL folder to identified MRU folder
+                    if ($record->pdf_path && str_contains($record->pdf_path, '/GENERAL/')) {
+                        $targetDir = "users/{$userId}/pdfs/{$record->billing_year}/{$record->billing_month}/{$mruCode}";
+                        $targetPath = "{$targetDir}/{$ca}.pdf";
+                        Storage::disk('local')->makeDirectory($targetDir);
+                        if (Storage::disk('local')->exists($record->pdf_path)) {
+                            Storage::disk('local')->move($record->pdf_path, $targetPath);
+                            $newPdfPath = $targetPath;
+                        }
+                    }
+                }
+
+                if ($mruId && $masterAccount && ! $masterAccount->mru_id) {
+                    $masterAccount->mru_id = $mruId;
+                    $masterAccount->save();
+                }
+
                 $record->update([
+                    'mru_id' => $mruId ?: $record->mru_id,
+                    'pdf_path' => $newPdfPath,
                     'bill_month_label' => $extracted['bill_month'] ?: $record->bill_month_label,
                     'consumer_name' => $finalConsumerName,
                     'total_amount' => $extracted['total_amount'],
@@ -355,7 +397,41 @@ class BillParseService
                     $initialWorking = (string) $extracted['current_reading'];
                 }
 
+                // Resolve MRU from extracted bill data if missing on record
+                $mruId = $record->mru_id;
+                $newPdfPath = $record->pdf_path;
+                if (! empty($extracted['mru'])) {
+                    $rawMru = trim($extracted['mru']);
+                    $mruCode = str_contains($rawMru, '/') ? trim(substr(strrchr($rawMru, '/'), 1)) : $rawMru;
+                    $mruName = str_replace('_', ' ', $mruCode);
+                    if (! $mruId) {
+                        $mru = Mru::firstOrCreate(
+                            ['user_id' => $userId, 'code' => $mruCode],
+                            ['name' => $mruName, 'full_identifier' => $rawMru, 'status' => 'active']
+                        );
+                        $mruId = $mru->id;
+                    }
+
+                    // Relocate PDF from GENERAL folder to identified MRU folder
+                    if ($record->pdf_path && str_contains($record->pdf_path, '/GENERAL/')) {
+                        $targetDir = "users/{$userId}/pdfs/{$record->billing_year}/{$record->billing_month}/{$mruCode}";
+                        $targetPath = "{$targetDir}/{$ca}.pdf";
+                        Storage::disk('local')->makeDirectory($targetDir);
+                        if (Storage::disk('local')->exists($record->pdf_path)) {
+                            Storage::disk('local')->move($record->pdf_path, $targetPath);
+                            $newPdfPath = $targetPath;
+                        }
+                    }
+                }
+
+                if ($mruId && $masterAccount && ! $masterAccount->mru_id) {
+                    $masterAccount->mru_id = $mruId;
+                    $masterAccount->save();
+                }
+
                 $record->update([
+                    'mru_id' => $mruId ?: $record->mru_id,
+                    'pdf_path' => $newPdfPath,
                     'bill_month_label' => $extracted['bill_month'] ?: $record->bill_month_label,
                     'consumer_name' => $finalConsumerName,
                     'total_amount' => $extracted['total_amount'],
@@ -417,7 +493,7 @@ class BillParseService
         $parser = $this->getParser();
         $pdf = $parser->parseFile($pdfPath);
 
-        return $this->extractFromText($pdf->getText());
+        return $this->extractionManager->extract($pdf->getText(), $pdfPath);
     }
 
     /**
@@ -429,136 +505,11 @@ class BillParseService
     }
 
     /**
-     * Extract structured fields from raw bill text.
+     * Extract structured fields from raw bill text using the multi-engine manager.
      */
-    public function extractFromText(string $text): array
+    public function extractFromText(string $text, ?string $pdfPath = null): array
     {
-        $data = [
-            'consumer_name' => null,
-            'father_name' => null,
-            'bill_month' => null,
-            'bill_date' => null,
-            'due_date' => null,
-            'current_reading' => null,
-            'previous_reading' => null,
-            'units_consumed' => 0,
-            'total_amount' => 0.0,
-            'meter_no' => null,
-            'tariff_category' => null,
-            'billing_basis' => 'OK',
-            'mru' => null,
-        ];
-
-        // 1. Consumer Name: (matches uppercase English name line before miHkks)
-        if (preg_match('/\n([^\n\r]+?)\s*[\t\s]+miHkks/u', $text, $m)) {
-            $raw = trim(preg_replace('/[^A-Za-z0-9\s\.\,\/\-\&\(\)]/u', '', $m[1]));
-            $data['consumer_name'] = preg_replace('/\s+/', ' ', $raw);
-        } elseif (preg_match('/miHkksDrk dk uke[^\n\r]*\n\s*([^\n\r]+)/u', $text, $m)) {
-            $data['consumer_name'] = trim($m[1]);
-        }
-
-        // 2. Father / Relative Name:
-        if (preg_match('/\n([A-Z0-9\s\.\,\/\-]+?)\s*[\t\s]+,e vkj ;q/u', $text, $mFather)) {
-            $rawFather = trim(preg_replace('/[^A-Za-z0-9\s\.\,\/\-\&\(\)]/u', '', $mFather[1]));
-            if (! empty($rawFather) && ! str_contains($rawFather, 'VILL') && strlen($rawFather) >= 3) {
-                $data['father_name'] = preg_replace('/\s+/', ' ', $rawFather);
-            }
-        }
-
-        // 3. Bill Month:
-        if (preg_match('/fcy ekg\s*\n?\s*([A-Z]{3},\s*\d{4})/i', $text, $m)) {
-            $data['bill_month'] = trim($m[1]);
-        }
-
-        // 4. Total Amount:
-        if (preg_match('/\d{2}-\d{2}-\d{4}\s+rd ns; jkf\'k\s*\n\s*(-?\s*[\d,]+\.?\d*)/u', $text, $m)) {
-            $data['total_amount'] = (float) str_replace([' ', ','], '', $m[1]);
-        } elseif (preg_match_all('/dqy jkf\'k\s+(-?\s*[\d.]+)/u', $text, $amounts)) {
-            $data['total_amount'] = (float) str_replace(' ', '', end($amounts[1]));
-        }
-
-        // 5. Due Date:
-        if (preg_match('/(\d{2}-\d{2}-\d{4})\s+rd ns; jkf\'k/u', $text, $m)) {
-            $d = \DateTime::createFromFormat('d-m-Y', $m[1]);
-            $data['due_date'] = $d ? $d->format('Y-m-d') : null;
-        }
-
-        // 6. Bill Date:
-        if (preg_match('/fcy frfFk\s*\n\s*(\d{2}-\d{2}-\d{4})/u', $text, $m)) {
-            $d = \DateTime::createFromFormat('d-m-Y', $m[1]);
-            $data['bill_date'] = $d ? $d->format('Y-m-d') : null;
-        }
-
-        // 7. Meter Readings & Units:
-        $readingPattern = '/(\d+)\s+(\d{2}-\d{2}-\d{4})\s*(\d+)\s+(\d{2}-[A-Z]{3}-\d{2})\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/i';
-        if (preg_match($readingPattern, $text, $m)) {
-            $data['meter_no'] = $m[1];
-            $data['current_reading'] = (int) $m[3];
-            $data['previous_reading'] = (int) $m[5];
-            $data['units_consumed'] = (int) $m[6];
-        } elseif (preg_match('/dqy \[kir\s*\n\s*(\d+)/u', $text, $m)) {
-            $data['units_consumed'] = (int) $m[1];
-        }
-
-        // 8. Tariff Category (under Js.kh)
-        if (preg_match('/Js\.kh\s*\n\s*([A-Za-z0-9\(\)\/\-\_]+)/u', $text, $m)) {
-            $data['tariff_category'] = trim($m[1]);
-        }
-
-        // 9. Billing Basis (under fcy dk vkèkkj)
-        if (preg_match('/fcy dk vkèkkj\s*\n\s*([A-Za-z0-9\(\)\/\-\_]+)/u', $text, $m)) {
-            $rawBasis = trim($m[1]);
-            if (stripos($rawBasis, 'MD') !== false) {
-                $data['billing_basis'] = 'MD';
-            } elseif (stripos($rawBasis, 'LK') !== false) {
-                $data['billing_basis'] = 'LK';
-            } elseif (stripos($rawBasis, 'PL') !== false) {
-                $data['billing_basis'] = 'PL';
-            } elseif (stripos($rawBasis, 'RN') !== false) {
-                $data['billing_basis'] = 'RN';
-            } elseif (stripos($rawBasis, 'Normal') !== false || stripos($rawBasis, 'OK') !== false) {
-                $data['billing_basis'] = 'OK';
-            } else {
-                $data['billing_basis'] = strtoupper(substr($rawBasis, 0, 4));
-            }
-        }
-
-        // 10. MRU:
-        if (preg_match('/,e vkj ;q\s*\n\s*([A-Za-z0-9_\-\s]+?)(?=\n\d|\n[A-Z]|\nrd)/u', $text, $m)) {
-            $data['mru'] = trim(str_replace(["\r", "\n", ' '], '', $m[1]));
-        } elseif (preg_match('/,e vkj ;q\s+([A-Za-z0-9_\-]+)/u', $text, $m)) {
-            $data['mru'] = trim($m[1]);
-        }
-
-        // 11. Historical Monthly Consumption Table ([kir fooj.kh):
-        $data['consumption_history'] = [];
-        if (preg_match('/\[kir fooj\.kh(.*?)(?:lHkh|\z)/us', $text, $sec)) {
-            if (preg_match_all('/([A-Z]{3})\/(\d{2})\s+(\d+)(?:\(([A-Za-z0-9]+)(?:,\s*[A-Za-z0-9]+)?\))?/i', $sec[1], $histMatches, PREG_SET_ORDER)) {
-                $monthMap = [
-                    'JAN' => 1, 'FEB' => 2, 'MAR' => 3, 'APR' => 4, 'MAY' => 5, 'JUN' => 6,
-                    'JUL' => 7, 'AUG' => 8, 'SEP' => 9, 'OCT' => 10, 'NOV' => 11, 'DEC' => 12,
-                ];
-                foreach ($histMatches as $hm) {
-                    $mShort = strtoupper($hm[1]);
-                    $mNum = $monthMap[$mShort] ?? null;
-                    $yNum = 2000 + (int) $hm[2];
-                    $units = (int) $hm[3];
-                    $basis = ! empty($hm[4]) ? strtoupper($hm[4]) : 'OK';
-
-                    if ($mNum && $units >= 0) {
-                        $data['consumption_history'][] = [
-                            'month' => $mNum,
-                            'year' => $yNum,
-                            'month_label' => "{$mShort}, {$yNum}",
-                            'units' => $units,
-                            'basis' => $basis,
-                        ];
-                    }
-                }
-            }
-        }
-
-        return $data;
+        return $this->extractionManager->extract($text, $pdfPath);
     }
 
     /**

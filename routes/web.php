@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AdminApiHubController;
 use App\Http\Controllers\Admin\AdminBackupController;
 use App\Http\Controllers\Admin\AdminBillController;
+use App\Http\Controllers\Admin\AdminCompressionController;
 use App\Http\Controllers\Admin\AdminCouponController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminEmailProviderController;
@@ -210,6 +211,16 @@ Route::middleware(['auth', 'admin.restore_impersonation', 'role:admin', 'active'
     Route::get('/wallets/{user}/export', [AdminWalletController::class, 'export'])->name('wallets.export');
 
     Route::get('/bills', [AdminBillController::class, 'index'])->name('bills.index');
+    Route::get('/bills/engine-settings', [AdminBillController::class, 'engineSettings'])->name('bills.engine-settings');
+    Route::post('/bills/engine-settings', [AdminBillController::class, 'updateEngineSettings'])->name('bills.engine-settings.update');
+    Route::post('/bills/engine-settings/reset', [AdminBillController::class, 'resetEngineSettings'])->name('bills.engine-settings.reset');
+    Route::post('/bills/engine-settings/diagnostic', [AdminBillController::class, 'testEngineDiagnostic'])->name('bills.engine-settings.diagnostic');
+
+    // Admin Adaptive Compression Management & Live Diagnostics
+    Route::get('/compression', [AdminCompressionController::class, 'index'])->name('compression.index');
+    Route::post('/compression', [AdminCompressionController::class, 'update'])->name('compression.update');
+    Route::post('/compression/reset', [AdminCompressionController::class, 'reset'])->name('compression.reset');
+    Route::post('/compression/diagnostic', [AdminCompressionController::class, 'diagnostic'])->name('compression.diagnostic');
 
     Route::get('/mrus', [AdminMruController::class, 'index'])->name('mrus.index');
     Route::patch('/mrus/{mru}', [AdminMruController::class, 'update'])->name('mrus.update');
