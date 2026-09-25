@@ -50,7 +50,8 @@ RUN install-php-extensions \
     opcache \
     redis \
     brotli \
-    zstd
+    zstd \
+    sockets
 
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
