@@ -205,7 +205,7 @@ class MruController extends Controller
             return response()->json([
                 'success' => true,
                 'already_exists' => false,
-                'message' => "MRU '{$mru->name} ({$mru->code})' created successfully.",
+                'message' => "MRU '{$mru->name} ({$mru->code})' created successfully. Next step: add or import consumers to start billing.",
                 'redirect_url' => route('mrus.show', $mru),
                 'mru' => [
                     'id' => $mru->id,
@@ -215,7 +215,7 @@ class MruController extends Controller
             ], 201);
         }
 
-        return redirect()->route('mrus.show', $mru)->with('success', "MRU '{$mru->name} ({$mru->code})' created successfully.");
+        return redirect()->route('mrus.show', $mru)->with('success', "MRU '{$mru->name} ({$mru->code})' created successfully. Next step: add or import consumers to start billing.");
     }
 
     /**
@@ -815,6 +815,8 @@ class MruController extends Controller
         if ($activeConsumers->isEmpty()) {
             return response()->json([
                 'success' => false,
+                'action_required' => 'add_consumers',
+                'redirect_url' => route('mrus.show', $mru),
                 'message' => "MRU '{$mru->name}' has no active consumers. Please add consumers first.",
             ], 422);
         }
@@ -984,6 +986,8 @@ class MruController extends Controller
         if (empty($consumerCAs)) {
             return response()->json([
                 'success' => false,
+                'action_required' => 'add_consumers',
+                'redirect_url' => route('mrus.show', $mru),
                 'message' => "MRU '{$mru->name}' has no active consumers. Please add consumers first.",
             ], 422);
         }

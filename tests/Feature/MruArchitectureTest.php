@@ -299,4 +299,80 @@ class MruArchitectureTest extends TestCase
 
         $this->assertDatabaseCount('mrus', 2);
     }
+
+    public function test_creating_billing_cycle_on_mru_without_consumers_returns_422_with_guidance(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $this->subscribeUser($user);
+
+        $mru = Mru::create([
+            'user_id' => $user->id,
+            'code' => '0473',
+            'name' => 'Hala',
+            'status' => 'active',
+        ]);
+
+        // Attempting startMonthlyBilling on MRU with 0 consumers
+        $response = $this->actingAs($user)->postJson("/mrus/{$mru->id}/start-billing", [
+            'billing_month' => 9,
+            'billing_year' => 2026,
+            'action_type' => 'download_all',
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJson([
+            'success' => false,
+            'action_required' => 'add_consumers',
+            'message' => "MRU 'Hala' has no active consumers. Please add consumers first.",
+        ]);
+        $this->assertStringContainsString("/mrus/{$mru->id}", $response->json('redirect_url'));
+
+        // Attempting createCycleOnly on MRU with 0 consumers
+        $cycleOnlyResponse = $this->actingAs($user)->postJson("/mrus/{$mru->id}/start-billing", [
+            'billing_month' => 9,
+            'billing_year' => 2026,
+            'action_type' => 'create_only',
+        ]);
+
+        $cycleOnlyResponse->assertStatus(422);
+        $cycleOnlyResponse->assertJson([
+            'success' => false,
+            'action_required' => 'add_consumers',
+            'message' => "MRU 'Hala' has no active consumers. Please add consumers first.",
+        ]);
+    }
+
+    public function test_mru_show_page_displays_onboarding_guidance_when_no_consumers_exist(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+
+        $mru = Mru::create([
+            'user_id' => $user->id,
+            'code' => '0473',
+            'name' => 'Hala',
+            'status' => 'active',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('mrus.show', $mru));
+
+        $response->assertOk();
+        $response->assertSee('No Consumers in this MRU Workspace Yet');
+        $response->assertSee('Step 1: Add Consumers First');
+        $response->assertSee('No Active Consumers in this MRU');
+        $response->assertSee('Buttons are disallowed: Add or import consumers to this MRU to unlock billing cycles.');
+    }
+
+    public function test_creating_mru_includes_guidance_in_flash_message(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+
+        $response = $this->actingAs($user)->post('/mrus', [
+            'code' => '0888',
+            'name' => 'Rampur',
+            'full_identifier' => 'Rampur Sector',
+        ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('success', "MRU 'Rampur (0888)' created successfully. Next step: add or import consumers to start billing.");
+    }
 }

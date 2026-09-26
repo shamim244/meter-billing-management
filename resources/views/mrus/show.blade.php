@@ -114,6 +114,33 @@
                 </div>
             </div>
 
+            <!-- No Consumers Onboarding Banner -->
+            @if($consumers->total() === 0)
+                <div class="p-5 rounded-3xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/80 text-amber-900 dark:text-amber-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div class="flex items-start gap-3.5">
+                        <div class="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-900/60 text-amber-600 dark:text-amber-300 flex items-center justify-center shrink-0 text-xl font-bold">
+                            ⚠️
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-bold text-amber-900 dark:text-amber-100">
+                                No Consumers in this MRU Workspace Yet
+                            </h4>
+                            <p class="text-xs text-amber-800/90 dark:text-amber-300/90 mt-0.5 leading-relaxed max-w-2xl">
+                                Before creating billing cycles or downloading bills, you must register consumer CA numbers or bulk import them into this MRU workspace.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button type="button" @click="showAddConsumerModal = true" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center gap-1.5">
+                            <span>+</span> Add Consumer
+                        </button>
+                        <button type="button" @click="showImportModal = true" class="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-slate-700 text-amber-900 dark:text-amber-200 rounded-xl text-xs font-bold border border-amber-300 dark:border-amber-700 transition flex items-center gap-1.5">
+                            <span>📥</span> Bulk Paste CAs
+                        </button>
+                    </div>
+                </div>
+            @endif
+
             <!-- Tab Switcher & Dynamic Action Toolbar -->
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-3">
                 <!-- Pill Tabs -->
@@ -203,17 +230,40 @@
                             </div>
                         </div>
                     @empty
-                        <div class="col-span-full bg-white dark:bg-slate-900 p-12 text-center rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                            <div class="w-14 h-14 bg-blue-50 dark:bg-blue-950/40 text-blue-500 dark:text-blue-400 rounded-full flex items-center justify-center mx-auto mb-3 text-xl">
-                                📅
-                            </div>
-                            <h3 class="text-base font-bold text-slate-900 dark:text-slate-100">No monthly billing sessions recorded yet</h3>
-                            <p class="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto mt-1 mb-5">
-                                Initialize your first billing cycle (e.g. {{ date('F Y') }}) for this MRU workspace.
-                            </p>
-                            <button @click="showStartBillingModal = true" class="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 shadow-sm transition">
-                                + Create First Billing Cycle
-                            </button>
+                        <div class="col-span-full bg-white dark:bg-slate-900 p-10 sm:p-12 text-center rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                            @if($consumers->total() === 0)
+                                <div class="w-14 h-14 bg-amber-50 dark:bg-amber-950/40 text-amber-500 rounded-full flex items-center justify-center mx-auto text-2xl">
+                                    👥
+                                </div>
+                                <div>
+                                    <h3 class="text-base font-bold text-slate-900 dark:text-slate-100">Step 1: Add Consumers First</h3>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1 leading-relaxed">
+                                        This MRU workspace has no registered consumers. You need to register or import consumer account numbers (CAs) before you can initialize a monthly billing cycle.
+                                    </p>
+                                </div>
+                                <div class="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+                                    <button type="button" @click="showAddConsumerModal = true" class="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition flex items-center gap-1.5">
+                                        <span>+</span> Add First Consumer
+                                    </button>
+                                    <button type="button" @click="showImportModal = true" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 transition flex items-center gap-1.5">
+                                        <span>📥</span> Bulk Paste CA Numbers
+                                    </button>
+                                    <button type="button" @click="activeTab = 'consumers'" class="px-4 py-2.5 text-blue-600 dark:text-cyan-400 hover:underline text-xs font-semibold">
+                                        View Consumer Master Tab →
+                                    </button>
+                                </div>
+                            @else
+                                <div class="w-14 h-14 bg-blue-50 dark:bg-blue-950/40 text-blue-500 dark:text-blue-400 rounded-full flex items-center justify-center mx-auto mb-1 text-2xl">
+                                    📅
+                                </div>
+                                <h3 class="text-base font-bold text-slate-900 dark:text-slate-100">No monthly billing sessions recorded yet</h3>
+                                <p class="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto mt-1 mb-3">
+                                    Initialize your first billing cycle (e.g. {{ date('F Y') }}) for this MRU workspace.
+                                </p>
+                                <button @click="showStartBillingModal = true" class="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 shadow-sm transition">
+                                    + Create First Billing Cycle
+                                </button>
+                            @endif
                         </div>
                     @endforelse
                 </div>
@@ -323,9 +373,23 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="9" class="py-12 text-center text-slate-400 dark:text-slate-500">
-                                            <div class="text-2xl mb-1">👥</div>
-                                            No consumers found matching your search.
+                                        <td colspan="10" class="py-12 text-center text-slate-400 dark:text-slate-500">
+                                            <div class="text-3xl mb-2">👥</div>
+                                            @if(!empty($search))
+                                                <p class="text-sm font-semibold text-slate-700 dark:text-slate-300">No consumers found matching "{{ $search }}"</p>
+                                                <a href="{{ route('mrus.show', $mru) }}" class="inline-block mt-2 text-xs text-blue-600 dark:text-cyan-400 hover:underline">Clear Search</a>
+                                            @else
+                                                <p class="text-sm font-semibold text-slate-700 dark:text-slate-300">No consumers registered in this MRU workspace yet</p>
+                                                <p class="text-xs text-slate-400 dark:text-slate-500 mt-1 max-w-sm mx-auto">Add consumer accounts individually or paste CA numbers in bulk to start billing.</p>
+                                                <div class="flex items-center justify-center gap-2.5 mt-4">
+                                                    <button type="button" @click="showAddConsumerModal = true" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition">
+                                                        + Add Consumer
+                                                    </button>
+                                                    <button type="button" @click="showImportModal = true" class="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 transition">
+                                                        📥 Bulk Paste CAs
+                                                    </button>
+                                                </div>
+                                            @endif
                                         </td>
                                     </tr>
                                 @endforelse
@@ -560,10 +624,35 @@
                                 <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Target MRU Workspace</span>
                                 <span class="text-sm font-bold text-slate-900 dark:text-white">{{ $mru->name }} ({{ $mru->code }})</span>
                             </div>
-                            <span class="px-2.5 py-1 rounded-xl text-xs font-mono font-bold bg-blue-50 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800/60">
+                            <span class="px-2.5 py-1 rounded-xl text-xs font-mono font-bold {{ $consumers->total() === 0 ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700' : 'bg-blue-50 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800/60' }}">
                                 {{ $consumers->total() }} Consumers
                             </span>
                         </div>
+
+                        <!-- Notice when 0 consumers -->
+                        @if($consumers->total() === 0)
+                            <div class="p-4 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/70 rounded-2xl space-y-2.5">
+                                <div class="flex items-start gap-2.5">
+                                    <span class="text-base leading-none mt-0.5">⚠️</span>
+                                    <div class="space-y-1">
+                                        <h5 class="text-xs font-bold text-amber-900 dark:text-amber-100">
+                                            No Active Consumers in this MRU
+                                        </h5>
+                                        <p class="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                                            You cannot start a billing cycle because this MRU workspace has <strong>0 registered consumers</strong>. The creation buttons below are disallowed until you add or import consumer CA numbers.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="pt-2 border-t border-amber-200/60 dark:border-amber-800/60 flex flex-wrap items-center gap-2">
+                                    <button type="button" @click="showStartBillingModal = false; showAddConsumerModal = true" class="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs">
+                                        <span>+</span> Add Consumer
+                                    </button>
+                                    <button type="button" @click="showStartBillingModal = false; showImportModal = true" class="px-3.5 py-1.5 bg-white dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-slate-700 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs">
+                                        <span>📥</span> Bulk Import CAs
+                                    </button>
+                                </div>
+                            </div>
+                        @endif
 
                         <!-- Billing Month & Year Selectors -->
                         <div class="grid grid-cols-2 gap-3">
@@ -632,19 +721,33 @@
                     </div>
 
                     <!-- Modal Actions: Two distinct choices -->
-                    <div class="p-4 sm:p-6 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2.5">
-                        <button type="button" @click="showStartBillingModal = false" :disabled="billingInProgress" class="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition text-center">
-                            Cancel
-                        </button>
+                    <div class="p-4 sm:p-6 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-3">
+                        <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                            <button type="button" @click="showStartBillingModal = false" :disabled="billingInProgress" class="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition text-center">
+                                Cancel
+                            </button>
 
-                        <div class="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
-                            <button type="button" @click="triggerMruBilling('create_only')" :disabled="billingInProgress || {{ $consumers->total() }} === 0" class="w-full sm:w-auto px-4 py-2.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-40 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition text-center">
-                                ➕ Create Cycle Only
-                            </button>
-                            <button type="button" @click="triggerMruBilling('download_all')" :disabled="billingInProgress || {{ $consumers->total() }} === 0" class="w-full sm:w-auto px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition flex items-center justify-center gap-1">
-                                <span>⚡</span> Create & Download All
-                            </button>
+                            <div class="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+                                <button type="button" @click="triggerMruBilling('create_only')" :disabled="billingInProgress || {{ $consumers->total() }} === 0" class="w-full sm:w-auto px-4 py-2.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition text-center" title="{{ $consumers->total() === 0 ? 'Cannot create cycle: MRU has 0 consumers. Add consumers first.' : '' }}">
+                                    ➕ Create Cycle Only
+                                </button>
+                                <button type="button" @click="triggerMruBilling('download_all')" :disabled="billingInProgress || {{ $consumers->total() }} === 0" class="w-full sm:w-auto px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition flex items-center justify-center gap-1" title="{{ $consumers->total() === 0 ? 'Cannot create cycle: MRU has 0 consumers. Add consumers first.' : '' }}">
+                                    <span>⚡</span> Create & Download All
+                                </button>
+                            </div>
                         </div>
+
+                        @if($consumers->total() === 0)
+                            <div class="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60 text-[11px] text-amber-700 dark:text-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div class="flex items-center gap-1.5 font-medium">
+                                    <span>🔒</span>
+                                    <span>Buttons are disallowed: Add or import consumers to this MRU to unlock billing cycles.</span>
+                                </div>
+                                <button type="button" @click="showStartBillingModal = false; showImportModal = true" class="text-xs font-bold text-amber-800 dark:text-amber-200 hover:underline shrink-0">
+                                    Import Now →
+                                </button>
+                            </div>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -773,7 +876,7 @@
     <script>
         function mruHubApp() {
             return {
-                activeTab: 'sessions',
+                activeTab: '{{ (!empty($search) || $consumers->total() === 0) ? "consumers" : "sessions" }}',
                 showAddConsumerModal: false,
                 showEditConsumerModal: false,
                 showImportModal: false,
