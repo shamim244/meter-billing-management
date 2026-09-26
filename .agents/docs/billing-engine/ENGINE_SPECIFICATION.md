@@ -79,13 +79,13 @@ The active driver is resolved dynamically at runtime via `\App\Models\SystemSett
         return base64_encode('Salted__' . $salt . $encrypted);
     }
     ```
-* **Response Sanitization**:
-  The response body is binary PDF. Because reverse proxy or chunked transfer encoding can insert header bytes before the `%PDF` magic marker, the service always strips preceding bytes:
-  ```php
-  if ($content && ($pos = strpos($content, '%PDF')) !== false) {
-      $content = substr($content, $pos);
-  }
-  ```
+* **Response Sanitization & Atomic Commit**:
+  1. **Direct Stream-to-Disk**: Streams binary data directly into a `.tmp` file (`users/{id}/pdfs/.../{ca}.pdf.tmp`) via `CURLOPT_FILE`, eliminating in-memory buffer spikes.
+  2. **Magic Header & Prefix Truncation**: Strips reverse proxy or chunked transfer encoding bytes prior to `%PDF-`.
+  3. **%%EOF Trailer Integrity**: Validates that `%%EOF` exists in the last 1024 bytes of the file, guaranteeing that network dropouts during streaming never result in corrupted or partial PDFs.
+  4. **Atomic Promotion**: Upon validation, atomically renames `.tmp` to `{ca}.pdf`.
+  5. **Upstream Business Error Classification**: If upstream returns non-PDF data (e.g. JSON error `{"status":"FAILURE","message":"Bill not generated"}` or 502 HTML), parses the exact upstream message into `BillRecord->error_message` and deletes the temporary file.
+  6. **Jittered Transient Retry**: Automatically retries transient network errors (HTTP 429, 500, 502, 503, 504, curl timeout 28) up to 2 times with jitter before falling back.
 
 ---
 
@@ -127,7 +127,15 @@ The manager inspects the raw text stream extracted by `Smalot\PdfParser\Parser`:
   * `bill_month`, `bill_date`, `due_date`.
   * `tariff_category`: e.g. `DS-II D`, `Kutir Jyoti Rural`.
   * `billing_basis`: e.g. `OK`, `LK`, `MD`.
-  * `mru`: e.g. `1002/BARSOI_NEW`.
+  * `bill_number`: 17-18 digit unique invoice identifier (e.g. `20260910230041576`).
+  * `sanctioned_load`: Sanctioned/connected load in KW or HP (e.g. `0.25 KW`, `1.00 KW`).
+  * `phase`: Single-phase (`1`) or three-phase (`3`).
+  * `energy_charges`: Billed energy charges (ऊर्जा शुल्क).
+  * `fixed_charges`: Demand/fixed charges (िफ / डिमांड चार्ज).
+  * `government_subsidy`: State government tariff subsidy (राज्य सरकार अनुदान).
+  * `electricity_duty`: Electricity duty (विद्युत कर).
+  * `arrears`: Past arrears balance (गत बकाया).
+  * `mru`: e.g. `0122/CHETANA`.
   * `consumption_history`: Array of up to 12 previous months containing `[month, year, units, basis]`.
 
 ### 3.3 Legacy Kruti-Dev Extractor
@@ -141,7 +149,12 @@ The manager inspects the raw text stream extracted by `Smalot\PdfParser\Parser`:
 ### 4.1 `BillDownloadService`
 * **Path**: [`app/Services/BillDownloadService.php`](file:///c:/Users/bccbo/Desktop/NBPDCL/tool/bill-downlod/php/laravel/app/Services/BillDownloadService.php)
 * **Method**: `download(array $caNumbers, int $userId, int $month, int $year, ?int $mruId = null, ?int $concurrency = null): array`
-* Handles multi-handle cURL queue, automatic fallback, disk quota checks, and updates `BillRecord` statuses (`download_status: 'downloaded'|'failed'`).
+* **Method**: `downloadSingle(string $ca, int $month, int $year, string $driver = 'auto', ?int $maxLookback = null): array`
+* **Features**:
+  * **Automated Smart Baseline Discovery (Auto-Lookback)**: When field operators work on an upcoming/current billing cycle (e.g., October), NBPDCL WSS has not yet generated bills for that month (returning 0 bytes). The engine automatically probes backwards up to 6 months ($M \rightarrow M-1 \rightarrow M-2 \dots \rightarrow M-6$) to discover and download the consumer's latest baseline bill. As soon as the bill is found, it is saved under the target working cycle, setting `bill_month_label` to the resolved baseline cycle and enabling `BillParseService` to extract starting readings (`previous_reading`) and arrears for immediate billing calculations.
+  * **Stream-to-Disk Multi-cURL**: Handles concurrent downloads with `CURLOPT_FILE` directly to disk pointers without accumulating large binary strings in memory.
+  * **Atomic File Promotion & Integrity Verification**: Validates `%PDF-` binary headers and `%%EOF` trailers within the trailing 1024 bytes, stripping chunked transfer or proxy prefixes before atomic rename.
+  * **Transient Jittered Retries & Safe Fallback**: Retries transient HTTP/network drops (429, 500+, connection timeouts) up to 3 times before falling back to legacy BSPHCL as a last resort.
 
 ### 4.2 `BillParseService`
 * **Path**: [`app/Services/BillParseService.php`](file:///c:/Users/bccbo/Desktop/NBPDCL/tool/bill-downlod/php/laravel/app/Services/BillParseService.php)

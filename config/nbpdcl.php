@@ -41,4 +41,5 @@ return [
     */
     'timeout' => (int) env('NBPDCL_TIMEOUT', 45),
     'concurrency' => (int) env('NBPDCL_CONCURRENCY', 10),
+    'lookback_months' => (int) env('NBPDCL_LOOKBACK_MONTHS', 6),
 ];

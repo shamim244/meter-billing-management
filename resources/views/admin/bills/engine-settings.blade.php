@@ -320,7 +320,7 @@
                 </div>
 
                 <!-- Network Metrics Grid -->
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
                     <div class="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80">
                         <span class="text-slate-500 block text-[10px] font-bold uppercase">Driver Executed</span>
                         <span class="text-white font-bold font-mono" x-text="diagResult?.driver_executed"></span>
@@ -332,6 +332,10 @@
                     <div class="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80">
                         <span class="text-slate-500 block text-[10px] font-bold uppercase">Payload Size</span>
                         <span class="text-white font-bold font-mono" x-text="Math.round(diagResult?.pdf_bytes / 1024) + ' KB'"></span>
+                    </div>
+                    <div class="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80">
+                        <span class="text-slate-500 block text-[10px] font-bold uppercase">Baseline Cycle</span>
+                        <span class="font-bold font-mono" :class="diagResult?.lookback_steps > 0 ? 'text-amber-400' : 'text-emerald-400'" x-text="diagResult?.resolved_cycle ? (diagResult.resolved_cycle + (diagResult.lookback_steps > 0 ? ' (' + diagResult.lookback_steps + 'm back)' : ' (Exact)')) : 'N/A'"></span>
                     </div>
                     <div class="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80">
                         <span class="text-slate-500 block text-[10px] font-bold uppercase">Layout Detected</span>
@@ -356,6 +360,10 @@
                                 <span class="text-white truncate block" x-text="diagResult.extraction.bill_month || '—'"></span>
                             </div>
                             <div class="p-2 bg-slate-950 rounded-lg border border-slate-800">
+                                <span class="text-slate-500 block text-[9px] uppercase">Bill Number</span>
+                                <span class="text-white truncate block text-[10px]" x-text="diagResult.extraction.bill_number || '—'"></span>
+                            </div>
+                            <div class="p-2 bg-slate-950 rounded-lg border border-slate-800">
                                 <span class="text-slate-500 block text-[9px] uppercase">Total Amount</span>
                                 <span class="text-emerald-400 font-bold block" x-text="'₹ ' + Number(diagResult.extraction.total_amount).toFixed(2)"></span>
                             </div>
@@ -368,12 +376,24 @@
                                 <span class="text-white block" x-text="diagResult.extraction.units_consumed ?? '0'"></span>
                             </div>
                             <div class="p-2 bg-slate-950 rounded-lg border border-slate-800">
+                                <span class="text-slate-500 block text-[9px] uppercase">Sanctioned Load</span>
+                                <span class="text-cyan-300 block" x-text="diagResult.extraction.sanctioned_load || '—'"></span>
+                            </div>
+                            <div class="p-2 bg-slate-950 rounded-lg border border-slate-800">
                                 <span class="text-slate-500 block text-[9px] uppercase">Meter Number</span>
                                 <span class="text-white block" x-text="diagResult.extraction.meter_no || '—'"></span>
                             </div>
                             <div class="p-2 bg-slate-950 rounded-lg border border-slate-800">
                                 <span class="text-slate-500 block text-[9px] uppercase">Tariff Category</span>
                                 <span class="text-amber-300 block" x-text="diagResult.extraction.tariff_category || '—'"></span>
+                            </div>
+                            <div class="p-2 bg-slate-950 rounded-lg border border-slate-800">
+                                <span class="text-slate-500 block text-[9px] uppercase">Billing Basis</span>
+                                <span class="text-emerald-300 block" x-text="diagResult.extraction.billing_basis || '—'"></span>
+                            </div>
+                            <div class="p-2 bg-slate-950 rounded-lg border border-slate-800">
+                                <span class="text-slate-500 block text-[9px] uppercase">Energy / Demand Chg</span>
+                                <span class="text-slate-300 block text-[10px]" x-text="'₹ ' + Number(diagResult.extraction.energy_charges || 0).toFixed(2) + ' / ₹ ' + Number(diagResult.extraction.fixed_charges || 0).toFixed(2)"></span>
                             </div>
                             <div class="p-2 bg-slate-950 rounded-lg border border-slate-800">
                                 <span class="text-slate-500 block text-[9px] uppercase">MRU Identifier</span>

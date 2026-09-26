@@ -162,82 +162,12 @@ class AdminBillController extends Controller
         $month = (int) $request->input('month', now()->month);
         $year = (int) $request->input('year', now()->year);
 
-        $wssUrl = SystemSetting::get('nbpdcl_wss_url', config('nbpdcl.wss_url'));
-        $aesKey = SystemSetting::get('nbpdcl_aes_key', config('nbpdcl.aes_key'));
-        $legacyUrl = SystemSetting::get('nbpdcl_legacy_url', config('nbpdcl.api_url'));
-        $timeout = (int) SystemSetting::get('nbpdcl_timeout', 45);
-
-        $startTime = microtime(true);
-        $driverUsed = ($driver === 'legacy') ? 'legacy' : 'wss';
-
-        $executeRequest = function (string $mode) use ($ca, $month, $year, $wssUrl, $aesKey, $legacyUrl, $timeout, $downloadService) {
-            $ch = curl_init();
-            if ($mode === 'legacy') {
-                $url = $legacyUrl.urlencode($ca);
-                curl_setopt($ch, CURLOPT_URL, $url);
-                curl_setopt($ch, CURLOPT_HTTPGET, true);
-                curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                    'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                ]);
-            } else {
-                $payload = [
-                    'req' => [
-                        'billMonth' => sprintf('%02d', $month),
-                        'billYear' => (string) $year,
-                        'scno' => $ca,
-                        'lang' => 'H',
-                        'printtype' => 'PDF',
-                        'modulename' => 'WSS',
-                        'genPDF' => 'N',
-                        'finalflag' => 'X',
-                    ],
-                    'action' => 'billing/getviewbillprint',
-                    'method' => 'POST',
-                    'auth' => 'TOKEN',
-                ];
-                $encryptedBody = $downloadService->encryptCryptoJS(json_encode($payload), $aesKey);
-
-                curl_setopt($ch, CURLOPT_URL, $wssUrl);
-                curl_setopt($ch, CURLOPT_POST, true);
-                curl_setopt($ch, CURLOPT_POSTFIELDS, $encryptedBody);
-                curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                    'Content-Type: text/plain',
-                    'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                ]);
-            }
-
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-
-            $body = curl_exec($ch);
-            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $err = curl_error($ch);
-            curl_close($ch);
-
-            if ($body && ($pos = strpos($body, '%PDF')) !== false) {
-                $body = substr($body, $pos);
-            }
-
-            return [$code, $body, $err];
-        };
-
-        [$httpCode, $content, $curlErr] = $executeRequest($driverUsed);
-
-        // Auto fallback
-        if ($driver === 'auto' && $driverUsed === 'wss' && ($httpCode !== 200 || empty($content) || ! str_starts_with($content, '%PDF'))) {
-            $driverUsed = 'legacy (auto-fallback)';
-            [$httpCode, $content, $curlErr] = $executeRequest('legacy');
-        }
-
-        $latencyMs = (int) round((microtime(true) - $startTime) * 1000);
-        $isValidPdf = ($httpCode === 200 && ! empty($content) && str_starts_with($content, '%PDF'));
+        $downloadResult = $downloadService->downloadSingle($ca, $month, $year, $driver);
+        $isValidPdf = $downloadResult['success'];
+        $content = $downloadResult['pdf_content'];
 
         $extractionReport = null;
-        if ($isValidPdf) {
+        if ($isValidPdf && ! empty($content)) {
             try {
                 if (! class_exists(Parser::class) && file_exists(base_path('../vendor/autoload.php'))) {
                     require_once base_path('../vendor/autoload.php');
@@ -251,8 +181,19 @@ class AdminBillController extends Controller
                     'detected_format' => $extracted['detected_format'] ?? 'unknown',
                     'extractor_used' => $extracted['extractor_used'] ?? 'unknown',
                     'consumer_name' => $extracted['consumer_name'] ?? null,
+                    'father_name' => $extracted['father_name'] ?? null,
+                    'bill_number' => $extracted['bill_number'] ?? null,
                     'bill_month' => $extracted['bill_month'] ?? null,
+                    'bill_date' => $extracted['bill_date'] ?? null,
+                    'due_date' => $extracted['due_date'] ?? null,
+                    'sanctioned_load' => $extracted['sanctioned_load'] ?? null,
+                    'phase' => $extracted['phase'] ?? null,
                     'total_amount' => $extracted['total_amount'] ?? 0.0,
+                    'energy_charges' => $extracted['energy_charges'] ?? 0.0,
+                    'fixed_charges' => $extracted['fixed_charges'] ?? 0.0,
+                    'government_subsidy' => $extracted['government_subsidy'] ?? 0.0,
+                    'electricity_duty' => $extracted['electricity_duty'] ?? 0.0,
+                    'arrears' => $extracted['arrears'] ?? 0.0,
                     'current_reading' => $extracted['current_reading'] ?? null,
                     'previous_reading' => $extracted['previous_reading'] ?? null,
                     'units_consumed' => $extracted['units_consumed'] ?? 0,
@@ -272,12 +213,15 @@ class AdminBillController extends Controller
         return response()->json([
             'success' => $isValidPdf,
             'driver_requested' => $driver,
-            'driver_executed' => $driverUsed,
-            'http_code' => $httpCode,
-            'latency_ms' => $latencyMs,
-            'pdf_bytes' => $isValidPdf ? strlen($content) : 0,
+            'driver_executed' => $downloadResult['driver_used'],
+            'resolved_cycle' => $downloadResult['resolved_cycle'] ?? null,
+            'lookback_steps' => $downloadResult['lookback_steps'] ?? 0,
+            'http_code' => $downloadResult['http_code'],
+            'latency_ms' => $downloadResult['latency_ms'],
+            'pdf_bytes' => $downloadResult['pdf_bytes'],
             'is_valid_pdf' => $isValidPdf,
-            'error' => $isValidPdf ? null : ($curlErr ?: "HTTP {$httpCode} - No valid %PDF stream received"),
+            'error' => $downloadResult['error'],
+            'upstream_message' => $downloadResult['upstream_message'],
             'extraction' => $extractionReport,
         ]);
     }

@@ -41,13 +41,21 @@ class JasperUnicodeExtractor implements BillExtractorInterface
             'engine' => $this->getEngineName(),
             'consumer_name' => null,
             'father_name' => null,
+            'bill_number' => null,
             'bill_month' => null,
             'bill_date' => null,
             'due_date' => null,
+            'sanctioned_load' => null,
+            'phase' => null,
             'current_reading' => null,
             'previous_reading' => null,
             'units_consumed' => 0,
             'total_amount' => 0.0,
+            'energy_charges' => 0.0,
+            'fixed_charges' => 0.0,
+            'government_subsidy' => 0.0,
+            'electricity_duty' => 0.0,
+            'arrears' => 0.0,
             'meter_no' => null,
             'tariff_category' => null,
             'billing_basis' => 'OK',
@@ -72,26 +80,43 @@ class JasperUnicodeExtractor implements BillExtractorInterface
             }
         }
 
-        // 3. Bill Month
+        // 3. Bill Number (17-18 digit unique invoice identifier)
+        if (preg_match('/:\s*(20\d{14,18})/u', $cleanText, $m)) {
+            $data['bill_number'] = $m[1];
+        } elseif (preg_match('/(20\d{14,18})/u', $cleanText, $m)) {
+            $data['bill_number'] = $m[1];
+        }
+
+        // 4. Bill Month
         if (preg_match('/:\s*([A-Z]{3}\s*,\s*\d{4})/i', $cleanText, $m)) {
             $data['bill_month'] = trim($m[1]);
         }
 
-        // 4. Total Amount
+        // 5. Total Amount
         if (preg_match('/(\d+\.\d{2})\s*\r?\n\s*(\d+\.\d{2})\s*\r?\n\s*(\d+\.\d{2})\s*\r?\n\s*:\s*\d{11}/', $cleanText, $m)) {
             $data['total_amount'] = (float) $m[1];
-        } elseif (preg_match('/वर्तमान विपत्र राशि[^\d\r\n]*(-?[\d,]+\.?\d*)/u', $cleanText, $m)) {
+        } elseif (preg_match('/वर्तमान विपत्र राशि[^\d\r\n\-]*(-?[\d,]+\.?\d*)/u', $cleanText, $m)) {
             $data['total_amount'] = (float) str_replace([' ', ','], '', $m[1]);
         } elseif (preg_match('/कुल राशि\s*[\r\n]+[^\d\r\n]*(\d+\.\d{2})/u', $cleanText, $m)) {
             $data['total_amount'] = (float) $m[1];
         }
 
-        // 5. Due Date
+        // 6. Due Date
         if (preg_match('/(\d{2}\/\d{2}\/\d{4})\s*\r?\n\s*(\d{2}\/\d{2}\/\d{4})\s*\r?\n\s*(\d{2}\/\d{2}\/\d{4})/', $cleanText, $m)) {
             $data['due_date'] = date('Y-m-d', strtotime(str_replace('/', '-', $m[2])));
         }
 
-        // 6. Meter Reading, Bill Date & Readings
+        // 7. Sanctioned Load & Phase
+        if (preg_match('/:\s*(\d+(?:\.\d+)?)\s*(KW|HP|KVA)/iu', $cleanText, $m)) {
+            $data['sanctioned_load'] = $m[1].' '.strtoupper($m[2]);
+        }
+        if (preg_match('/फेज\s*[\r\n\s:]*(\d+)/u', $cleanText, $m)) {
+            $data['phase'] = (int) $m[1];
+        } elseif (preg_match('/:\s*([13])\s*\r?\n\s*:\s*(?:Kutir|DS|NDS)/u', $cleanText, $m)) {
+            $data['phase'] = (int) $m[1];
+        }
+
+        // 8. Meter Serial, Reading Dates & Values
         if (preg_match('/(\d+)\s+KWH\s+(\d{2}-\d{2}-\d{4})\s+(\d+)\s+(\d{2}-\d{2}-\d{4})\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/i', $cleanText, $m)) {
             $data['meter_no'] = $m[1];
             $data['bill_date'] = date('Y-m-d', strtotime($m[2]));
@@ -106,7 +131,7 @@ class JasperUnicodeExtractor implements BillExtractorInterface
             }
         }
 
-        // 7. Tariff Category & Billing Basis
+        // 9. Tariff Category & Billing Basis
         if (preg_match('/:\s*(Kutir\s*Jyoti[^\r\n\t:]*|DS-[^\r\n\t:]+|NDS-[^\r\n\t:]+|LTIS-[^\r\n\t:]+)/iu', $cleanText, $m)) {
             $data['tariff_category'] = trim(preg_replace('/\s+/', ' ', $m[1]));
         }
@@ -117,12 +142,25 @@ class JasperUnicodeExtractor implements BillExtractorInterface
             $data['billing_basis'] = (stripos($basisRaw, 'OK') !== false) ? 'OK' : ((stripos($basisRaw, 'LK') !== false) ? 'LK' : $basisRaw);
         }
 
-        // 8. MRU Identifier
+        // 10. MRU Identifier
         if (preg_match('/:\s*(\d{4}\s*\/\s*[A-Z_]+)/', $cleanText, $m)) {
             $data['mru'] = trim(str_replace([' ', "\t"], '', $m[1]));
         }
 
-        // 9. Historical Monthly Consumption (12-Month Ledger)
+        // 11. Financial Breakdown
+        if (preg_match('/(\d+\.\d{2})\s*:\s*(\d+\.\d{2})\s*:\s*(\d+\.\d{2})\s*0\.00\s*किश्त राशि/u', $cleanText, $m)) {
+            $data['energy_charges'] = (float) $m[2];
+            $data['fixed_charges'] = (float) $m[3];
+        }
+        if (preg_match('/(\d+\.\d{2})\s*0\.00\s*:\s*(-?\d+\.\d{2})/u', $cleanText, $m)) {
+            $data['electricity_duty'] = (float) $m[1];
+            $data['government_subsidy'] = (float) $m[2];
+        }
+        if (preg_match('/(\d+\.\d{2})\s*0\.00(?:\s*:\s*)+मीटर पठन विवरणी/u', $cleanText, $m)) {
+            $data['arrears'] = (float) $m[1];
+        }
+
+        // 12. Historical Monthly Consumption (12-Month Ledger)
         if (preg_match_all('/([A-Z][a-z]{2})-(\d{4})\s+(\d+)\s*\(([A-Za-z0-9]+)\)/', $cleanText, $mHist, PREG_SET_ORDER)) {
             $monthMap = ['Jan' => 1, 'Feb' => 2, 'Mar' => 3, 'Apr' => 4, 'May' => 5, 'Jun' => 6, 'Jul' => 7, 'Aug' => 8, 'Sep' => 9, 'Oct' => 10, 'Nov' => 11, 'Dec' => 12];
             foreach ($mHist as $h) {
@@ -136,6 +174,18 @@ class JasperUnicodeExtractor implements BillExtractorInterface
                         'basis' => $h[4],
                     ];
                 }
+            }
+        }
+
+        // 13. Sanity Reconciliation: If units_consumed is 0, infer from readings or recent ledger
+        if ($data['units_consumed'] <= 0) {
+            if ($data['current_reading'] !== null && $data['previous_reading'] !== null && $data['billing_basis'] === 'OK') {
+                $diff = $data['current_reading'] - $data['previous_reading'];
+                if ($diff >= 0) {
+                    $data['units_consumed'] = $diff;
+                }
+            } elseif (! empty($data['consumption_history'])) {
+                $data['units_consumed'] = $data['consumption_history'][0]['units'];
             }
         }
 
