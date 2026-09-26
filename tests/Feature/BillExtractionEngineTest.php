@@ -19,9 +19,6 @@ class BillExtractionEngineTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        if (! class_exists(Parser::class) && file_exists(base_path('../vendor/autoload.php'))) {
-            require_once base_path('../vendor/autoload.php');
-        }
         $this->manager = app(BillExtractionManager::class);
         $this->parser = new Parser;
         SystemSetting::clearRuntimeCache();
@@ -32,8 +29,8 @@ class BillExtractionEngineTest extends TestCase
         $pdfPath = base_path('apk/bill-pdf/LIVE_DOWNLOAD_SUCCESS.pdf');
         $this->assertFileExists($pdfPath);
 
-        $pdf = $this->parser->parseFile($pdfPath);
-        $text = $pdf->getText();
+        $pdf = @$this->parser->parseFile($pdfPath);
+        $text = @$pdf->getText();
 
         $format = $this->manager->detectFormat($text);
         $this->assertEquals('jasper_unicode', $format);
@@ -53,8 +50,8 @@ class BillExtractionEngineTest extends TestCase
         $pdfPath = base_path('apk/bill-pdf/bill_10230014993_09_2026.pdf');
         $this->assertFileExists($pdfPath);
 
-        $pdf = $this->parser->parseFile($pdfPath);
-        $text = $pdf->getText();
+        $pdf = @$this->parser->parseFile($pdfPath);
+        $text = @$pdf->getText();
 
         $format = $this->manager->detectFormat($text);
         $this->assertEquals('jasper_unicode', $format);
@@ -72,8 +69,8 @@ class BillExtractionEngineTest extends TestCase
         $pdfPath = base_path('apk/bill-pdf/from-direct-url.pdf');
         $this->assertFileExists($pdfPath);
 
-        $pdf = $this->parser->parseFile($pdfPath);
-        $text = $pdf->getText();
+        $pdf = @$this->parser->parseFile($pdfPath);
+        $text = @$pdf->getText();
 
         $format = $this->manager->detectFormat($text);
         $this->assertEquals('legacy_krutidev', $format);
@@ -92,8 +89,8 @@ class BillExtractionEngineTest extends TestCase
         SystemSetting::set('nbpdcl_extraction_engine', 'legacy_krutidev');
 
         $pdfPath = base_path('apk/bill-pdf/LIVE_DOWNLOAD_SUCCESS.pdf');
-        $pdf = $this->parser->parseFile($pdfPath);
-        $text = $pdf->getText();
+        $pdf = @$this->parser->parseFile($pdfPath);
+        $text = @$pdf->getText();
 
         // Even though legacy was forced, primary legacy extractor fails to find key fields on modern PDF,
         // and manager should gracefully fall back to JasperUnicodeExtractor

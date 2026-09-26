@@ -18,6 +18,7 @@
         "nyholm/psr7": "^1.8",
         "razorpay/razorpay": "^2.9",
         "resend/resend-laravel": "*",
+        "smalot/pdfparser": "^2.12",
         "spatie/laravel-backup": "^10.3",
         "spatie/laravel-permission": "*",
         "spiral/roadrunner-cli": "^2.7",

@@ -25,7 +25,18 @@ class BillParseService
     protected function getParser(): Parser
     {
         if ($this->pdfParser === null) {
-            require_once base_path('../vendor/autoload.php');
+            if (! class_exists(Parser::class)) {
+                if (file_exists(base_path('vendor/autoload.php'))) {
+                    require_once base_path('vendor/autoload.php');
+                } elseif (file_exists(base_path('../vendor/autoload.php'))) {
+                    require_once base_path('../vendor/autoload.php');
+                }
+            }
+
+            if (! class_exists(Parser::class)) {
+                throw new \RuntimeException('PDF Parser library (Smalot\PdfParser) is missing. Please ensure "smalot/pdfparser" is installed in vendor.');
+            }
+
             $this->pdfParser = new Parser;
         }
 
@@ -491,9 +502,9 @@ class BillParseService
     public function extractFromPdf(string $pdfPath): array
     {
         $parser = $this->getParser();
-        $pdf = $parser->parseFile($pdfPath);
+        $pdf = @$parser->parseFile($pdfPath);
 
-        return $this->extractionManager->extract($pdf->getText(), $pdfPath);
+        return $this->extractionManager->extract(@$pdf->getText(), $pdfPath);
     }
 
     /**
