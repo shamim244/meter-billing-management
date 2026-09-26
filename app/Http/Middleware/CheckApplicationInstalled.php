@@ -21,6 +21,10 @@ class CheckApplicationInstalled
         $isInstalled = $this->installerService->isInstalled();
 
         if (! $isInstalled) {
+            if (empty(config('app.key'))) {
+                config(['app.key' => 'base64:'.base64_encode('temp_installer_key_32_bytes_!!')]);
+            }
+
             // Temporary session & cache safety: fallback to file if uninstalled
             config([
                 'session.driver' => 'file',
