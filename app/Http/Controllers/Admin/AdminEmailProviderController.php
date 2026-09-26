@@ -27,13 +27,22 @@ class AdminEmailProviderController extends Controller
     {
         $providers = EmailProviderInstance::orderBy('priority', 'asc')->get();
 
+        $hasKeyMismatch = false;
+        foreach ($providers as $provider) {
+            // Trigger accessor to verify encryption key validity
+            $nullCheck = $provider->config;
+            if ($provider->isConfigDecryptionFailed()) {
+                $hasKeyMismatch = true;
+            }
+        }
+
         $recentDeliveries = NotificationDelivery::with(['notification.user', 'emailProviderInstance'])
             ->where('channel', 'email')
             ->orderBy('id', 'desc')
             ->limit(25)
             ->get();
 
-        return view('admin.notifications.email-providers', compact('providers', 'recentDeliveries'));
+        return view('admin.notifications.email-providers', compact('providers', 'recentDeliveries', 'hasKeyMismatch'));
     }
 
     /**

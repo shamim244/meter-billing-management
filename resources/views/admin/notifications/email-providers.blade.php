@@ -43,6 +43,19 @@
             </div>
         @endif
 
+        @if(!empty($hasKeyMismatch))
+            <div class="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-xs text-amber-300 flex items-start gap-3 shadow-lg">
+                <span class="text-lg leading-none mt-0.5">⚠️</span>
+                <div class="space-y-1">
+                    <p class="font-bold text-amber-200">Server Encryption Key (APP_KEY) Rotated</p>
+                    <p class="text-[11px] text-amber-300/90 leading-relaxed">
+                        The application's encryption key was regenerated on the server, so previously encrypted email credentials cannot be decrypted with the new key. 
+                        Please click <span class="font-bold underline text-white">Edit</span> on the flagged providers below to enter and re-save your SMTP or API credentials with the current key.
+                    </p>
+                </div>
+            </div>
+        @endif
+
         <!-- Provider Chain Table -->
         <div class="bg-slate-900 rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
             <div class="p-4 border-b border-slate-800/80">
@@ -71,7 +84,14 @@
                                     #{{ $p->priority }}
                                 </td>
                                 <td class="py-3 px-3 font-semibold text-white">
-                                    {{ $p->label }}
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span>{{ $p->label }}</span>
+                                        @if($p->isConfigDecryptionFailed())
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30" title="APP_KEY rotated. Click Edit to enter new credentials.">
+                                                ⚠️ Re-enter Credentials
+                                            </span>
+                                        @endif
+                                    </div>
                                 </td>
                                 <td class="py-3 px-3 text-center">
                                     <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono bg-slate-950 border border-slate-800 text-slate-300">
