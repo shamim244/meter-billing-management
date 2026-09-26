@@ -4,6 +4,9 @@ namespace App\Services\Installation;
 
 use App\Models\User;
 use App\Services\Migration\ServerMigrationService;
+use Database\Seeders\NotificationSystemSeeder;
+use Database\Seeders\PlanSeeder;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -25,7 +28,11 @@ class InstallerService
     public function isInstalled(): bool
     {
         // When in testing environment, bypass unless test explicitly sets app.testing_installer
-        if (app()->environment('testing') && ! config('app.testing_installer', false)) {
+        if (app()->environment('testing')) {
+            if (config('app.testing_installer', false)) {
+                return false;
+            }
+
             return true;
         }
 
@@ -59,7 +66,7 @@ class InstallerService
             $database = $config['database'] ?? database_path('database.sqlite');
             if ($database !== ':memory:' && ! File::exists($database)) {
                 File::ensureDirectoryExists(dirname($database));
-                touch($database);
+                File::put($database, '');
             }
 
             return [
@@ -125,6 +132,107 @@ class InstallerService
     }
 
     /**
+     * Ensure environment prerequisites exist automatically without requiring manual shell commands.
+     */
+    public function ensureInstallerPrerequisites(): void
+    {
+        if (app()->environment('testing') && ! config('app.testing_installer', false)) {
+            return;
+        }
+
+        $envPath = base_path('.env');
+        $examplePath = base_path('.env.example');
+
+        // 1. If .env does not exist, copy .env.example (skip during automated tests unless explicitly testing file creation)
+        if (! app()->environment('testing') || config('app.testing_installer_write_env', false)) {
+            if (! File::exists($envPath)) {
+                if (File::exists($examplePath)) {
+                    File::copy($examplePath, $envPath);
+                } else {
+                    File::put($envPath, "APP_NAME=\"NBPDCL Meter Billing\"\nAPP_ENV=production\nAPP_KEY=\nAPP_DEBUG=false\n");
+                }
+            }
+        }
+
+        // 2. Clear bootstrap config, routes, and events cache if uninstalled so cached config never overrides .env
+        foreach ([
+            base_path('bootstrap/cache/config.php'),
+            base_path('bootstrap/cache/routes-v7.php'),
+            base_path('bootstrap/cache/events.php'),
+        ] as $cacheFile) {
+            if (File::exists($cacheFile)) {
+                @unlink($cacheFile);
+            }
+        }
+
+        // 3. Generate APP_KEY if empty without running shell command
+        $currentKey = config('app.key');
+        $envKey = env('APP_KEY');
+        if (empty($currentKey) || empty($envKey) || $currentKey === 'base64:temp_installer_key_32_bytes_!!') {
+            $generatedKey = 'base64:'.base64_encode(random_bytes(32));
+            config(['app.key' => $generatedKey]);
+            $this->updateEnvFile(['APP_KEY' => $generatedKey]);
+        }
+
+        // 4. Ensure database/database.sqlite exists so SQLite fallback never crashes
+        $sqlitePath = database_path('database.sqlite');
+        if (! File::exists($sqlitePath)) {
+            File::ensureDirectoryExists(dirname($sqlitePath));
+            File::put($sqlitePath, '');
+        }
+
+        // 5. Ensure storage/ writable subdirectories exist with proper permissions
+        $storagePaths = [
+            storage_path('framework/cache/data'),
+            storage_path('framework/sessions'),
+            storage_path('framework/views'),
+            storage_path('app/public'),
+            storage_path('logs'),
+        ];
+
+        foreach ($storagePaths as $path) {
+            if (! File::exists($path)) {
+                File::ensureDirectoryExists($path, 0775, true);
+            }
+            @chmod($path, 0775);
+        }
+    }
+
+    /**
+     * Safely update or add key-value pairs in the .env file.
+     */
+    public function updateEnvFile(array $updates): void
+    {
+        if (app()->environment('testing') && ! config('app.testing_installer_write_env', false)) {
+            return;
+        }
+
+        $envPath = base_path('.env');
+        if (! File::exists($envPath)) {
+            $examplePath = base_path('.env.example');
+            if (File::exists($examplePath)) {
+                File::copy($examplePath, $envPath);
+            } else {
+                File::put($envPath, '');
+            }
+        }
+
+        $envContent = File::get($envPath);
+
+        foreach ($updates as $key => $value) {
+            $pattern = "/^{$key}=.*/m";
+            $escapedValue = (str_contains((string) $value, ' ') || str_contains((string) $value, '#')) ? "\"{$value}\"" : $value;
+            if (preg_match($pattern, $envContent)) {
+                $envContent = preg_replace($pattern, "{$key}={$escapedValue}", $envContent);
+            } else {
+                $envContent .= "\n{$key}={$escapedValue}";
+            }
+        }
+
+        File::put($envPath, $envContent);
+    }
+
+    /**
      * Write or update the .env file with the specified database and application parameters.
      */
     public function saveEnvironment(array $dbConfig, ?string $appUrl = null): void
@@ -132,19 +240,6 @@ class InstallerService
         if (app()->environment('testing')) {
             return;
         }
-
-        $envPath = base_path('.env');
-        $examplePath = base_path('.env.example');
-
-        if (! File::exists($envPath)) {
-            if (File::exists($examplePath)) {
-                File::copy($examplePath, $envPath);
-            } else {
-                File::put($envPath, "APP_NAME=\"NBPDCL Meter Billing\"\nAPP_ENV=production\nAPP_KEY=\nAPP_DEBUG=false\n");
-            }
-        }
-
-        $envContent = File::get($envPath);
 
         $updates = [
             'DB_CONNECTION' => $dbConfig['driver'] ?? 'mysql',
@@ -159,17 +254,7 @@ class InstallerService
             $updates['APP_URL'] = rtrim($appUrl, '/');
         }
 
-        foreach ($updates as $key => $value) {
-            $pattern = "/^{$key}=.*/m";
-            $escapedValue = (str_contains($value, ' ') || str_contains($value, '#')) ? "\"{$value}\"" : $value;
-            if (preg_match($pattern, $envContent)) {
-                $envContent = preg_replace($pattern, "{$key}={$escapedValue}", $envContent);
-            } else {
-                $envContent .= "\n{$key}={$escapedValue}";
-            }
-        }
-
-        File::put($envPath, $envContent);
+        $this->updateEnvFile($updates);
 
         // Update live in-memory config so current request can connect
         config([
@@ -183,10 +268,12 @@ class InstallerService
 
         DB::purge($updates['DB_CONNECTION']);
 
-        // Generate APP_KEY if empty
+        // Generate APP_KEY if empty without shell artisan command
         if (! config('app.key') || empty(env('APP_KEY'))) {
             try {
-                Artisan::call('key:generate', ['--force' => true]);
+                $generatedKey = 'base64:'.base64_encode(random_bytes(32));
+                $this->updateEnvFile(['APP_KEY' => $generatedKey]);
+                config(['app.key' => $generatedKey]);
             } catch (Throwable $e) {
                 // Non-fatal if already set
             }
@@ -208,7 +295,18 @@ class InstallerService
             try {
                 Artisan::call('db:seed', ['--force' => true]);
             } catch (Throwable $e) {
-                Artisan::call('db:seed', ['--class' => 'RoleAndPermissionSeeder', '--force' => true]);
+                // Ensure essential seeders are executed individually if full database seeder encounters an issue
+                foreach ([
+                    RoleAndPermissionSeeder::class,
+                    PlanSeeder::class,
+                    NotificationSystemSeeder::class,
+                ] as $seederClass) {
+                    try {
+                        Artisan::call('db:seed', ['--class' => $seederClass, '--force' => true]);
+                    } catch (Throwable $seederErr) {
+                        Log::warning("[InstallerService] Seeder {$seederClass} fallback notice: {$seederErr->getMessage()}");
+                    }
+                }
             }
         }
 
@@ -233,11 +331,16 @@ class InstallerService
 
         try {
             Artisan::call('optimize:clear');
-            if (! file_exists(public_path('storage'))) {
+        } catch (Throwable $e) {
+            // Non-fatal on shared hosting
+        }
+
+        try {
+            if (function_exists('symlink') && ! file_exists(public_path('storage')) && ! is_link(public_path('storage'))) {
                 Artisan::call('storage:link');
             }
         } catch (Throwable $e) {
-            // Ignore in restricted environments
+            // Non-fatal if symlink or exec is disabled on shared hosting
         }
 
         return [

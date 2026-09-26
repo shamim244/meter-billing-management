@@ -19,7 +19,7 @@ class ServerPreflightCommand extends Command
         $check = $migrationService->runPreflightCheck();
 
         // 1. PHP Version
-        $phpStatus = $check['php_satisfies'] ? '✅ OK' : '❌ FAIL (Requires >= 8.3)';
+        $phpStatus = $check['php_satisfies'] ? '✅ OK (Satisfies >= 8.4.1)' : '❌ FAIL (Requires >= 8.4.1)';
         $this->line("• PHP Version: <info>{$check['php_version']}</info> [{$phpStatus}]");
 
         // 2. Extensions Table
@@ -51,7 +51,29 @@ class ServerPreflightCommand extends Command
         $redisStatus = $check['redis']['connected'] ? '✅ CONNECTED' : '⚠️ OFFLINE (Optional for cache/queue)';
         $this->line("• Redis: {$redisStatus}");
 
-        // 5. PHP Limits
+        // 5. Zend OPcache
+        $opcacheStatus = $check['opcache']['enabled'] ? '✅ ENABLED' : ($check['opcache']['installed'] ? '⚠️ DISABLED' : '❌ NOT INSTALLED');
+        $this->line("• Zend OPcache: {$opcacheStatus} ({$check['opcache']['message']})");
+
+        // 6. PHP Functions Audit
+        if (! empty($check['functions'])) {
+            $funcRows = [];
+            $allFunctions = array_merge(
+                $check['functions']['critical'] ?? [],
+                $check['functions']['recommended'] ?? []
+            );
+            foreach ($allFunctions as $name => $fn) {
+                $funcRows[] = [
+                    $name.'()',
+                    strtoupper($fn['category'] ?? 'recommended'),
+                    $fn['enabled'] ? '<info>ENABLED</info>' : '<fg=yellow>DISABLED</fg=yellow>',
+                    $fn['enabled'] ? '✅' : '⚠️',
+                ];
+            }
+            $this->table(['PHP Function', 'Category', 'Status', 'Pass'], $funcRows);
+        }
+
+        // 7. PHP Limits
         $this->line("• Memory Limit: <comment>{$check['memory_limit']}</comment>");
         $this->line("• Upload Max Filesize: <comment>{$check['upload_max_filesize']}</comment>");
         $this->line("• Post Max Size: <comment>{$check['post_max_size']}</comment>");

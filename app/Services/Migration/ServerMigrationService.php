@@ -447,19 +447,78 @@ class ServerMigrationService
         $dbDriver = config('database.default');
         $dbDriverLoaded = $dbDriver === 'sqlite' ? extension_loaded('pdo_sqlite') : ($requiredExtensions['pdo_mysql'] ?? false);
 
-        $allCriticalPassed = version_compare(PHP_VERSION, '8.3.0', '>=')
+        $phpSatisfies = version_compare(PHP_VERSION, '8.4.1', '>=');
+
+        // Audit disabled functions
+        $rawDisabled = (string) ini_get('disable_functions');
+        $disabledList = array_values(array_filter(array_map('trim', explode(',', strtolower($rawDisabled)))));
+
+        $criticalFunctions = [
+            'putenv' => [
+                'name' => 'putenv',
+                'enabled' => function_exists('putenv') && ! in_array('putenv', $disabledList, true),
+                'category' => 'critical',
+                'description' => 'Loads environment configuration and database credentials.',
+            ],
+        ];
+
+        $recommendedFunctions = [
+            'proc_open' => [
+                'name' => 'proc_open',
+                'enabled' => function_exists('proc_open') && ! in_array('proc_open', $disabledList, true),
+                'category' => 'recommended',
+                'description' => 'Executes background workers and Artisan subprocesses.',
+            ],
+            'shell_exec' => [
+                'name' => 'shell_exec',
+                'enabled' => function_exists('shell_exec') && ! in_array('shell_exec', $disabledList, true),
+                'category' => 'recommended',
+                'description' => 'Executes shell utilities when shell access is enabled.',
+            ],
+            'exec' => [
+                'name' => 'exec',
+                'enabled' => function_exists('exec') && ! in_array('exec', $disabledList, true),
+                'category' => 'recommended',
+                'description' => 'Runs native database dump utilities and native CLI tools.',
+            ],
+            'symlink' => [
+                'name' => 'symlink',
+                'enabled' => function_exists('symlink') && ! in_array('symlink', $disabledList, true),
+                'category' => 'recommended',
+                'description' => 'Creates public/storage symlink. Web route fallback activates automatically if disabled.',
+            ],
+        ];
+
+        $criticalFunctionsPassed = collect($criticalFunctions)->every(fn ($fn) => $fn['enabled']);
+
+        // Audit Zend OPcache status
+        $opcacheLoaded = extension_loaded('Zend OPcache');
+        $opcacheEnabled = $opcacheLoaded && (bool) ini_get('opcache.enable');
+        $opcacheInfo = [
+            'installed' => $opcacheLoaded,
+            'enabled' => $opcacheEnabled,
+            'status' => $opcacheEnabled ? 'enabled' : ($opcacheLoaded ? 'disabled' : 'not_installed'),
+            'message' => $opcacheEnabled
+                ? 'OPcache bytecode caching is active (Optimal Performance).'
+                : ($opcacheLoaded ? 'OPcache is installed but disabled in php.ini.' : 'OPcache extension is not installed.'),
+        ];
+
+        $serverEnvironmentReady = $phpSatisfies
             && $dbDriverLoaded
             && $requiredExtensions['bcmath']
             && $requiredExtensions['mbstring']
             && $requiredExtensions['zip']
             && $writablePaths['storage']
             && $writablePaths['bootstrap/cache']
-            && $dbConnected;
+            && $criticalFunctionsPassed;
+
+        $allCriticalPassed = $serverEnvironmentReady && $dbConnected;
 
         return [
             'ready' => $allCriticalPassed,
+            'server_ready' => $serverEnvironmentReady,
             'php_version' => PHP_VERSION,
-            'php_satisfies' => version_compare(PHP_VERSION, '8.3.0', '>='),
+            'php_satisfies' => $phpSatisfies,
             'extensions' => $requiredExtensions,
             'writable_paths' => $writablePaths,
             'database' => [
@@ -473,6 +532,15 @@ class ServerMigrationService
             'memory_limit' => ini_get('memory_limit'),
             'upload_max_filesize' => ini_get('upload_max_filesize'),
             'post_max_size' => ini_get('post_max_size'),
+            'functions' => [
+                'critical' => $criticalFunctions,
+                'recommended' => $recommendedFunctions,
+                'disabled_functions' => $disabledList,
+            ],
+            'critical_functions' => $criticalFunctions,
+            'recommended_functions' => $recommendedFunctions,
+            'disabled_functions' => $disabledList,
+            'opcache' => $opcacheInfo,
         ];
     }
 

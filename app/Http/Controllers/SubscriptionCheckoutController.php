@@ -25,6 +25,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class SubscriptionCheckoutController extends Controller
@@ -45,113 +46,126 @@ class SubscriptionCheckoutController extends Controller
      */
     public function quote(Request $request, Plan $plan, PlanDuration $duration): JsonResponse
     {
-        if ($duration->plan_id !== $plan->id || ! $plan->is_active) {
-            return response()->json(['success' => false, 'message' => 'Selected plan or duration is not currently available.'], 404);
-        }
-
-        /** @var User $user */
-        $user = Auth::user();
-        $walletBalance = (float) $this->walletService->getBalance($user);
-
-        $activeSubscription = $user->activeSubscription;
-
-        $actionMode = $request->input('action_mode', 'auto');
-        $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription, $actionMode);
-
-        $downgradeEligibility = null;
-        if (($pricingDetails['action_type'] === 'downgrade' || ($pricingDetails['shift_option']['action_type'] ?? null) === 'downgrade') && $activeSubscription) {
-            $downgradeEligibility = $this->planChangeService->checkDowngradeEligibility($activeSubscription, $plan);
-        }
-
-        // Check optional coupon code
-        $couponCode = trim($request->input('coupon_code', ''));
-        $couponData = null;
-        $finalPayable = (float) $pricingDetails['final_amount'];
-
-        if (! empty($couponCode)) {
-            $couponValidation = $this->couponRedemptionService->validateCode(
-                code: $couponCode,
-                user: $user,
-                actionType: 'subscription_discount',
-                amount: $finalPayable,
-                planId: $plan->id
-            );
-
-            if ($couponValidation['valid']) {
-                $couponDiscount = (float) $couponValidation['discount_or_bonus_amount'];
-                $finalPayable = (float) $couponValidation['final_amount'];
-                $couponData = [
-                    'valid' => true,
-                    'code' => $couponValidation['code'],
-                    'discount_amount' => $couponDiscount,
-                    'discount_kind' => $couponValidation['discount_kind'],
-                    'discount_value' => $couponValidation['discount_value'],
-                    'message' => $couponValidation['message'],
-                ];
-            } else {
-                $couponData = [
-                    'valid' => false,
-                    'code' => $couponCode,
-                    'message' => $couponValidation['message'],
-                ];
+        try {
+            if ($duration->plan_id !== $plan->id || ! $plan->is_active) {
+                return response()->json(['success' => false, 'message' => 'Selected plan or duration is not currently available.'], 404);
             }
-        }
 
-        return response()->json([
-            'success' => true,
-            'action_type' => $pricingDetails['action_type'],
-            'action_mode' => $pricingDetails['action_mode'],
-            'available_actions' => $pricingDetails['available_actions'],
-            'shift_option' => $pricingDetails['shift_option'] ?? null,
-            'extend_option' => $pricingDetails['extend_option'] ?? null,
-            'start_date' => $pricingDetails['start_date'] ?? null,
-            'end_date' => $pricingDetails['end_date'] ?? null,
-            'plan' => [
-                'id' => $plan->id,
-                'name' => $plan->name,
-                'description' => $plan->description,
-                'included_mrus' => (int) $plan->included_mrus,
-                'included_consumers' => (int) $plan->included_consumers,
-                'extra_mru_rate' => (float) ($duration->extra_mru_rate ?? $plan->extra_mru_rate),
-                'extra_consumer_rate' => (float) ($duration->extra_consumer_rate ?? $plan->extra_consumer_rate),
-            ],
-            'duration' => [
-                'id' => $duration->id,
-                'formatted_duration' => $duration->formatted_duration,
-                'duration_months' => $duration->duration_months,
-                'duration_unit' => $duration->duration_unit,
-                'duration_value' => $duration->duration_value,
-                'discount_percent' => (float) $duration->discount_percent,
-                'final_price' => (float) $duration->final_price,
-            ],
-            'current_subscription' => $activeSubscription ? [
-                'plan_name' => $activeSubscription->plan?->name ?? 'Active Plan',
-                'included_mrus' => (int) $activeSubscription->included_mrus_locked,
-                'included_consumers' => (int) $activeSubscription->included_consumers_locked,
-                'billing_end' => $activeSubscription->billing_end ? $activeSubscription->billing_end->format('M d, Y') : null,
-                'base_price_paid' => (float) $activeSubscription->base_price_paid,
-            ] : null,
-            'proration' => $pricingDetails['proration'],
-            'final_amount' => $finalPayable,
-            'original_final_amount' => (float) $pricingDetails['final_amount'],
-            'coupon' => $couponData,
-            'prorated_credit' => (float) ($pricingDetails['prorated_credit'] ?? 0.0),
-            'wallet_balance' => $walletBalance,
-            'can_pay_from_wallet' => $finalPayable <= 0 || $walletBalance >= $finalPayable,
-            'downgrade_eligibility' => $downgradeEligibility ? [
-                'eligible' => $downgradeEligibility['eligible'],
-                'active_mrus_count' => $downgradeEligibility['active_mrus_count'],
-                'new_plan_quota' => $downgradeEligibility['new_plan_quota'],
-                'excess_mrus' => $downgradeEligibility['excess_mrus'] ?? 0,
-                'active_mrus' => ($downgradeEligibility['active_mrus'] ?? collect())->map(fn ($m) => [
-                    'id' => $m->id,
-                    'code' => $m->code,
-                    'name' => $m->name,
-                    'full_identifier' => $m->full_identifier,
-                    'consumers_count' => $m->consumerAccounts()->count(),
-                ]),
-            ] : null,
-        ]);
+            /** @var User $user */
+            $user = Auth::user();
+            $walletBalance = (float) $this->walletService->getBalance($user);
+
+            $activeSubscription = $user->activeSubscription;
+
+            $actionMode = $request->input('action_mode', 'auto');
+            $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription, $actionMode);
+
+            $downgradeEligibility = null;
+            if (($pricingDetails['action_type'] === 'downgrade' || ($pricingDetails['shift_option']['action_type'] ?? null) === 'downgrade') && $activeSubscription) {
+                $downgradeEligibility = $this->planChangeService->checkDowngradeEligibility($activeSubscription, $plan);
+            }
+
+            // Check optional coupon code
+            $couponCode = trim($request->input('coupon_code', ''));
+            $couponData = null;
+            $finalPayable = (float) $pricingDetails['final_amount'];
+
+            if (! empty($couponCode)) {
+                $couponValidation = $this->couponRedemptionService->validateCode(
+                    code: $couponCode,
+                    user: $user,
+                    actionType: 'subscription_discount',
+                    amount: $finalPayable,
+                    planId: $plan->id
+                );
+
+                if ($couponValidation['valid']) {
+                    $couponDiscount = (float) $couponValidation['discount_or_bonus_amount'];
+                    $finalPayable = (float) $couponValidation['final_amount'];
+                    $couponData = [
+                        'valid' => true,
+                        'code' => $couponValidation['code'],
+                        'discount_amount' => $couponDiscount,
+                        'discount_kind' => $couponValidation['discount_kind'],
+                        'discount_value' => $couponValidation['discount_value'],
+                        'message' => $couponValidation['message'],
+                    ];
+                } else {
+                    $couponData = [
+                        'valid' => false,
+                        'code' => $couponCode,
+                        'message' => $couponValidation['message'],
+                    ];
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'action_type' => $pricingDetails['action_type'],
+                'action_mode' => $pricingDetails['action_mode'],
+                'available_actions' => $pricingDetails['available_actions'],
+                'shift_option' => $pricingDetails['shift_option'] ?? null,
+                'extend_option' => $pricingDetails['extend_option'] ?? null,
+                'start_date' => $pricingDetails['start_date'] ?? null,
+                'end_date' => $pricingDetails['end_date'] ?? null,
+                'plan' => [
+                    'id' => $plan->id,
+                    'name' => $plan->name,
+                    'description' => $plan->description,
+                    'included_mrus' => (int) $plan->included_mrus,
+                    'included_consumers' => (int) $plan->included_consumers,
+                    'extra_mru_rate' => (float) ($duration->extra_mru_rate ?? $plan->extra_mru_rate),
+                    'extra_consumer_rate' => (float) ($duration->extra_consumer_rate ?? $plan->extra_consumer_rate),
+                ],
+                'duration' => [
+                    'id' => $duration->id,
+                    'formatted_duration' => $duration->formatted_duration,
+                    'duration_months' => $duration->duration_months,
+                    'duration_unit' => $duration->duration_unit,
+                    'duration_value' => $duration->duration_value,
+                    'discount_percent' => (float) $duration->discount_percent,
+                    'final_price' => (float) $duration->final_price,
+                ],
+                'current_subscription' => $activeSubscription ? [
+                    'plan_name' => $activeSubscription->plan?->name ?? 'Active Plan',
+                    'included_mrus' => (int) $activeSubscription->included_mrus_locked,
+                    'included_consumers' => (int) $activeSubscription->included_consumers_locked,
+                    'billing_end' => $activeSubscription->billing_end ? $activeSubscription->billing_end->format('M d, Y') : null,
+                    'base_price_paid' => (float) $activeSubscription->base_price_paid,
+                ] : null,
+                'proration' => $pricingDetails['proration'],
+                'final_amount' => $finalPayable,
+                'original_final_amount' => (float) $pricingDetails['final_amount'],
+                'coupon' => $couponData,
+                'prorated_credit' => (float) ($pricingDetails['prorated_credit'] ?? 0.0),
+                'wallet_balance' => $walletBalance,
+                'can_pay_from_wallet' => $finalPayable <= 0 || $walletBalance >= $finalPayable,
+                'downgrade_eligibility' => $downgradeEligibility ? [
+                    'eligible' => $downgradeEligibility['eligible'],
+                    'active_mrus_count' => $downgradeEligibility['active_mrus_count'],
+                    'new_plan_quota' => $downgradeEligibility['new_plan_quota'],
+                    'excess_mrus' => $downgradeEligibility['excess_mrus'] ?? 0,
+                    'active_mrus' => ($downgradeEligibility['active_mrus'] ?? collect())->map(fn ($m) => [
+                        'id' => $m->id,
+                        'code' => $m->code,
+                        'name' => $m->name,
+                        'full_identifier' => $m->full_identifier,
+                        'consumers_count' => $m->consumerAccounts()->count(),
+                    ]),
+                ] : null,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[SubscriptionCheckout] Quote calculation failed: '.$e->getMessage(), [
+                'exception' => $e,
+                'plan_id' => $plan->id ?? null,
+                'duration_id' => $duration->id ?? null,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to calculate plan pricing: '.$e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
@@ -341,182 +355,210 @@ class SubscriptionCheckoutController extends Controller
      */
     public function subscribeWallet(Request $request): JsonResponse|RedirectResponse
     {
-        $request->validate([
-            'plan_id' => 'required|integer|exists:plans,id',
-            'duration_id' => 'required|integer|exists:plan_durations,id',
-            'action_mode' => 'nullable|string|in:auto,shift,extend,new',
-            'coupon_code' => 'nullable|string|max:50',
-        ]);
+        try {
+            $request->validate([
+                'plan_id' => 'required|integer|exists:plans,id',
+                'duration_id' => 'required|integer|exists:plan_durations,id',
+                'action_mode' => 'nullable|string|in:auto,shift,extend,new',
+                'coupon_code' => 'nullable|string|max:50',
+            ]);
 
-        $plan = Plan::findOrFail($request->input('plan_id'));
-        $duration = PlanDuration::where('id', $request->input('duration_id'))
-            ->where('plan_id', $plan->id)
-            ->firstOrFail();
+            $plan = Plan::findOrFail($request->input('plan_id'));
+            $duration = PlanDuration::where('id', $request->input('duration_id'))
+                ->where('plan_id', $plan->id)
+                ->firstOrFail();
 
-        if (! $plan->is_active) {
-            $msg = 'Selected plan is not currently active.';
+            if (! $plan->is_active) {
+                $msg = 'Selected plan is not currently active.';
 
-            return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
-        }
-
-        /** @var User $user */
-        $user = Auth::user();
-
-        $activeSubscription = $user->activeSubscription;
-
-        $actionMode = $request->input('action_mode', 'auto');
-        $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription, $actionMode);
-        $amountDue = (float) $pricingDetails['final_amount'];
-        $originalAmountDue = $amountDue;
-        $walletBalance = (float) $this->walletService->getBalance($user);
-
-        // Check optional coupon code
-        $couponCode = trim($request->input('coupon_code', ''));
-        $couponToRedeem = null;
-        if (! empty($couponCode)) {
-            $couponValidation = $this->couponRedemptionService->validateCode(
-                code: $couponCode,
-                user: $user,
-                actionType: 'subscription_discount',
-                amount: $amountDue,
-                planId: $plan->id
-            );
-
-            if (! $couponValidation['valid']) {
-                return $request->wantsJson()
-                    ? response()->json(['success' => false, 'message' => $couponValidation['message']], 422)
-                    : back()->with('error', $couponValidation['message']);
+                return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
             }
 
-            $couponToRedeem = $couponValidation['coupon'];
-            $amountDue = (float) $couponValidation['final_amount'];
-        }
+            /** @var User $user */
+            $user = Auth::user();
 
-        if ($amountDue > 0 && $walletBalance < $amountDue) {
-            $msg = 'Insufficient wallet balance. You need ₹'.number_format($amountDue, 2).' but your wallet balance is ₹'.number_format($walletBalance, 2).'.';
+            $activeSubscription = $user->activeSubscription;
 
-            return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg, 'requires_topup' => true], 422) : back()->with('error', $msg);
-        }
+            $actionMode = $request->input('action_mode', 'auto');
+            $pricingDetails = $this->calculatePricingDetails($user, $plan, $duration, $activeSubscription, $actionMode);
+            $amountDue = (float) $pricingDetails['final_amount'];
+            $originalAmountDue = $amountDue;
+            $walletBalance = (float) $this->walletService->getBalance($user);
 
-        // Case 1: Shift Mode - Upgrade (Prorated difference debited, new cycle starts today)
-        if ($pricingDetails['action_mode'] === 'shift' && $pricingDetails['is_upgrade'] && $activeSubscription) {
-            return DB::transaction(function () use ($activeSubscription, $plan, $duration, $couponToRedeem, $user, $originalAmountDue, $amountDue, $request) {
-                $res = $this->planChangeService->upgradePlan($activeSubscription, $plan, $duration);
-                if (! $res['success']) {
-                    $msg = $res['message'] ?? 'Upgrade failed.';
+            // Check optional coupon code
+            $couponCode = trim($request->input('coupon_code', ''));
+            $couponToRedeem = null;
+            if (! empty($couponCode)) {
+                $couponValidation = $this->couponRedemptionService->validateCode(
+                    code: $couponCode,
+                    user: $user,
+                    actionType: 'subscription_discount',
+                    amount: $amountDue,
+                    planId: $plan->id
+                );
 
-                    return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
+                if (! $couponValidation['valid']) {
+                    return $request->wantsJson()
+                        ? response()->json(['success' => false, 'message' => $couponValidation['message']], 422)
+                        : back()->with('error', $couponValidation['message']);
                 }
+
+                $couponToRedeem = $couponValidation['coupon'];
+                $amountDue = (float) $couponValidation['final_amount'];
+            }
+
+            if ($amountDue > 0 && $walletBalance < $amountDue) {
+                $msg = 'Insufficient wallet balance. You need ₹'.number_format($amountDue, 2).' but your wallet balance is ₹'.number_format($walletBalance, 2).'.';
+
+                return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg, 'requires_topup' => true], 422) : back()->with('error', $msg);
+            }
+
+            // Case 1: Shift Mode - Upgrade (Prorated difference debited, new cycle starts today)
+            if ($pricingDetails['action_mode'] === 'shift' && $pricingDetails['is_upgrade'] && $activeSubscription) {
+                return DB::transaction(function () use ($activeSubscription, $plan, $duration, $couponToRedeem, $user, $originalAmountDue, $amountDue, $request) {
+                    $res = $this->planChangeService->upgradePlan($activeSubscription, $plan, $duration);
+                    if (! $res['success']) {
+                        $msg = $res['message'] ?? 'Upgrade failed.';
+
+                        return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
+                    }
+
+                    if ($couponToRedeem) {
+                        $this->couponRedemptionService->redeemForSubscription(
+                            coupon: $couponToRedeem,
+                            user: $user,
+                            originalAmount: $originalAmountDue,
+                            referenceId: 'sub_'.$res['subscription']->id
+                        );
+                    }
+
+                    $msg = "🎉 Switched to {$plan->name} ({$duration->formatted_duration}) successfully! Prorated fee of ₹".number_format($amountDue, 2).' was debited from your wallet. Valid from today until '.$res['subscription']->billing_end->format('M d, Y').'.';
+
+                    return $request->wantsJson() ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $res['subscription']->id]) : back()->with('success', $msg);
+                });
+            }
+
+            // Case 2: Shift Mode - Downgrade (Prorated credit added to wallet, new cycle starts today)
+            if ($pricingDetails['action_mode'] === 'shift' && $pricingDetails['is_downgrade'] && $activeSubscription) {
+                $eligibility = $this->planChangeService->checkDowngradeEligibility($activeSubscription, $plan);
+                if (! $eligibility['eligible']) {
+                    $msg = $eligibility['message'] ?? 'Downgrade ineligible due to active MRU count.';
+                    if ($request->wantsJson() || $request->ajax()) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => $msg,
+                            'ineligible_mrus' => true,
+                            'active_mrus' => $eligibility['active_mrus']->map(fn ($m) => [
+                                'id' => $m->id,
+                                'code' => $m->code,
+                                'name' => $m->name,
+                                'full_identifier' => $m->full_identifier,
+                                'consumers_count' => $m->consumerAccounts()->count(),
+                            ]),
+                            'excess_mrus' => $eligibility['excess_mrus'],
+                            'new_plan_quota' => $eligibility['new_plan_quota'],
+                            'active_mrus_count' => $eligibility['active_mrus_count'],
+                        ], 422);
+                    }
+
+                    return back()->with('error', $msg);
+                }
+
+                return DB::transaction(function () use ($activeSubscription, $plan, $duration, $request) {
+                    $res = $this->planChangeService->downgradePlan($activeSubscription, $plan, $duration);
+                    if (! $res['success']) {
+                        $msg = $res['message'] ?? 'Downgrade failed.';
+
+                        return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
+                    }
+                    $msg = "🎉 Switched to {$plan->name} ({$duration->formatted_duration}) successfully! Prorated credit of ₹".number_format($res['amount_credited'], 2).' was credited to your wallet. Valid from today until '.$res['subscription']->billing_end->format('M d, Y').'.';
+
+                    return $request->wantsJson() ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $res['subscription']->id]) : back()->with('success', $msg);
+                });
+            }
+
+            // Case 3: Extend Mode OR Brand New Subscription
+            $isExtend = ($pricingDetails['action_mode'] === 'extend') && $activeSubscription;
+            $txDesc = $isExtend
+                ? "Plan Extension: +{$duration->formatted_duration} added to {$plan->name}"
+                : "Subscription to {$plan->name} ({$duration->formatted_duration})";
+
+            return DB::transaction(function () use ($user, $plan, $duration, $amountDue, $originalAmountDue, $couponToRedeem, $isExtend, $txDesc, $request) {
+                if ($amountDue > 0) {
+                    $debitResult = $this->walletService->debit(
+                        user: $user,
+                        amount: $amountDue,
+                        source: $isExtend ? 'subscription_renewal' : 'subscription_purchase',
+                        referenceType: Plan::class,
+                        referenceId: (string) $plan->id,
+                        description: $txDesc
+                    );
+
+                    if ($debitResult !== DebitResult::SUCCESS) {
+                        $msg = $debitResult === DebitResult::WALLET_FROZEN ? 'Wallet is frozen. Please contact admin.' : 'Insufficient wallet balance.';
+
+                        return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
+                    }
+                }
+
+                $subscription = $this->planService->subscribeAgent($user, $plan, $duration);
 
                 if ($couponToRedeem) {
                     $this->couponRedemptionService->redeemForSubscription(
                         coupon: $couponToRedeem,
                         user: $user,
                         originalAmount: $originalAmountDue,
-                        referenceId: 'sub_'.$res['subscription']->id
+                        referenceId: 'sub_'.$subscription->id
                     );
                 }
 
-                $msg = "🎉 Switched to {$plan->name} ({$duration->formatted_duration}) successfully! Prorated fee of ₹".number_format($amountDue, 2).' was debited from your wallet. Valid from today until '.$res['subscription']->billing_end->format('M d, Y').'.';
+                // Refer & Earn: check if referee's first subscription payment qualifies for a referral reward
+                try {
+                    app(ReferralService::class)->checkAndCreatePendingPayout(
+                        user: $user,
+                        paymentReferenceType: 'subscription_payment',
+                        paymentReferenceId: 'sub_'.$subscription->id,
+                        paymentAmount: (float) $amountDue
+                    );
+                } catch (\Throwable $e) {
+                    Log::error("[SubscriptionCheckout] Referral payout check error for sub #{$subscription->id}: ".$e->getMessage());
+                }
 
-                return $request->wantsJson() ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $res['subscription']->id]) : back()->with('success', $msg);
+                $msg = $isExtend
+                    ? "🎉 Extended {$plan->name} (+{$duration->formatted_duration}) successfully! New validity until ".$subscription->billing_end->format('M d, Y').'.'
+                    : "🎉 Subscribed to {$plan->name} ({$duration->formatted_duration}) successfully! Valid until ".$subscription->billing_end->format('M d, Y').'.';
+
+                return $request->wantsJson()
+                    ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $subscription->id])
+                    : back()->with('success', $msg);
             });
+        } catch (ValidationException $e) {
+            if ($request->wantsJson() || $request->ajax() || $request->isJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => collect($e->errors())->flatten()->first() ?: 'Validation failed.',
+                    'errors' => $e->errors(),
+                ], 422);
+            }
+            throw $e;
+        } catch (\Throwable $e) {
+            Log::error('[SubscriptionCheckout] Wallet subscription error: '.$e->getMessage(), [
+                'exception' => $e,
+                'user_id' => Auth::id(),
+                'payload' => $request->all(),
+            ]);
+
+            $message = 'Subscription activation encountered an issue: '.$e->getMessage();
+
+            if ($request->wantsJson() || $request->ajax() || $request->isJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $message,
+                ], 500);
+            }
+
+            return back()->withInput()->with('error', $message);
         }
-
-        // Case 2: Shift Mode - Downgrade (Prorated credit added to wallet, new cycle starts today)
-        if ($pricingDetails['action_mode'] === 'shift' && $pricingDetails['is_downgrade'] && $activeSubscription) {
-            $eligibility = $this->planChangeService->checkDowngradeEligibility($activeSubscription, $plan);
-            if (! $eligibility['eligible']) {
-                $msg = $eligibility['message'] ?? 'Downgrade ineligible due to active MRU count.';
-                if ($request->wantsJson() || $request->ajax()) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => $msg,
-                        'ineligible_mrus' => true,
-                        'active_mrus' => $eligibility['active_mrus']->map(fn ($m) => [
-                            'id' => $m->id,
-                            'code' => $m->code,
-                            'name' => $m->name,
-                            'full_identifier' => $m->full_identifier,
-                            'consumers_count' => $m->consumerAccounts()->count(),
-                        ]),
-                        'excess_mrus' => $eligibility['excess_mrus'],
-                        'new_plan_quota' => $eligibility['new_plan_quota'],
-                        'active_mrus_count' => $eligibility['active_mrus_count'],
-                    ], 422);
-                }
-
-                return back()->with('error', $msg);
-            }
-
-            return DB::transaction(function () use ($activeSubscription, $plan, $duration, $request) {
-                $res = $this->planChangeService->downgradePlan($activeSubscription, $plan, $duration);
-                if (! $res['success']) {
-                    $msg = $res['message'] ?? 'Downgrade failed.';
-
-                    return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
-                }
-                $msg = "🎉 Switched to {$plan->name} ({$duration->formatted_duration}) successfully! Prorated credit of ₹".number_format($res['amount_credited'], 2).' was credited to your wallet. Valid from today until '.$res['subscription']->billing_end->format('M d, Y').'.';
-
-                return $request->wantsJson() ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $res['subscription']->id]) : back()->with('success', $msg);
-            });
-        }
-
-        // Case 3: Extend Mode OR Brand New Subscription
-        $isExtend = ($pricingDetails['action_mode'] === 'extend') && $activeSubscription;
-        $txDesc = $isExtend
-            ? "Plan Extension: +{$duration->formatted_duration} added to {$plan->name}"
-            : "Subscription to {$plan->name} ({$duration->formatted_duration})";
-
-        return DB::transaction(function () use ($user, $plan, $duration, $amountDue, $originalAmountDue, $couponToRedeem, $isExtend, $txDesc, $request) {
-            if ($amountDue > 0) {
-                $debitResult = $this->walletService->debit(
-                    user: $user,
-                    amount: $amountDue,
-                    source: $isExtend ? 'subscription_renewal' : 'subscription_purchase',
-                    referenceType: Plan::class,
-                    referenceId: (string) $plan->id,
-                    description: $txDesc
-                );
-
-                if ($debitResult !== DebitResult::SUCCESS) {
-                    $msg = $debitResult === DebitResult::WALLET_FROZEN ? 'Wallet is frozen. Please contact admin.' : 'Insufficient wallet balance.';
-
-                    return $request->wantsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->with('error', $msg);
-                }
-            }
-
-            $subscription = $this->planService->subscribeAgent($user, $plan, $duration);
-
-            if ($couponToRedeem) {
-                $this->couponRedemptionService->redeemForSubscription(
-                    coupon: $couponToRedeem,
-                    user: $user,
-                    originalAmount: $originalAmountDue,
-                    referenceId: 'sub_'.$subscription->id
-                );
-            }
-
-            // Refer & Earn: check if referee's first subscription payment qualifies for a referral reward
-            try {
-                app(ReferralService::class)->checkAndCreatePendingPayout(
-                    user: $user,
-                    paymentReferenceType: 'subscription_payment',
-                    paymentReferenceId: 'sub_'.$subscription->id,
-                    paymentAmount: (float) $amountDue
-                );
-            } catch (\Throwable $e) {
-                Log::error("[SubscriptionCheckout] Referral payout check error for sub #{$subscription->id}: ".$e->getMessage());
-            }
-
-            $msg = $isExtend
-                ? "🎉 Extended {$plan->name} (+{$duration->formatted_duration}) successfully! New validity until ".$subscription->billing_end->format('M d, Y').'.'
-                : "🎉 Subscribed to {$plan->name} ({$duration->formatted_duration}) successfully! Valid until ".$subscription->billing_end->format('M d, Y').'.';
-
-            return $request->wantsJson()
-                ? response()->json(['success' => true, 'message' => $msg, 'subscription_id' => $subscription->id])
-                : back()->with('success', $msg);
-        });
     }
 
     /**

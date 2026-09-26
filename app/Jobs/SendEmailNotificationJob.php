@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Events\AdminNotificationFailedEvent;
 use App\Models\NotificationDelivery;
+use App\Services\Notifications\Contracts\DeliveryResult;
 use App\Services\Notifications\Drivers\Channels\EmailChannelDriver;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -47,15 +48,20 @@ class SendEmailNotificationJob implements ShouldQueue
         $delivery->increment('attempt_count');
         $delivery->update(['last_attempted_at' => now()]);
 
-        $result = $emailDriver->send($notification, $delivery);
+        try {
+            $result = $emailDriver->send($notification, $delivery);
+        } catch (Throwable $e) {
+            $result = DeliveryResult::failure($e->getMessage() ?: 'Unexpected exception during email dispatch.');
+        }
 
         if (! $result->success) {
-            $isFinalAttempt = ($this->attempts() >= $this->tries) || (app()->environment('testing') && config('queue.default') === 'sync');
+            $isSync = config('queue.default') === 'sync' || ($this->connection ?? null) === 'sync';
+            $isFinalAttempt = ($this->attempts() >= $this->tries) || $isSync;
 
             if ($isFinalAttempt) {
                 $delivery->update([
                     'status' => 'permanently_failed',
-                    'failed_reason' => $result->errorMessage ?: 'Exhausted retry attempts.',
+                    'failed_reason' => $result->errorMessage ?: 'Exhausted retry attempts or synchronous queue failure.',
                 ]);
 
                 // If this was a CRITICAL event, alert Admin
@@ -67,7 +73,12 @@ class SendEmailNotificationJob implements ShouldQueue
                         $result->errorMessage ?: 'Exhausted retry attempts.'
                     );
                 } else {
-                    Log::warning("[NotificationSystem] Routine Notification #{$notification->id} email delivery failed permanently.");
+                    Log::warning("[NotificationSystem] Routine Notification #{$notification->id} email delivery failed: ".($result->errorMessage ?: 'Unknown error'));
+                }
+
+                // When queue connection is sync, never throw an unhandled exception to prevent crashing web transactions
+                if ($isSync) {
+                    return;
                 }
             } else {
                 // Fail this attempt so Laravel queue retries with exponential backoff

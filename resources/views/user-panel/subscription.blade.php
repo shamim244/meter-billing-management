@@ -110,7 +110,15 @@
                 const res = await fetch(`/subscription/quote/${this.selectedPlan.id}/${this.selectedDuration.id}?action_mode=${mode}${couponParam}`, {
                     headers: { 'Accept': 'application/json' }
                 });
-                const data = await res.json();
+                let data;
+                const resText = await res.text();
+                try {
+                    data = JSON.parse(resText);
+                } catch (parseErr) {
+                    this.walletError = `Server returned an unexpected response (Status ${res.status}).`;
+                    return;
+                }
+
                 if (data.success) {
                     this.quote = data;
                     if (data.coupon && data.coupon.valid) {
@@ -128,7 +136,7 @@
                     this.walletError = data.message || 'Failed to calculate quote.';
                 }
             } catch (err) {
-                this.walletError = 'Failed to load plan quote.';
+                this.walletError = err.message || 'Failed to load plan quote.';
             } finally {
                 this.isLoadingQuote = false;
             }
@@ -142,7 +150,15 @@
                 const res = await fetch(`/subscription/quote/${this.selectedPlan.id}/${this.selectedDuration.id}?action_mode=${this.selectedActionMode}&coupon_code=${encodeURIComponent(this.couponCodeInput.trim())}`, {
                     headers: { 'Accept': 'application/json' }
                 });
-                const data = await res.json();
+                let data;
+                const resText = await res.text();
+                try {
+                    data = JSON.parse(resText);
+                } catch (parseErr) {
+                    this.couponError = `Server returned an unexpected response (Status ${res.status}).`;
+                    return;
+                }
+
                 if (data.success) {
                     this.quote = data;
                     if (data.coupon && data.coupon.valid) {
@@ -157,7 +173,7 @@
                     this.appliedCoupon = null;
                 }
             } catch (err) {
-                this.couponError = 'Failed to validate coupon code.';
+                this.couponError = err.message || 'Failed to validate coupon code.';
             } finally {
                 this.isValidatingCoupon = false;
             }
@@ -192,7 +208,13 @@
                     })
                 });
 
-                const data = await response.json();
+                let data;
+                const responseText = await response.text();
+                try {
+                    data = JSON.parse(responseText);
+                } catch (jsonErr) {
+                    throw new Error(`Server returned an unexpected response (Status ${response.status}). Please try again or contact support.`);
+                }
 
                 if (!response.ok || !data.success) {
                     if (data.ineligible_mrus) {
@@ -235,7 +257,14 @@
                     },
                     body: JSON.stringify({ reason: 'plan_downgrade' })
                 });
-                const d = await res.json();
+                let d;
+                const resText = await res.text();
+                try {
+                    d = JSON.parse(resText);
+                } catch (parseErr) {
+                    throw new Error(`Failed to lock MRU (Status ${res.status}).`);
+                }
+
                 if (d.success) {
                     this.activeMrus = this.activeMrus.filter(m => m.id !== mruId);
                     this.excessMrus = Math.max(0, this.excessMrus - 1);

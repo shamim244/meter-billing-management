@@ -38,6 +38,7 @@ use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\PdfManagerController;
 use App\Http\Controllers\ProcessingController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\StorageFallbackController;
 use App\Http\Controllers\SubscriptionCheckoutController;
 use App\Http\Controllers\UsageReportController;
 use App\Http\Controllers\UserPanel\AgentBackupController;
@@ -417,3 +418,8 @@ Route::middleware(['auth', 'active'])->group(function () {
 Route::middleware(['auth'])->post('/impersonate/leave', [AdminUserController::class, 'leaveImpersonation'])->name('impersonate.leave');
 
 require __DIR__.'/auth.php';
+
+// Resilient Public Storage Fallback for Shared Hosting (Hostinger / cPanel without physical symlinks)
+Route::get('/storage/{path}', [StorageFallbackController::class, 'show'])
+    ->where('path', '.*')
+    ->name('storage.fallback');

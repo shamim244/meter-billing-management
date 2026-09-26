@@ -21,6 +21,8 @@ class CheckApplicationInstalled
         $isInstalled = $this->installerService->isInstalled();
 
         if (! $isInstalled) {
+            $this->installerService->ensureInstallerPrerequisites();
+
             if (empty(config('app.key'))) {
                 config(['app.key' => 'base64:'.base64_encode('temp_installer_key_32_bytes_!!')]);
             }
@@ -31,8 +33,8 @@ class CheckApplicationInstalled
                 'cache.default' => 'file',
             ]);
 
-            // Allow installer routes and system health/docs endpoints
-            if ($request->is('install*') || $request->is('documentation*') || $request->is('up') || $request->is('build/*') || $request->is('favicon.ico')) {
+            // Allow installer routes, storage assets, and system health/docs endpoints
+            if ($request->is('install*') || $request->is('documentation*') || $request->is('up') || $request->is('build/*') || $request->is('favicon.ico') || $request->is('storage/*')) {
                 return $next($request);
             }
 
