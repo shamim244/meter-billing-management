@@ -16,7 +16,11 @@ class RoleAndPermissionSeeder extends Seeder
     public function run(): void
     {
         // Reset cached roles and permissions
-        app()[PermissionRegistrar::class]->forgetCachedPermissions();
+        try {
+            app()[PermissionRegistrar::class]->forgetCachedPermissions();
+        } catch (\Throwable $e) {
+            // Non-fatal during fresh installer seeding
+        }
 
         // Create roles
         $adminRole = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
