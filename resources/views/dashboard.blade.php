@@ -2590,8 +2590,8 @@
                                             if (q.type === 'working_reading' && q.payload && q.payload.working_reading !== undefined) {
                                                 b.working_reading = q.payload.working_reading;
                                                 const prevNum = parseInt(b.db_prev_reading) || parseInt(b.previous_reading) || 0;
-                                                const workNum = parseInt(b.working_reading) || 0;
-                                                b.working_diff_units = Math.max(0, workNum - prevNum);
+                                                const anchorNum = Math.max(prevNum, (parseInt(b.current_reading) || 0));
+                                                b.working_diff_units = Math.max(0, workNum - anchorNum);
                                             } else if (q.type === 'status' && q.payload && q.payload.status) {
                                                 b.review_status = q.payload.status;
                                             } else if (q.type === 'remark' && q.payload && q.payload.remark !== undefined) {
@@ -2913,7 +2913,8 @@
                         is_projected: bill.is_projected
                     };
 
-                    bill.working_diff_units = Math.max(0, workNum - prevNum);
+                    const anchorNum = Math.max(prevNum, (!isNaN(pdfNum) && pdfNum > 0 ? pdfNum : 0));
+                    bill.working_diff_units = Math.max(0, workNum - anchorNum);
 
                     // Recompute live status
                     if (!isNaN(pdfNum) && pdfNum > 0) {

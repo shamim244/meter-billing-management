@@ -434,7 +434,7 @@ class DashboardController extends Controller
                 $bill->is_projected = true;
                 $bill->reading_source = 'auto';
 
-                if (empty($bill->working_reading) || $bill->working_reading == '0') {
+                if (empty($bill->working_reading) || $bill->working_reading == '0' || (int) $bill->working_reading < $projectedReading) {
                     if ($projectedReading > 0) {
                         $bill->working_reading = (string) $projectedReading;
                     }
@@ -442,7 +442,8 @@ class DashboardController extends Controller
             }
 
             $workNum = is_numeric($bill->working_reading) ? (int) $bill->working_reading : $projectedReading;
-            $bill->working_diff_units = ($prevNum > 0 && $workNum >= $prevNum) ? ($workNum - $prevNum) : ($bill->units_consumed ?: $avgCalc['avg_units']);
+            $effectiveAnchor = max($prevNum, ($pdfNum ?? 0));
+            $bill->working_diff_units = ($effectiveAnchor > 0 && $workNum >= $effectiveAnchor) ? ($workNum - $effectiveAnchor) : ($bill->units_consumed ?: $avgCalc['avg_units']);
             if (empty($bill->units_consumed) || (int) $bill->units_consumed === 0) {
                 $bill->units_consumed = $bill->working_diff_units;
             }
@@ -814,13 +815,9 @@ class DashboardController extends Controller
 
                 $futureBill->previous_reading = (string) $currentChainReading;
                 $avgUnits = $futureBill->units_consumed ?: 50;
-                $newProjected = $currentChainReading + $avgUnits;
-                if (! empty($futureBill->current_reading) && is_numeric($futureBill->current_reading)) {
-                    $pdfReading = (int) $futureBill->current_reading;
-                    if ($newProjected < $pdfReading) {
-                        $newProjected = $pdfReading;
-                    }
-                }
+                $pdfReading = (! empty($futureBill->current_reading) && is_numeric($futureBill->current_reading)) ? (int) $futureBill->current_reading : 0;
+                $anchor = max($currentChainReading, $pdfReading);
+                $newProjected = ($anchor > 0) ? ($anchor + $avgUnits) : $avgUnits;
                 $futureBill->working_reading = (string) $newProjected;
                 $futureBill->reading_source = 'auto';
                 $futureBill->save();

@@ -105,13 +105,9 @@ class ImportAugustWorkingReadingsCommand extends Command
                         foreach ($subsequentBills as $futureBill) {
                             $futureBill->previous_reading = (string) $currentChainReading;
                             $avgUnits = $futureBill->units_consumed ?: 50;
-                            $newProjected = $currentChainReading + $avgUnits;
-                            if (! empty($futureBill->current_reading) && is_numeric($futureBill->current_reading)) {
-                                $pdfReading = (int) $futureBill->current_reading;
-                                if ($newProjected < $pdfReading) {
-                                    $newProjected = $pdfReading;
-                                }
-                            }
+                            $pdfReading = (! empty($futureBill->current_reading) && is_numeric($futureBill->current_reading)) ? (int) $futureBill->current_reading : 0;
+                            $anchor = max($currentChainReading, $pdfReading);
+                            $newProjected = ($anchor > 0) ? ($anchor + $avgUnits) : $avgUnits;
                             $futureBill->working_reading = (string) $newProjected;
                             $futureBill->save();
                             $currentChainReading = $newProjected;

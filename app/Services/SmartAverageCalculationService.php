@@ -410,17 +410,19 @@ class SmartAverageCalculationService
     }
 
     /**
-     * Compute projected reading enforcing optional percentage adjustment and official PDF floor invariant.
+     * Compute projected reading using dual-anchor arbitrage:
+     * Base Anchor = max(Previous Reading, Official PDF Reading)
+     * Working Reading = Base Anchor + Tuned Average Units.
      */
     public function calculateProjectedReading(?int $prevReading, int $avgUnits, ?int $officialPdfReading = null, float|int $adjustmentPercent = 0): int
     {
         $effectiveUnits = $this->adjustAverageUnits($avgUnits, $adjustmentPercent);
-        $projected = ($prevReading !== null && $prevReading > 0) ? ($prevReading + $effectiveUnits) : $effectiveUnits;
 
-        if ($officialPdfReading !== null && $officialPdfReading > 0 && $projected < $officialPdfReading) {
-            $projected = $officialPdfReading;
-        }
+        $prev = ($prevReading !== null && $prevReading > 0) ? $prevReading : 0;
+        $pdf = ($officialPdfReading !== null && $officialPdfReading > 0) ? $officialPdfReading : 0;
 
-        return $projected;
+        $anchor = max($prev, $pdf);
+
+        return ($anchor > 0) ? ($anchor + $effectiveUnits) : $effectiveUnits;
     }
 }
