@@ -8,6 +8,7 @@ use App\Models\BillStatus;
 use App\Models\ConsumerAccount;
 use App\Models\MeterReadingHistory;
 use App\Models\Mru;
+use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\BillTagService;
 use App\Services\MeterReadingHistoryService;
@@ -203,6 +204,16 @@ class DashboardController extends Controller
         $defaultTag = $this->billTagService->getDefaultTag();
         $activeSubscription = Auth::user()?->activeSubscription;
 
+        $colorSettings = [
+            'enabled' => (bool) SystemSetting::get('dynamic_colorization_enabled', true),
+            'amount_safe_ceiling' => (float) SystemSetting::get('color_amount_safe_ceiling', 500.0),
+            'amount_warning_ceiling' => (float) SystemSetting::get('color_amount_warning_ceiling', 1500.0),
+            'amount_danger_floor' => (float) SystemSetting::get('color_amount_danger_floor', 2500.0),
+            'units_safe_ceiling' => (int) SystemSetting::get('color_units_safe_ceiling', 50),
+            'units_warning_ceiling' => (int) SystemSetting::get('color_units_warning_ceiling', 120),
+            'units_danger_floor' => (int) SystemSetting::get('color_units_danger_floor', 200),
+        ];
+
         return view('dashboard', compact(
             'periods',
             'mruPeriodsMap',
@@ -218,7 +229,8 @@ class DashboardController extends Controller
             'statusCounts',
             'activeTags',
             'defaultTag',
-            'activeSubscription'
+            'activeSubscription',
+            'colorSettings'
         ));
     }
 
@@ -336,8 +348,13 @@ class DashboardController extends Controller
             $adjPercent = (float) session('dashboard_tuning_percent', 0);
         }
 
+        $colorSafeCeiling = (float) SystemSetting::get('color_amount_safe_ceiling', 500.0);
+        $colorDangerFloor = (float) SystemSetting::get('color_amount_danger_floor', 2500.0);
+        $unitsSafeCeiling = (int) SystemSetting::get('color_units_safe_ceiling', 50);
+        $unitsDangerFloor = (int) SystemSetting::get('color_units_danger_floor', 200);
+
         // Attach review_status, remark, and 4-Box Reading Metrics
-        $mapped = $allRecords->map(function ($bill) use ($userStatusModels, $historicalBills, $meterHistories, $basisHistories, $consumers, $month, $year, $adjPercent, $tuningSteps) {
+        $mapped = $allRecords->map(function ($bill) use ($userStatusModels, $historicalBills, $meterHistories, $basisHistories, $consumers, $month, $year, $adjPercent, $tuningSteps, $colorSafeCeiling, $colorDangerFloor, $unitsSafeCeiling, $unitsDangerFloor) {
             $st = $userStatusModels[$bill->ca_number] ?? null;
             $bill->review_status = ! empty($bill->review_status) && $bill->review_status !== 'pending' ? $bill->review_status : ($st ? $st->status : ($bill->review_status ?: 'pending'));
             $bill->remark = ! empty($bill->remark) ? $bill->remark : ($st ? ($st->remark ?? '') : '');
@@ -442,8 +459,7 @@ class DashboardController extends Controller
             }
 
             $workNum = is_numeric($bill->working_reading) ? (int) $bill->working_reading : $projectedReading;
-            $effectiveAnchor = max($prevNum, ($pdfNum ?? 0));
-            $bill->working_diff_units = ($effectiveAnchor > 0 && $workNum >= $effectiveAnchor) ? ($workNum - $effectiveAnchor) : ($bill->units_consumed ?: $avgCalc['avg_units']);
+            $bill->working_diff_units = ($prevNum > 0 && $workNum >= $prevNum) ? ($workNum - $prevNum) : ($bill->units_consumed ?: $avgCalc['avg_units']);
             if (empty($bill->units_consumed) || (int) $bill->units_consumed === 0) {
                 $bill->units_consumed = $bill->working_diff_units;
             }
@@ -468,6 +484,25 @@ class DashboardController extends Controller
                 $bill->pdf_sync_status = 'awaiting'; // ⏳ Awaiting PDF (80-90% relying on Prev + Avg)
                 $bill->pdf_delta = null;
                 $bill->pdf_status_label = 'Awaiting PDF';
+            }
+
+            // Dynamic Heatmap & Visual Threshold Zone Classifications
+            $amt = (float) ($bill->total_amount ?? 0);
+            if ($amt <= $colorSafeCeiling) {
+                $bill->amount_zone = 'safe';
+            } elseif ($amt >= $colorDangerFloor) {
+                $bill->amount_zone = 'alert';
+            } else {
+                $bill->amount_zone = 'moderate';
+            }
+
+            $units = (float) ($bill->smart_avg_units ?? $avgCalc['avg_units'] ?? $bill->units_consumed ?? 0);
+            if ($units <= $unitsSafeCeiling) {
+                $bill->avg_units_zone = 'safe';
+            } elseif ($units >= $unitsDangerFloor) {
+                $bill->avg_units_zone = 'alert';
+            } else {
+                $bill->avg_units_zone = 'moderate';
             }
 
             return $bill;
@@ -672,6 +707,15 @@ class DashboardController extends Controller
             'shortcut_labels' => $currentUser ? $currentUser->getShortcutLabels() : config('shortcuts.labels'),
             'available_tags' => $this->billTagService->getActiveTags(),
             'default_tag' => $this->billTagService->getDefaultTag(),
+            'color_settings' => [
+                'enabled' => (bool) SystemSetting::get('dynamic_colorization_enabled', true),
+                'amount_safe_ceiling' => $colorSafeCeiling,
+                'amount_warning_ceiling' => (float) SystemSetting::get('color_amount_warning_ceiling', 1500.0),
+                'amount_danger_floor' => $colorDangerFloor,
+                'units_safe_ceiling' => $unitsSafeCeiling,
+                'units_warning_ceiling' => (int) SystemSetting::get('color_units_warning_ceiling', 120),
+                'units_danger_floor' => $unitsDangerFloor,
+            ],
             'pagination' => [
                 'total' => $totalMatching,
                 'per_page' => $perPage,

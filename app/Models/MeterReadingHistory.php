@@ -104,8 +104,8 @@ class MeterReadingHistory extends Model
 
     public function getEffectiveUnits(): int
     {
-        if ($this->units_consumed !== null && $this->units_consumed > 0) {
-            return (int) $this->units_consumed;
+        if ($this->units_consumed !== null) {
+            return max(0, (int) $this->units_consumed);
         }
 
         $eff = $this->getEffectiveReading();
@@ -116,5 +116,15 @@ class MeterReadingHistory extends Model
         }
 
         return 0;
+    }
+
+    public function isSpike(): bool
+    {
+        return (bool) ($this->meta['is_spike'] ?? false);
+    }
+
+    public function isActiveForAverage(): bool
+    {
+        return (bool) ($this->meta['active_for_average'] ?? true);
     }
 }

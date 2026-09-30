@@ -683,7 +683,7 @@
                                     <td class="py-3 px-2 text-center font-mono text-xs cursor-pointer hover:bg-indigo-50/60 dark:hover:bg-indigo-950/40 transition group rounded-xl"
                                         @click="openMeterHistoryModal(bill.ca_number, bill.consumer_name)"
                                         title="Click to view 2D Monthly Reading History & calculation breakdown">
-                                        <div class="font-bold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-cyan-400 transition" x-text="(bill.smart_avg_units ?? 50) + ' k'"></div>
+                                        <div class="transition" :class="getAvgUnitStyle(bill.smart_avg_units)" x-text="(bill.smart_avg_units ?? 50) + ' k'"></div>
                                         <div class="text-[9px] text-indigo-500 font-semibold opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-0.5">
                                             <span>📊</span> History
                                         </div>
@@ -711,8 +711,16 @@
                                     </td>
 
                                     <!-- Amount -->
-                                    <td class="py-3 px-3 text-right font-extrabold" :class="Number(bill.total_amount) < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'">
-                                        <span x-text="formatCurrency(bill.total_amount)"></span>
+                                    <td class="py-3 px-3 text-right" :class="getAmountStyle(bill.total_amount)">
+                                        <div class="flex items-center justify-end gap-1.5">
+                                            <template x-if="Number(bill.total_amount) < 0">
+                                                <span class="px-1.5 py-0.2 rounded text-[8px] font-bold uppercase bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">Advance / Credit</span>
+                                            </template>
+                                            <template x-if="colorSettings?.enabled && Number(bill.total_amount) >= (colorSettings.amount_danger_floor ?? 2500)">
+                                                <span class="px-1.5 py-0.2 rounded text-[8px] font-black uppercase bg-rose-500/10 text-rose-600 border border-rose-500/20 animate-pulse">Alert</span>
+                                            </template>
+                                            <span x-text="formatCurrency(bill.total_amount)"></span>
+                                        </div>
                                     </td>
 
                                     <!-- Month -->
@@ -817,7 +825,7 @@
                         
                         <template x-for="(bill, index) in items" :key="bill.id">
                             <div class="min-w-full w-full shrink-0 px-1 box-border">
-                                <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xl overflow-hidden transition-all duration-200" :class="{ 'ring-2 ring-rose-500 border-rose-500 shadow-rose-500/20': bill._syncError }">
+                                <div class="bg-white dark:bg-slate-900 rounded-3xl border shadow-xl overflow-hidden transition-all duration-200" :class="bill._syncError ? 'ring-2 ring-rose-500 border-rose-500 shadow-rose-500/20' : (colorSettings?.enabled ? getAvgUnitStyle(bill.smart_avg_units, 'border') : 'border-slate-200/90 dark:border-slate-800')">
                                     <!-- Top Header Bar (Mobile Responsive & Crisp) -->
                                     <div class="px-4 sm:px-5 py-3.5 sm:py-4 relative text-white" :class="{
                                         'bg-gradient-to-r from-emerald-900 to-slate-900': bill.review_status === 'submitted',
@@ -893,17 +901,23 @@
 
                                         <!-- Center: Total Amount -->
                                         <div class="text-center">
-                                            <span class="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider block leading-none mb-0.5" 
-                                                  :class="Number(bill.total_amount) < 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-400 dark:text-slate-500'" 
-                                                  x-text="Number(bill.total_amount) < 0 ? 'Advance / Credit' : 'Total Amount'"></span>
-                                            <div class="font-black leading-tight" 
-                                                 :class="{
-                                                     'text-lg sm:text-xl': amountSize === 'standard',
-                                                     'text-xl sm:text-2xl': amountSize === 'large',
-                                                     'text-emerald-600 dark:text-emerald-400': Number(bill.total_amount) < 0,
-                                                     'text-blue-600 dark:text-cyan-400': Number(bill.total_amount) > 0,
-                                                     'text-slate-500 dark:text-slate-400': Number(bill.total_amount) == 0
-                                                 }" 
+                                            <div class="flex items-center justify-center gap-1 leading-none mb-0.5">
+                                                <template x-if="Number(bill.total_amount) < 0">
+                                                    <span class="px-1.5 py-0.2 text-[8px] font-bold uppercase tracking-wider rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">Advance / Credit</span>
+                                                </template>
+                                                <template x-if="Number(bill.total_amount) >= 0">
+                                                    <span class="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider block" 
+                                                          :class="colorSettings?.enabled && Number(bill.total_amount) >= (colorSettings.amount_danger_floor ?? 2500) ? 'text-rose-600 font-black' : 'text-slate-400 dark:text-slate-500'">Total Amount</span>
+                                                </template>
+                                                <template x-if="colorSettings?.enabled && Number(bill.total_amount) >= (colorSettings.amount_danger_floor ?? 2500)">
+                                                    <span class="px-1 py-0.2 text-[8px] font-black uppercase tracking-wider rounded bg-rose-500/10 text-rose-600 border border-rose-500/20 animate-pulse">Alert</span>
+                                                </template>
+                                            </div>
+                                            <div class="leading-tight" 
+                                                 :class="[
+                                                     amountSize === 'standard' ? 'text-lg sm:text-xl' : 'text-xl sm:text-2xl',
+                                                     getAmountStyle(bill.total_amount)
+                                                 ]" 
                                                  x-text="formatCurrency(bill.total_amount)"></div>
                                         </div>
 
@@ -990,12 +1004,17 @@
                                         </div>
 
                                         <!-- Box 3: 📊 Average Usage (Avg kWh) -->
-                                        <div @click="openMeterHistoryModal(bill.ca_number, bill.consumer_name)" class="bg-white dark:bg-slate-800 p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm flex flex-col justify-between cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-500 transition group" title="Click to view 2D Monthly Reading History & calculation audit">
+                                        <div @click="openMeterHistoryModal(bill.ca_number, bill.consumer_name)" 
+                                             class="bg-white dark:bg-slate-800 p-2.5 sm:p-3 rounded-2xl border shadow-sm flex flex-col justify-between cursor-pointer transition group" 
+                                             :class="colorSettings?.enabled ? getAvgUnitStyle(bill.smart_avg_units, 'border') : 'border-slate-200/80 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500'" 
+                                             title="Click to view 2D Monthly Reading History & calculation audit">
                                             <div class="flex items-center justify-between">
                                                 <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">📊 Avg Usage</span>
                                                 <span class="text-[9px] text-indigo-500 font-bold opacity-70 group-hover:opacity-100 transition">History ↗</span>
                                             </div>
-                                            <div class="text-base sm:text-lg font-black text-slate-800 dark:text-white my-0.5 sm:my-1 font-mono text-center group-hover:text-indigo-600 dark:group-hover:text-cyan-400 transition" x-text="(bill.smart_avg_units ?? 50) + ' kWh'"></div>
+                                            <div class="text-base sm:text-lg my-0.5 sm:my-1 font-mono text-center transition" 
+                                                 :class="getAvgUnitStyle(bill.smart_avg_units)" 
+                                                 x-text="(bill.smart_avg_units ?? 50) + ' kWh'"></div>
                                             <div class="text-[9px] sm:text-[10px] text-slate-400 border-t border-slate-100 dark:border-slate-700/60 pt-1 truncate" x-text="bill.smart_avg_label || 'History Avg'"></div>
                                         </div>
 
@@ -2078,6 +2097,7 @@
                 cardDensity: '{{ session('pref_card_density', 'compact') }}',
                 amountSize: '{{ session('pref_amount_size', 'standard') }}',
                 showRemarkPresets: {{ json_encode(session('pref_remark_presets', false)) }},
+                colorSettings: {{ json_encode($colorSettings ?? ['enabled' => true, 'amount_safe_ceiling' => 500, 'amount_warning_ceiling' => 1500, 'amount_danger_floor' => 2500, 'units_safe_ceiling' => 50, 'units_warning_ceiling' => 120, 'units_danger_floor' => 200]) }},
 
                 cycleMonth: {{ $selectedMonth }},
                 cycleYear: {{ $selectedYear }},
@@ -2590,8 +2610,8 @@
                                             if (q.type === 'working_reading' && q.payload && q.payload.working_reading !== undefined) {
                                                 b.working_reading = q.payload.working_reading;
                                                 const prevNum = parseInt(b.db_prev_reading) || parseInt(b.previous_reading) || 0;
-                                                const anchorNum = Math.max(prevNum, (parseInt(b.current_reading) || 0));
-                                                b.working_diff_units = Math.max(0, workNum - anchorNum);
+                                                const workNum = parseInt(b.working_reading) || 0;
+                                                b.working_diff_units = Math.max(0, workNum - prevNum);
                                             } else if (q.type === 'status' && q.payload && q.payload.status) {
                                                 b.review_status = q.payload.status;
                                             } else if (q.type === 'remark' && q.payload && q.payload.remark !== undefined) {
@@ -2633,6 +2653,7 @@
                                 if (json.counts) this.counts = json.counts;
                                 if (json.filtered_units !== undefined) this.counts.filtered_units = json.filtered_units;
                                 if (json.filtered_amount !== undefined) this.counts.filtered_amount = json.filtered_amount;
+                                if (json.color_settings) this.colorSettings = json.color_settings;
                                 if (json.available_periods) {
                                     this.availablePeriods = json.available_periods;
                                     const mruKey = String(this.filterMru || '');
@@ -2913,8 +2934,7 @@
                         is_projected: bill.is_projected
                     };
 
-                    const anchorNum = Math.max(prevNum, (!isNaN(pdfNum) && pdfNum > 0 ? pdfNum : 0));
-                    bill.working_diff_units = Math.max(0, workNum - anchorNum);
+                    bill.working_diff_units = Math.max(0, workNum - prevNum);
 
                     // Recompute live status
                     if (!isNaN(pdfNum) && pdfNum > 0) {
@@ -4425,6 +4445,98 @@
                         return '-₹' + Math.abs(num).toFixed(2);
                     }
                     return '₹' + num.toFixed(2);
+                },
+
+                getAmountStyle(amount) {
+                    const cleanAmt = typeof amount === 'string' ? amount.replace(/[^0-9.-]+/g, '') : amount;
+                    const val = Number(cleanAmt) || 0;
+                    if (!this.colorSettings || this.colorSettings.enabled === false) {
+                        if (val < 0) return 'text-emerald-500 font-bold';
+                        return val > 0 ? 'text-blue-600 dark:text-cyan-400 font-bold' : 'text-slate-500 dark:text-slate-400 font-bold';
+                    }
+
+                    const safe = Number(this.colorSettings.amount_safe_ceiling ?? 500);
+                    const warning = Number(this.colorSettings.amount_warning_ceiling ?? 1500);
+                    const danger = Number(this.colorSettings.amount_danger_floor ?? 2500);
+
+                    // Negative / Credit (< ₹0): Emerald Green
+                    if (val < 0) {
+                        return 'text-emerald-500 font-bold';
+                    }
+
+                    // ₹0 to Safe Ceiling: Vibrant Green (Safe Zone)
+                    if (val <= safe) {
+                        return 'text-emerald-500 font-bold';
+                    }
+
+                    // Safe Ceiling to Warning Ceiling: Lime / Amber (Normal Zone)
+                    if (val <= warning) {
+                        const mid = (safe + warning) / 2;
+                        return val <= mid ? 'text-lime-500 font-bold' : 'text-amber-500 font-bold';
+                    }
+
+                    // Warning Ceiling to Danger Floor: Warm Orange (Elevated Zone)
+                    if (val < danger) {
+                        return 'text-orange-500 font-extrabold';
+                    }
+
+                    // Danger Floor+: Bold Crimson Red (High Attention Zone)
+                    return 'text-rose-600 font-black';
+                },
+
+                getAvgUnitStyle(units, type = 'text') {
+                    const cleanUnits = typeof units === 'string' ? units.replace(/[^0-9.-]+/g, '') : units;
+                    const u = Number(cleanUnits) || 0;
+                    if (!this.colorSettings || this.colorSettings.enabled === false) {
+                        if (type === 'border') return 'border-slate-200/80 dark:border-slate-700';
+                        if (type === 'badge') return 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300';
+                        return 'text-slate-800 dark:text-white font-bold';
+                    }
+
+                    const safe = Number(this.colorSettings.units_safe_ceiling ?? 50);
+                    const warning = Number(this.colorSettings.units_warning_ceiling ?? 120);
+                    const danger = Number(this.colorSettings.units_danger_floor ?? 200);
+
+                    if (type === 'border') {
+                        if (u <= safe) {
+                            return 'border-emerald-500/50 dark:border-emerald-600/50';
+                        }
+                        if (u <= warning) {
+                            const mid = (safe + warning) / 2;
+                            return u <= mid ? 'border-lime-500/50 dark:border-lime-600/50' : 'border-amber-500/50 dark:border-amber-600/50';
+                        }
+                        if (u < danger) {
+                            return 'border-orange-500/50 dark:border-orange-600/50';
+                        }
+                        return 'border-rose-600/70 dark:border-rose-500/70 ring-1 ring-rose-500/30';
+                    }
+
+                    if (type === 'badge') {
+                        if (u <= safe) {
+                            return 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20';
+                        }
+                        if (u <= warning) {
+                            const mid = (safe + warning) / 2;
+                            return u <= mid ? 'bg-lime-500/10 text-lime-500 border border-lime-500/20' : 'bg-amber-500/10 text-amber-500 border border-amber-500/20';
+                        }
+                        if (u < danger) {
+                            return 'bg-orange-500/10 text-orange-500 border border-orange-500/20';
+                        }
+                        return 'bg-rose-500/10 text-rose-600 border border-rose-500/20';
+                    }
+
+                    // Reading numbers spectrum
+                    if (u <= safe) {
+                        return 'text-emerald-500 font-bold';
+                    }
+                    if (u <= warning) {
+                        const mid = (safe + warning) / 2;
+                        return u <= mid ? 'text-lime-500 font-bold' : 'text-amber-500 font-bold';
+                    }
+                    if (u < danger) {
+                        return 'text-orange-500 font-extrabold';
+                    }
+                    return 'text-rose-600 font-black';
                 }
             };
         }

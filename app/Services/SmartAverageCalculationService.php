@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\BillRecord;
 use App\Models\ConsumerAccount;
 use App\Models\MeterReadingHistory;
+use App\Models\SystemSetting;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 
@@ -210,7 +211,8 @@ class SmartAverageCalculationService
                 }
             }
 
-            if ($units > 0) {
+            $hasUnitsData = ($h->units_consumed !== null) || ($rCurr !== null && $rPrev !== null);
+            if ($hasUnitsData && $units >= 0) {
                 $periodMap[$pKey] = ['units' => $units, 'basis' => $hBasis];
             }
         }
@@ -245,24 +247,73 @@ class SmartAverageCalculationService
                     $chosen = $working ?: $pdf;
                     if ($chosen) {
                         $u = $chosen->getEffectiveUnits();
-                        if ($u > 0) {
-                            $b = strtoupper(trim((string) ($chosen->billing_basis ?: 'OK')));
-                            // Dedicated ledger takes priority for the period
-                            $periodMap[$pKey] = ['units' => $u, 'basis' => $b];
-                        }
+                        $b = strtoupper(trim((string) ($chosen->billing_basis ?: 'OK')));
+                        // Dedicated ledger takes priority for the period
+                        $periodMap[$pKey] = ['units' => $u, 'basis' => $b];
                     }
                 }
             }
         }
 
+        // Check system filter toggles and thresholds
+        $calculationFilterEnabled = (bool) SystemSetting::get('calculation_filter_enabled', true);
+        $filterNonOkBases = (bool) SystemSetting::get('filter_non_ok_bases', true);
+        $filterZeroUnits = (bool) SystemSetting::get('filter_zero_unit_months', true);
+
+        // Resolve consumer tariff category
+        $tariffCategory = $consumer?->tariff_category
+            ?? $currentBill?->tariff_category
+            ?? ConsumerAccount::where('ca_number', $caNumber)->value('tariff_category')
+            ?? 'DS1D';
+        $tariffCategory = strtoupper(trim((string) $tariffCategory));
+
+        // Determine category-specific spike multiplier & agricultural bypass
+        $isAgriculture = str_contains($tariffCategory, 'IAS');
+        $isCommercial = str_contains($tariffCategory, 'NDS');
+        $isDomestic = ! $isCommercial && (str_contains($tariffCategory, 'DS') || str_contains($tariffCategory, 'KJ') || str_contains($tariffCategory, 'KUTIR') || str_contains($tariffCategory, 'JYOTI'));
+
+        $minBuffer = (int) SystemSetting::get('min_spike_unit_buffer', 30);
+        $bypassSpikeFilter = false;
+        $multiplier = (float) SystemSetting::get('global_spike_multiplier', 2.0);
+
+        if ($isAgriculture) {
+            $agriBypass = (bool) SystemSetting::get('agriculture_spike_bypass', true);
+            if ($agriBypass) {
+                $bypassSpikeFilter = true;
+            }
+            $multiplier = (float) SystemSetting::get('agriculture_spike_multiplier', 4.0);
+        } elseif ($isCommercial) {
+            $multiplier = (float) SystemSetting::get('commercial_spike_multiplier', 2.5);
+        } elseif ($isDomestic) {
+            $multiplier = (float) SystemSetting::get('domestic_spike_multiplier', 2.0);
+        }
+
         // Separate deduplicated database historical periods into basis streams
-        $okUnits = collect();
+        $candidateOkUnits = collect();
         $lkUnits = collect();
-        foreach ($periodMap as $pData) {
-            if ($pData['basis'] === 'OK') {
-                $okUnits->push($pData['units']);
-            } elseif ($pData['basis'] === 'LK') {
-                $lkUnits->push($pData['units']);
+        $filteredBasesCount = 0;
+        $spikesFilteredCount = 0;
+
+        foreach ($periodMap as $pKey => $pData) {
+            $u = $pData['units'];
+            $b = strtoupper(trim((string) $pData['basis']));
+            $isOk = in_array($b, ['OK', 'NORMAL', 'NORMAL(OK)']);
+
+            if ($u <= 0 && $calculationFilterEnabled && $filterZeroUnits) {
+                continue;
+            }
+
+            if (! $isOk) {
+                if ($calculationFilterEnabled && $filterNonOkBases) {
+                    $filteredBasesCount++;
+                    if ($b === 'LK') {
+                        $lkUnits->push($u);
+                    }
+                } else {
+                    $candidateOkUnits->push($u);
+                }
+            } else {
+                $candidateOkUnits->push($u);
             }
         }
 
@@ -271,10 +322,44 @@ class SmartAverageCalculationService
 
         if ($activeRecord && $activeRecord->units_consumed && (int) $activeRecord->units_consumed > 0 && ! empty($activeRecord->current_reading)) {
             $currUnits = (int) $activeRecord->units_consumed;
-            if ($cleanBasis === 'OK') {
-                $okUnits->push($currUnits);
-            } elseif ($cleanBasis === 'LK') {
-                $lkUnits->push($currUnits);
+            $isOk = in_array($cleanBasis, ['OK', 'NORMAL', 'NORMAL(OK)']);
+            if ($isOk) {
+                $candidateOkUnits->push($currUnits);
+            } else {
+                if ($calculationFilterEnabled && $filterNonOkBases) {
+                    $filteredBasesCount++;
+                    if ($cleanBasis === 'LK') {
+                        $lkUnits->push($currUnits);
+                    }
+                } else {
+                    $candidateOkUnits->push($currUnits);
+                }
+            }
+        }
+
+        // Compute clean median from OK months and filter out extreme spikes
+        $cleanOkUnits = collect();
+        $rawMedian = null;
+
+        if ($candidateOkUnits->isNotEmpty()) {
+            $rawMedian = (float) $candidateOkUnits->median();
+
+            if ($calculationFilterEnabled && ! $bypassSpikeFilter) {
+                foreach ($candidateOkUnits as $u) {
+                    $isSpike = ($rawMedian > 0) && ($u > ($multiplier * $rawMedian)) && (($u - $rawMedian) >= $minBuffer);
+                    if ($isSpike) {
+                        $spikesFilteredCount++;
+                    } else {
+                        $cleanOkUnits->push($u);
+                    }
+                }
+
+                // Fallback if all values were flagged as spikes
+                if ($cleanOkUnits->isEmpty()) {
+                    $cleanOkUnits = $candidateOkUnits;
+                }
+            } else {
+                $cleanOkUnits = $candidateOkUnits;
             }
         }
 
@@ -300,8 +385,8 @@ class SmartAverageCalculationService
             $avgLabel = "{$avgUnits} kWh (MD Assessed)";
             $avgRange = 'Flat Assessed';
         } else {
-            if ($okUnits->isNotEmpty()) {
-                $sortedOk = $okUnits->sort()->values();
+            if ($cleanOkUnits->isNotEmpty()) {
+                $sortedOk = $cleanOkUnits->sort()->values();
                 $avgUnits = (int) round($sortedOk->median());
                 $avgLabel = "{$avgUnits} kWh (From OK History)";
                 $minR = max(1, (int) round($avgUnits * 0.85));
@@ -353,6 +438,14 @@ class SmartAverageCalculationService
             'label' => $avgLabel,
             'range' => $avgRange,
             'basis' => $cleanBasis,
+            'spikes_filtered_count' => $spikesFilteredCount,
+            'filtered_bases_count' => $filteredBasesCount,
+            'clean_units_count' => $cleanOkUnits->count(),
+            'raw_median' => $rawMedian,
+            'tariff_category' => $tariffCategory,
+            'multiplier_used' => $multiplier,
+            'min_buffer_applied' => $minBuffer,
+            'is_agriculture_bypass' => $bypassSpikeFilter,
         ];
     }
 

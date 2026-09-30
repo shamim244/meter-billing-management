@@ -52,6 +52,7 @@ class WorkingReadingTest extends TestCase
             'units_consumed' => 52,
             'billing_basis' => 'OK',
             'working_reading' => '452',
+            'reading_source' => 'manual',
         ]);
 
         $response = $this->actingAs($user)->getJson("/dashboard/data?mru_id={$mru->id}&month=8&year=2026");
@@ -223,9 +224,9 @@ class WorkingReadingTest extends TestCase
 
         $item = $response->json('data')[0];
 
-        // Invariant: Working Reading MUST NEVER be < PDF Reading (475)!
+        // Invariant: Working Reading MUST NEVER be < PDF Reading (475)! Under arbitrage: max(400, 475) + 40 = 515
         $this->assertGreaterThanOrEqual(475, (int) $item['working_reading']);
-        $this->assertEquals('matched', $item['pdf_sync_status']); // Exact match or ahead
+        $this->assertEquals('ahead', $item['pdf_sync_status']);
     }
 
     public function test_bulk_project_readings_never_overwrites_existing_readings_or_submitted_bills(): void

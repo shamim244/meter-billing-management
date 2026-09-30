@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\BillRecord;
+use App\Models\ConsumerAccount;
 use App\Models\MeterReadingHistory;
+use App\Models\SystemSetting;
 use Illuminate\Support\Collection;
 
 class MeterReadingHistoryService
@@ -12,10 +14,181 @@ class MeterReadingHistoryService
      * Record or update historical entry from an official PDF bill parse.
      * Also captures decoded prior month baseline reading and all 12-month consumption history ([kir fooj.kh).
      */
+    /**
+     * Resolve spike multiplier, unit buffer floor, and category bypass settings.
+     *
+     * @return array{category: string, bypassed: bool, multiplier: float, min_buffer: int}
+     */
+    public function resolveSpikeParameters(?string $tariffCategory): array
+    {
+        $tariff = strtoupper(trim((string) $tariffCategory));
+        $minBuffer = (int) SystemSetting::get('min_spike_unit_buffer', 30);
+
+        if (str_contains($tariff, 'IAS')) {
+            $bypass = (bool) SystemSetting::get('agriculture_spike_bypass', true);
+            $mult = (float) SystemSetting::get('agriculture_spike_multiplier', 4.0);
+
+            return [
+                'category' => 'agriculture',
+                'bypassed' => $bypass,
+                'multiplier' => $mult,
+                'min_buffer' => $minBuffer,
+            ];
+        }
+
+        if (str_contains($tariff, 'NDS')) {
+            return [
+                'category' => 'commercial',
+                'bypassed' => false,
+                'multiplier' => (float) SystemSetting::get('commercial_spike_multiplier', 2.5),
+                'min_buffer' => $minBuffer,
+            ];
+        }
+
+        if (str_contains($tariff, 'DS') || str_contains($tariff, 'KJ') || str_contains($tariff, 'KUTIR') || str_contains($tariff, 'JYOTI')) {
+            return [
+                'category' => 'domestic',
+                'bypassed' => false,
+                'multiplier' => (float) SystemSetting::get('domestic_spike_multiplier', 2.0),
+                'min_buffer' => $minBuffer,
+            ];
+        }
+
+        return [
+            'category' => 'global',
+            'bypassed' => false,
+            'multiplier' => (float) SystemSetting::get('global_spike_multiplier', 2.0),
+            'min_buffer' => $minBuffer,
+        ];
+    }
+
+    /**
+     * Evaluate ingestion quality gate for a reading: flag spikes, non-OK bases, and ghost rows.
+     *
+     * @return array{is_ghost: bool, is_spike: bool, active_for_average: bool, meta: array}
+     */
+    public function evaluateIngestionQuality(
+        ?int $units,
+        string $basis,
+        ?float $medianOkUnits,
+        array $spikeParams,
+        bool $extractionFilterEnabled,
+        bool $filterNonOkBases,
+        bool $filterZeroUnits
+    ): array {
+        $cleanBasis = strtoupper(trim($basis));
+        $isOk = in_array($cleanBasis, ['OK', 'NORMAL', 'NORMAL(OK)']);
+        $isZeroUnits = ($units === null || $units <= 0);
+
+        if (! $extractionFilterEnabled) {
+            return [
+                'is_ghost' => false,
+                'is_spike' => false,
+                'active_for_average' => true,
+                'meta' => [
+                    'active_for_average' => true,
+                    'is_spike' => false,
+                    'basis' => $cleanBasis,
+                ],
+            ];
+        }
+
+        // 1. Ghost row check
+        $isGhost = $isZeroUnits && $filterZeroUnits;
+
+        // 2. Non-OK basis check (MD, LK, PL, DL, EST, etc.)
+        $isNonOkBasis = ! $isOk;
+
+        // 3. Spike check
+        $isSpike = false;
+        $spikeDetails = null;
+
+        if (! $isZeroUnits && $medianOkUnits !== null && $medianOkUnits > 0 && ! $spikeParams['bypassed']) {
+            $multiplier = $spikeParams['multiplier'];
+            $buffer = $spikeParams['min_buffer'];
+
+            if (($units > ($multiplier * $medianOkUnits)) && (($units - $medianOkUnits) >= $buffer)) {
+                $isSpike = true;
+                $spikeDetails = [
+                    'units' => $units,
+                    'median' => $medianOkUnits,
+                    'multiplier' => $multiplier,
+                    'buffer' => $buffer,
+                ];
+            }
+        }
+
+        $isMdOrLk = in_array($cleanBasis, ['MD', 'LK']);
+        $activeForAverage = ! $isZeroUnits && ! $isSpike && ! ($filterNonOkBases && $isNonOkBasis) && ! $isMdOrLk;
+
+        $filterReasons = [];
+        if ($isNonOkBasis && ($filterNonOkBases || $isMdOrLk)) {
+            $filterReasons[] = "non_ok_basis_{$cleanBasis}";
+        }
+        if ($isZeroUnits && $filterZeroUnits) {
+            $filterReasons[] = 'zero_units';
+        }
+        if ($isSpike) {
+            $filterReasons[] = 'spike';
+        }
+
+        return [
+            'is_ghost' => $isGhost,
+            'is_spike' => $isSpike,
+            'active_for_average' => $activeForAverage,
+            'meta' => [
+                'is_spike' => $isSpike,
+                'active_for_average' => $activeForAverage,
+                'basis' => $cleanBasis,
+                'spike_details' => $spikeDetails,
+                'filter_reasons' => $filterReasons,
+            ],
+        ];
+    }
+
+    /**
+     * Record or update historical entry from an official PDF bill parse.
+     * Also captures decoded prior month baseline reading and all 12-month consumption history ([kir fooj.kh).
+     */
     public function recordFromPdf(BillRecord $bill, array $extractedHistory = []): MeterReadingHistory
     {
         $prevMonth = $bill->billing_month == 1 ? 12 : ((int) $bill->billing_month - 1);
         $prevYear = $bill->billing_month == 1 ? ((int) $bill->billing_year - 1) : (int) $bill->billing_year;
+
+        $extractionFilterEnabled = (bool) SystemSetting::get('extraction_filter_enabled', true);
+        $filterNonOkBases = (bool) SystemSetting::get('filter_non_ok_bases', true);
+        $filterZeroUnits = (bool) SystemSetting::get('filter_zero_unit_months', true);
+
+        $tariffCategory = $bill->tariff_category
+            ?? $bill->consumerAccount?->tariff_category
+            ?? ConsumerAccount::where('ca_number', $bill->ca_number)->value('tariff_category');
+        $spikeParams = $this->resolveSpikeParameters($tariffCategory);
+
+        // Precompute baseline median from OK historical months for ingestion spike detection
+        $okUnits = collect();
+        $currUnits = $bill->units_consumed ? (int) $bill->units_consumed : null;
+        $currBasis = strtoupper(trim((string) ($bill->billing_basis ?: 'OK')));
+        if ($currUnits !== null && $currUnits > 0 && in_array($currBasis, ['OK', 'NORMAL', 'NORMAL(OK)'])) {
+            $okUnits->push($currUnits);
+        }
+        foreach ($extractedHistory as $hRow) {
+            $hU = (int) ($hRow['units'] ?? 0);
+            $hB = strtoupper(trim((string) ($hRow['basis'] ?? 'OK')));
+            if ($hU > 0 && in_array($hB, ['OK', 'NORMAL', 'NORMAL(OK)'])) {
+                $okUnits->push($hU);
+            }
+        }
+        $existingOkHist = MeterReadingHistory::where('ca_number', $bill->ca_number)
+            ->where('user_id', $bill->user_id)
+            ->where('reading_source', 'pdf')
+            ->whereNotNull('units_consumed')
+            ->where('units_consumed', '>', 0)
+            ->whereIn('billing_basis', ['OK', 'NORMAL', 'NORMAL(OK)'])
+            ->pluck('units_consumed');
+        foreach ($existingOkHist as $eUnits) {
+            $okUnits->push((int) $eUnits);
+        }
+        $medianOkUnits = $okUnits->isNotEmpty() ? (float) $okUnits->median() : null;
 
         // 1. If previous_reading is decoded in PDF, ensure prior month has a baseline entry in history
         if (! empty($bill->previous_reading) && is_numeric($bill->previous_reading)) {
@@ -37,9 +210,24 @@ class MeterReadingHistoryService
                     'current_reading' => (string) $bill->previous_reading,
                     'billing_basis' => 'OK',
                     'is_closed' => true,
+                    'meta' => [
+                        'active_for_average' => true,
+                        'is_spike' => false,
+                        'basis' => 'OK',
+                    ],
                 ]);
             }
         }
+
+        $evalCurrent = $this->evaluateIngestionQuality(
+            $currUnits,
+            $bill->billing_basis ?: 'OK',
+            $medianOkUnits,
+            $spikeParams,
+            $extractionFilterEnabled,
+            $filterNonOkBases,
+            $filterZeroUnits
+        );
 
         // 2. Record the current bill's month
         $currentHistory = MeterReadingHistory::updateOrCreate(
@@ -59,6 +247,7 @@ class MeterReadingHistoryService
                 'units_consumed' => $bill->units_consumed ? (int) $bill->units_consumed : null,
                 'billing_basis' => strtoupper(trim((string) ($bill->billing_basis ?: 'OK'))),
                 'is_closed' => false,
+                'meta' => $evalCurrent['meta'],
             ]
         );
 
@@ -80,6 +269,28 @@ class MeterReadingHistoryService
                 $currR = $runningReading;
                 $prevR = ($currR !== null && $currR >= $hUnits) ? ($currR - $hUnits) : null;
 
+                $evalRow = $this->evaluateIngestionQuality(
+                    $hUnits,
+                    $hBasis,
+                    $medianOkUnits,
+                    $spikeParams,
+                    $extractionFilterEnabled,
+                    $filterNonOkBases,
+                    $filterZeroUnits
+                );
+
+                // Advance running reading before potentially skipping ghost row
+                $runningReading = $prevR;
+
+                // Eliminate empty ghost rows (0 units, null readings) from entering meter_reading_histories
+                if ($extractionFilterEnabled) {
+                    $isZeroUnits = ($hUnits <= 0);
+                    $hasNoReadings = ($currR === null && $prevR === null && empty($bill->previous_reading));
+                    if (($filterZeroUnits && $isZeroUnits) || ($isZeroUnits && $hasNoReadings)) {
+                        continue;
+                    }
+                }
+
                 $existing = MeterReadingHistory::where('user_id', $bill->user_id)
                     ->where('ca_number', $bill->ca_number)
                     ->where('billing_month', $hMonth)
@@ -100,6 +311,7 @@ class MeterReadingHistoryService
                         'units_consumed' => $hUnits,
                         'billing_basis' => $hBasis,
                         'is_closed' => true,
+                        'meta' => $evalRow['meta'],
                     ]);
                 } else {
                     // Update units or basis if empty
@@ -113,11 +325,10 @@ class MeterReadingHistoryService
                         if (empty($existing->previous_reading) && $prevR !== null) {
                             $existing->previous_reading = (string) $prevR;
                         }
+                        $existing->meta = array_merge($existing->meta ?? [], $evalRow['meta']);
                         $existing->save();
                     }
                 }
-
-                $runningReading = $prevR;
             }
         }
 
@@ -326,6 +537,9 @@ class MeterReadingHistoryService
                         'source' => $selected->reading_source,
                         'month' => $selected->billing_month,
                         'year' => $selected->billing_year,
+                        'is_spike' => $selected->isSpike(),
+                        'active_for_average' => $selected->isActiveForAverage(),
+                        'meta' => $selected->meta,
                     ]);
                 }
             }

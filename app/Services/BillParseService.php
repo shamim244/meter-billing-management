@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\BillRecord;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
+use App\Models\SystemSetting;
 use App\Services\Extraction\BillExtractionManager;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -262,7 +263,9 @@ class BillParseService
 
                 // Hook into Dedicated Meter Reading History System
                 try {
-                    app(MeterReadingHistoryService::class)->recordFromPdf($record, $extracted['consumption_history'] ?? []);
+                    $rawHistory = $extracted['consumption_history'] ?? [];
+                    $sanitizedHistory = $this->sanitizeConsumptionHistory($rawHistory);
+                    app(MeterReadingHistoryService::class)->recordFromPdf($record, $sanitizedHistory);
                 } catch (\Throwable $e) {
                     Log::warning("MeterReadingHistoryService hook failed for CA {$ca}: ".$e->getMessage());
                 }
@@ -469,7 +472,9 @@ class BillParseService
 
                 // Hook into Dedicated Meter Reading History System
                 try {
-                    app(MeterReadingHistoryService::class)->recordFromPdf($record, $extracted['consumption_history'] ?? []);
+                    $rawHistory = $extracted['consumption_history'] ?? [];
+                    $sanitizedHistory = $this->sanitizeConsumptionHistory($rawHistory);
+                    app(MeterReadingHistoryService::class)->recordFromPdf($record, $sanitizedHistory);
                 } catch (\Throwable $e) {
                     Log::warning("MeterReadingHistoryService hook failed for CA {$ca}: ".$e->getMessage());
                 }
@@ -521,6 +526,38 @@ class BillParseService
     public function extractFromText(string $text, ?string $pdfPath = null): array
     {
         return $this->extractionManager->extract($text, $pdfPath);
+    }
+
+    /**
+     * Sanitize decoded consumption history by removing empty ghost rows (0 units, null readings)
+     * when extraction_filter_enabled is ON.
+     */
+    public function sanitizeConsumptionHistory(array $history): array
+    {
+        if (! (bool) SystemSetting::get('extraction_filter_enabled', true)) {
+            return $history;
+        }
+
+        $filterZeroUnits = (bool) SystemSetting::get('filter_zero_unit_months', true);
+
+        return array_values(array_filter($history, function ($row) use ($filterZeroUnits) {
+            if (! isset($row['units']) || $row['units'] === '' || $row['units'] === null) {
+                return false;
+            }
+
+            $units = (int) $row['units'];
+
+            if ($filterZeroUnits && $units <= 0) {
+                return false;
+            }
+
+            // Ghost row elimination: 0 units with null/empty readings
+            if ($units <= 0 && empty($row['current_reading']) && empty($row['previous_reading'])) {
+                return false;
+            }
+
+            return true;
+        }));
     }
 
     /**

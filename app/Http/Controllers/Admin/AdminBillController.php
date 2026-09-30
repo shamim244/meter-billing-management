@@ -12,6 +12,7 @@ use App\Services\Extraction\BillExtractionManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\View\View;
 use Smalot\PdfParser\Parser;
 
@@ -94,6 +95,23 @@ class AdminBillController extends Controller
             'legacy_url' => SystemSetting::get('nbpdcl_legacy_url', config('nbpdcl.api_url')),
             'timeout' => (int) SystemSetting::get('nbpdcl_timeout', config('nbpdcl.timeout', 45)),
             'concurrency' => (int) SystemSetting::get('nbpdcl_concurrency', config('nbpdcl.concurrency', 10)),
+            'extraction_filter_enabled' => (bool) SystemSetting::get('extraction_filter_enabled', true),
+            'calculation_filter_enabled' => (bool) SystemSetting::get('calculation_filter_enabled', true),
+            'filter_non_ok_bases' => (bool) SystemSetting::get('filter_non_ok_bases', true),
+            'filter_zero_unit_months' => (bool) SystemSetting::get('filter_zero_unit_months', true),
+            'global_spike_multiplier' => (float) SystemSetting::get('global_spike_multiplier', 2.0),
+            'min_spike_unit_buffer' => (int) SystemSetting::get('min_spike_unit_buffer', 30),
+            'agriculture_spike_bypass' => (bool) SystemSetting::get('agriculture_spike_bypass', true),
+            'agriculture_spike_multiplier' => (float) SystemSetting::get('agriculture_spike_multiplier', 4.0),
+            'commercial_spike_multiplier' => (float) SystemSetting::get('commercial_spike_multiplier', 2.5),
+            'domestic_spike_multiplier' => (float) SystemSetting::get('domestic_spike_multiplier', 2.0),
+            'dynamic_colorization_enabled' => (bool) SystemSetting::get('dynamic_colorization_enabled', true),
+            'color_amount_safe_ceiling' => (float) SystemSetting::get('color_amount_safe_ceiling', 500.0),
+            'color_amount_warning_ceiling' => (float) SystemSetting::get('color_amount_warning_ceiling', 1500.0),
+            'color_amount_danger_floor' => (float) SystemSetting::get('color_amount_danger_floor', 2500.0),
+            'color_units_safe_ceiling' => (int) SystemSetting::get('color_units_safe_ceiling', 50),
+            'color_units_warning_ceiling' => (int) SystemSetting::get('color_units_warning_ceiling', 120),
+            'color_units_danger_floor' => (int) SystemSetting::get('color_units_danger_floor', 200),
         ];
 
         return view('admin.bills.engine-settings', compact('settings'));
@@ -102,29 +120,205 @@ class AdminBillController extends Controller
     /**
      * Update NBPDCL Download & Extraction Engine settings.
      */
-    public function updateEngineSettings(Request $request): RedirectResponse
+    public function updateEngineSettings(Request $request): RedirectResponse|JsonResponse
     {
-        $validated = $request->validate([
-            'download_driver' => 'required|in:auto,wss,legacy',
-            'extraction_engine' => 'required|in:auto,jasper_unicode,legacy_krutidev',
-            'wss_url' => 'required|url',
-            'aes_key' => 'required|string',
-            'legacy_url' => 'required|url',
-            'timeout' => 'required|integer|min:5|max:180',
-            'concurrency' => 'required|integer|min:1|max:50',
+        $validator = Validator::make($request->all(), [
+            'download_driver' => 'sometimes|required|in:auto,wss,legacy',
+            'extraction_engine' => 'sometimes|required|in:auto,jasper_unicode,legacy_krutidev',
+            'wss_url' => 'sometimes|required|url',
+            'aes_key' => 'sometimes|required|string',
+            'legacy_url' => 'sometimes|required|url',
+            'timeout' => 'sometimes|required|integer|min:5|max:180',
+            'concurrency' => 'sometimes|required|integer|min:1|max:50',
+            'extraction_filter_enabled' => 'nullable',
+            'calculation_filter_enabled' => 'nullable',
+            'filter_non_ok_bases' => 'nullable',
+            'filter_zero_unit_months' => 'nullable',
+            'global_spike_multiplier' => 'nullable|numeric|min:1.0|max:10.0',
+            'min_spike_unit_buffer' => 'nullable|integer|min:0|max:500',
+            'agriculture_spike_bypass' => 'nullable',
+            'agriculture_spike_multiplier' => 'nullable|numeric|min:1.0|max:20.0',
+            'commercial_spike_multiplier' => 'nullable|numeric|min:1.0|max:10.0',
+            'domestic_spike_multiplier' => 'nullable|numeric|min:1.0|max:10.0',
+            'dynamic_colorization_enabled' => 'nullable',
+            'color_amount_safe_ceiling' => 'nullable|numeric|min:0',
+            'color_amount_warning_ceiling' => 'nullable|numeric|min:0',
+            'color_amount_danger_floor' => 'nullable|numeric|min:0',
+            'color_units_safe_ceiling' => 'nullable|integer|min:0',
+            'color_units_warning_ceiling' => 'nullable|integer|min:0',
+            'color_units_danger_floor' => 'nullable|integer|min:0',
         ]);
 
-        SystemSetting::set('nbpdcl_download_driver', $validated['download_driver']);
-        SystemSetting::set('nbpdcl_extraction_engine', $validated['extraction_engine']);
-        SystemSetting::set('nbpdcl_wss_url', $validated['wss_url']);
-        SystemSetting::set('nbpdcl_aes_key', $validated['aes_key']);
-        SystemSetting::set('nbpdcl_legacy_url', $validated['legacy_url']);
-        SystemSetting::set('nbpdcl_timeout', (int) $validated['timeout']);
-        SystemSetting::set('nbpdcl_concurrency', (int) $validated['concurrency']);
+        $validator->after(function ($validator) use ($request) {
+            $hasAmtSafe = $request->filled('color_amount_safe_ceiling');
+            $hasAmtWarn = $request->filled('color_amount_warning_ceiling');
+            $hasAmtDanger = $request->filled('color_amount_danger_floor');
+
+            if ($hasAmtSafe || $hasAmtWarn || $hasAmtDanger) {
+                $safe = $hasAmtSafe ? (float) $request->input('color_amount_safe_ceiling') : (float) SystemSetting::get('color_amount_safe_ceiling', 500.0);
+                $warn = $hasAmtWarn ? (float) $request->input('color_amount_warning_ceiling') : (float) SystemSetting::get('color_amount_warning_ceiling', 1500.0);
+                $danger = $hasAmtDanger ? (float) $request->input('color_amount_danger_floor') : (float) SystemSetting::get('color_amount_danger_floor', 2500.0);
+
+                if ($safe > $warn) {
+                    $validator->errors()->add('color_amount_safe_ceiling', 'Safe zone ceiling cannot exceed warning zone ceiling.');
+                }
+                if ($warn > $danger) {
+                    $validator->errors()->add('color_amount_warning_ceiling', 'Warning zone ceiling cannot exceed danger zone floor.');
+                }
+            }
+
+            $hasUnitSafe = $request->filled('color_units_safe_ceiling');
+            $hasUnitWarn = $request->filled('color_units_warning_ceiling');
+            $hasUnitDanger = $request->filled('color_units_danger_floor');
+
+            if ($hasUnitSafe || $hasUnitWarn || $hasUnitDanger) {
+                $uSafe = $hasUnitSafe ? (int) $request->input('color_units_safe_ceiling') : (int) SystemSetting::get('color_units_safe_ceiling', 50);
+                $uWarn = $hasUnitWarn ? (int) $request->input('color_units_warning_ceiling') : (int) SystemSetting::get('color_units_warning_ceiling', 120);
+                $uDanger = $hasUnitDanger ? (int) $request->input('color_units_danger_floor') : (int) SystemSetting::get('color_units_danger_floor', 200);
+
+                if ($uSafe > $uWarn) {
+                    $validator->errors()->add('color_units_safe_ceiling', 'Safe zone units ceiling cannot exceed warning zone units ceiling.');
+                }
+                if ($uWarn > $uDanger) {
+                    $validator->errors()->add('color_units_warning_ceiling', 'Warning zone units ceiling cannot exceed danger zone units floor.');
+                }
+            }
+        });
+
+        $validated = $validator->validate();
+
+        if (isset($validated['download_driver'])) {
+            SystemSetting::set('nbpdcl_download_driver', $validated['download_driver']);
+        }
+        if (isset($validated['extraction_engine'])) {
+            SystemSetting::set('nbpdcl_extraction_engine', $validated['extraction_engine']);
+        }
+        if (isset($validated['wss_url'])) {
+            SystemSetting::set('nbpdcl_wss_url', $validated['wss_url']);
+        }
+        if (isset($validated['aes_key'])) {
+            SystemSetting::set('nbpdcl_aes_key', $validated['aes_key']);
+        }
+        if (isset($validated['legacy_url'])) {
+            SystemSetting::set('nbpdcl_legacy_url', $validated['legacy_url']);
+        }
+        if (isset($validated['timeout'])) {
+            SystemSetting::set('nbpdcl_timeout', (int) $validated['timeout']);
+        }
+        if (isset($validated['concurrency'])) {
+            SystemSetting::set('nbpdcl_concurrency', (int) $validated['concurrency']);
+        }
+
+        if ($request->has('has_spike_settings')) {
+            SystemSetting::set('extraction_filter_enabled', $request->boolean('extraction_filter_enabled'));
+            SystemSetting::set('calculation_filter_enabled', $request->boolean('calculation_filter_enabled'));
+            SystemSetting::set('filter_non_ok_bases', $request->boolean('filter_non_ok_bases'));
+            SystemSetting::set('filter_zero_unit_months', $request->boolean('filter_zero_unit_months'));
+            SystemSetting::set('agriculture_spike_bypass', $request->boolean('agriculture_spike_bypass'));
+
+            if ($request->filled('global_spike_multiplier')) {
+                SystemSetting::set('global_spike_multiplier', (float) $request->input('global_spike_multiplier'));
+            }
+            if ($request->filled('min_spike_unit_buffer')) {
+                SystemSetting::set('min_spike_unit_buffer', (int) $request->input('min_spike_unit_buffer'));
+            }
+            if ($request->filled('agriculture_spike_multiplier')) {
+                SystemSetting::set('agriculture_spike_multiplier', (float) $request->input('agriculture_spike_multiplier'));
+            }
+            if ($request->filled('commercial_spike_multiplier')) {
+                SystemSetting::set('commercial_spike_multiplier', (float) $request->input('commercial_spike_multiplier'));
+            }
+            if ($request->filled('domestic_spike_multiplier')) {
+                SystemSetting::set('domestic_spike_multiplier', (float) $request->input('domestic_spike_multiplier'));
+            }
+        } else {
+            // Support partial updates without unintentionally resetting unmentioned toggles
+            if ($request->has('extraction_filter_enabled')) {
+                SystemSetting::set('extraction_filter_enabled', $request->boolean('extraction_filter_enabled'));
+            }
+            if ($request->has('calculation_filter_enabled')) {
+                SystemSetting::set('calculation_filter_enabled', $request->boolean('calculation_filter_enabled'));
+            }
+            if ($request->has('filter_non_ok_bases')) {
+                SystemSetting::set('filter_non_ok_bases', $request->boolean('filter_non_ok_bases'));
+            }
+            if ($request->has('filter_zero_unit_months')) {
+                SystemSetting::set('filter_zero_unit_months', $request->boolean('filter_zero_unit_months'));
+            }
+            if ($request->has('agriculture_spike_bypass')) {
+                SystemSetting::set('agriculture_spike_bypass', $request->boolean('agriculture_spike_bypass'));
+            }
+            if ($request->filled('global_spike_multiplier')) {
+                SystemSetting::set('global_spike_multiplier', (float) $request->input('global_spike_multiplier'));
+            }
+            if ($request->filled('min_spike_unit_buffer')) {
+                SystemSetting::set('min_spike_unit_buffer', (int) $request->input('min_spike_unit_buffer'));
+            }
+            if ($request->filled('agriculture_spike_multiplier')) {
+                SystemSetting::set('agriculture_spike_multiplier', (float) $request->input('agriculture_spike_multiplier'));
+            }
+            if ($request->filled('commercial_spike_multiplier')) {
+                SystemSetting::set('commercial_spike_multiplier', (float) $request->input('commercial_spike_multiplier'));
+            }
+            if ($request->filled('domestic_spike_multiplier')) {
+                SystemSetting::set('domestic_spike_multiplier', (float) $request->input('domestic_spike_multiplier'));
+            }
+        }
+
+        if ($request->has('has_color_settings')) {
+            SystemSetting::set('dynamic_colorization_enabled', $request->boolean('dynamic_colorization_enabled'));
+            if ($request->filled('color_amount_safe_ceiling')) {
+                SystemSetting::set('color_amount_safe_ceiling', (float) $request->input('color_amount_safe_ceiling'));
+            }
+            if ($request->filled('color_amount_warning_ceiling')) {
+                SystemSetting::set('color_amount_warning_ceiling', (float) $request->input('color_amount_warning_ceiling'));
+            }
+            if ($request->filled('color_amount_danger_floor')) {
+                SystemSetting::set('color_amount_danger_floor', (float) $request->input('color_amount_danger_floor'));
+            }
+            if ($request->filled('color_units_safe_ceiling')) {
+                SystemSetting::set('color_units_safe_ceiling', (int) $request->input('color_units_safe_ceiling'));
+            }
+            if ($request->filled('color_units_warning_ceiling')) {
+                SystemSetting::set('color_units_warning_ceiling', (int) $request->input('color_units_warning_ceiling'));
+            }
+            if ($request->filled('color_units_danger_floor')) {
+                SystemSetting::set('color_units_danger_floor', (int) $request->input('color_units_danger_floor'));
+            }
+        } else {
+            if ($request->has('dynamic_colorization_enabled')) {
+                SystemSetting::set('dynamic_colorization_enabled', $request->boolean('dynamic_colorization_enabled'));
+            }
+            if ($request->filled('color_amount_safe_ceiling')) {
+                SystemSetting::set('color_amount_safe_ceiling', (float) $request->input('color_amount_safe_ceiling'));
+            }
+            if ($request->filled('color_amount_warning_ceiling')) {
+                SystemSetting::set('color_amount_warning_ceiling', (float) $request->input('color_amount_warning_ceiling'));
+            }
+            if ($request->filled('color_amount_danger_floor')) {
+                SystemSetting::set('color_amount_danger_floor', (float) $request->input('color_amount_danger_floor'));
+            }
+            if ($request->filled('color_units_safe_ceiling')) {
+                SystemSetting::set('color_units_safe_ceiling', (int) $request->input('color_units_safe_ceiling'));
+            }
+            if ($request->filled('color_units_warning_ceiling')) {
+                SystemSetting::set('color_units_warning_ceiling', (int) $request->input('color_units_warning_ceiling'));
+            }
+            if ($request->filled('color_units_danger_floor')) {
+                SystemSetting::set('color_units_danger_floor', (int) $request->input('color_units_danger_floor'));
+            }
+        }
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'NBPDCL Engine & Smart Average Configuration updated successfully.',
+            ]);
+        }
 
         return redirect()
             ->route('admin.bills.engine-settings')
-            ->with('status', 'NBPDCL Engine & Extraction configuration updated successfully.');
+            ->with('status', 'NBPDCL Engine & Smart Average Configuration updated successfully.');
     }
 
     /**
@@ -140,9 +334,28 @@ class AdminBillController extends Controller
         SystemSetting::set('nbpdcl_timeout', (int) config('nbpdcl.timeout', 45));
         SystemSetting::set('nbpdcl_concurrency', (int) config('nbpdcl.concurrency', 10));
 
+        SystemSetting::set('extraction_filter_enabled', true);
+        SystemSetting::set('calculation_filter_enabled', true);
+        SystemSetting::set('filter_non_ok_bases', true);
+        SystemSetting::set('filter_zero_unit_months', true);
+        SystemSetting::set('global_spike_multiplier', 2.0);
+        SystemSetting::set('min_spike_unit_buffer', 30);
+        SystemSetting::set('agriculture_spike_bypass', true);
+        SystemSetting::set('agriculture_spike_multiplier', 4.0);
+        SystemSetting::set('commercial_spike_multiplier', 2.5);
+        SystemSetting::set('domestic_spike_multiplier', 2.0);
+
+        SystemSetting::set('dynamic_colorization_enabled', true);
+        SystemSetting::set('color_amount_safe_ceiling', 500.0);
+        SystemSetting::set('color_amount_warning_ceiling', 1500.0);
+        SystemSetting::set('color_amount_danger_floor', 2500.0);
+        SystemSetting::set('color_units_safe_ceiling', 50);
+        SystemSetting::set('color_units_warning_ceiling', 120);
+        SystemSetting::set('color_units_danger_floor', 200);
+
         return redirect()
             ->route('admin.bills.engine-settings')
-            ->with('status', 'NBPDCL Engine configuration restored to system default values.');
+            ->with('status', 'NBPDCL Engine & Smart Average configuration restored to system default values.');
     }
 
     /**
