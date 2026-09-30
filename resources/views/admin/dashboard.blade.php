@@ -107,7 +107,7 @@
                                     <td class="py-3 px-3 text-slate-200 truncate max-w-[150px]">{{ $bill->consumer_name ?: '—' }}</td>
                                     <td class="py-3 px-3 text-slate-400">{{ $bill->user ? $bill->user->name : 'Unknown' }}</td>
                                     <td class="py-3 px-3 font-mono text-[11px]">{{ $bill->mru ? $bill->mru->code : 'UNKNOWN' }}</td>
-                                    <td class="py-3 px-3 text-right font-bold text-white">₹{{ number_format($bill->total_amount, 2) }}</td>
+                                    <td class="py-3 px-3 text-right font-bold text-white">₹{{ number_format((float) ($bill->total_amount ?? 0), 2) }}</td>
                                     <td class="py-3 px-3 text-center text-slate-500">{{ $bill->billing_month }}/{{ $bill->billing_year }}</td>
                                 </tr>
                             @empty

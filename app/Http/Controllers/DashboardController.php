@@ -44,21 +44,37 @@ class DashboardController extends Controller
     public function index(Request $request): View
     {
         $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
 
-        // Available MRUs for current user
-        $mrus = Mru::withCount('consumerAccounts')
-            ->where(function ($query) use ($userId) {
+        // Available MRUs: Admins can view all MRUs, while agents only view their own
+        $mrusQuery = Mru::withCount('consumerAccounts');
+        if (! $isAdmin) {
+            $mrusQuery->where(function ($query) use ($userId) {
                 $query->where('user_id', $userId)
                     ->orWhereHas('consumerAccounts', function ($q) use ($userId) {
                         $q->where('user_id', $userId);
                     })->orWhereHas('billRecords', function ($q) use ($userId) {
                         $q->where('user_id', $userId);
                     });
-            })
-            ->orderBy('code')
-            ->get();
+            });
+        }
+        $mrus = $mrusQuery->orderBy('code')->get();
 
         $selectedMruId = (string) $request->get('mru_id', $mrus->first()?->id ?? '');
+        if ($selectedMruId && ! $mrus->contains('id', (int) $selectedMruId)) {
+            if ($isAdmin) {
+                $extraMru = Mru::withCount('consumerAccounts')->find((int) $selectedMruId);
+                if ($extraMru) {
+                    $mrus->push($extraMru);
+                } else {
+                    $selectedMruId = (string) ($mrus->first()?->id ?? '');
+                }
+            } else {
+                $selectedMruId = (string) ($mrus->first()?->id ?? '');
+            }
+        }
 
         // Map of available periods per MRU (Scoped to user's available MRUs)
         $userMruIds = $mrus->pluck('id')->filter()->all();
@@ -68,10 +84,15 @@ class DashboardController extends Controller
         }
 
         if (! empty($userMruIds)) {
-            $rawMruPeriods = BillRecord::select('mru_id', 'billing_month', 'billing_year')
+            $rawMruPeriodsQuery = BillRecord::select('mru_id', 'billing_month', 'billing_year')
                 ->whereIn('mru_id', $userMruIds)
-                ->whereNotNull('mru_id')
-                ->distinct()
+                ->whereNotNull('mru_id');
+
+            if (! $isAdmin && $userId) {
+                $rawMruPeriodsQuery->where('user_id', $userId);
+            }
+
+            $rawMruPeriods = $rawMruPeriodsQuery->distinct()
                 ->orderBy('billing_year', 'desc')
                 ->orderBy('billing_month', 'desc')
                 ->get();
@@ -102,15 +123,21 @@ class DashboardController extends Controller
 
         // High-level KPI Stats for current user & selected MRU
         $consumersQuery = ConsumerAccount::query();
+        if (! $isAdmin && $userId) {
+            $consumersQuery->where('user_id', $userId);
+        }
         if (! empty($selectedMruId)) {
             $consumersQuery->where('mru_id', $selectedMruId);
         }
         $totalConsumers = $consumersQuery->count();
-        $totalBillsAllTime = BillRecord::where('user_id', $userId)->count();
+        $totalBillsAllTime = $isAdmin ? BillRecord::count() : BillRecord::where('user_id', $userId)->count();
 
         // Stats for selected month & MRU
         $periodBillsQuery = BillRecord::where('billing_month', $selectedMonth)
             ->where('billing_year', $selectedYear);
+        if (! $isAdmin && $userId) {
+            $periodBillsQuery->where('user_id', $userId);
+        }
         if (! empty($selectedMruId)) {
             $periodBillsQuery->where('mru_id', $selectedMruId);
         }
@@ -131,6 +158,9 @@ class DashboardController extends Controller
         // Status counts for selected month & MRU in 1 SQL query
         $statusCountsQuery = BillStatus::where('billing_month', $selectedMonth)
             ->where('billing_year', $selectedYear);
+        if (! $isAdmin && $userId) {
+            $statusCountsQuery->where('user_id', $userId);
+        }
 
         if (! empty($selectedMruId)) {
             $statusCountsQuery->where(function ($q) use ($selectedMruId) {
@@ -240,6 +270,10 @@ class DashboardController extends Controller
     public function getData(Request $request): JsonResponse
     {
         $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
+
         $month = (int) $request->get('month', now()->month);
         $year = (int) $request->get('year', now()->year);
         $mruId = $request->get('mru_id');
@@ -260,6 +294,10 @@ class DashboardController extends Controller
         $baseQuery = BillRecord::with(['mru', 'consumerAccount'])
             ->where('billing_month', $month)
             ->where('billing_year', $year);
+
+        if (! $isAdmin && $userId) {
+            $baseQuery->where('user_id', $userId);
+        }
 
         if (! empty($mruId)) {
             $baseQuery->where('mru_id', $mruId);
@@ -288,28 +326,28 @@ class DashboardController extends Controller
         // Get user statuses & remarks for this period
         $userStatusModels = BillStatus::where('billing_month', $month)
             ->where('billing_year', $year)
-            ->where('user_id', $userId)
+            ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
             ->whereIn('ca_number', $caNumbers)
             ->get()
             ->keyBy('ca_number');
 
         // Pre-fetch historical bill records for these CAs to resolve DB Previous Reading and Outlier-Proof Smart Average
-        $historicalBills = BillRecord::where('user_id', $userId)
-            ->whereIn('ca_number', $caNumbers)
+        $historicalBills = BillRecord::whereIn('ca_number', $caNumbers)
+            ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
             ->orderBy('billing_year', 'desc')
             ->orderBy('billing_month', 'desc')
             ->get()
             ->groupBy('ca_number');
 
-        $basisHistories = BillingBasisHistory::where('user_id', $userId)
-            ->where('billing_month', $month)
+        $basisHistories = BillingBasisHistory::where('billing_month', $month)
             ->where('billing_year', $year)
+            ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
             ->whereIn('ca_number', $caNumbers)
             ->get()
             ->keyBy('ca_number');
 
-        $consumers = ConsumerAccount::where('user_id', $userId)
-            ->whereIn('ca_number', $caNumbers)
+        $consumers = ConsumerAccount::whereIn('ca_number', $caNumbers)
+            ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
             ->get()
             ->keyBy('ca_number');
 
@@ -509,7 +547,7 @@ class DashboardController extends Controller
         });
 
         $consumersQuery = ConsumerAccount::query();
-        if ($userId) {
+        if (! $isAdmin && $userId) {
             $consumersQuery->where('user_id', $userId);
         }
         if (! empty($mruId)) {
@@ -670,7 +708,7 @@ class DashboardController extends Controller
         $items = $sorted->slice($offset, $perPage)->values();
 
         $availablePeriods = BillRecord::select('billing_month', 'billing_year')
-            ->when($userId, fn ($q) => $q->where('user_id', $userId))
+            ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
             ->when(! empty($mruId), function ($q) use ($mruId) {
                 $q->where('mru_id', $mruId);
             })
@@ -738,16 +776,22 @@ class DashboardController extends Controller
         ]);
 
         $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
         $readingVal = trim($request->working_reading);
 
-        $bill = BillRecord::where('user_id', $userId)
+        $bill = BillRecord::query()
+            ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
             ->where('id', $request->id)
             ->firstOrFail();
+
+        $ownerUserId = $bill->user_id;
 
         // Submitted Bill Lockout: Require explicit confirmation/override flag if bill is submitted
         $isSubmitted = (strtolower(trim($bill->review_status ?? '')) === 'submitted');
         if (! $isSubmitted) {
-            $isSubmitted = BillStatus::where('user_id', $userId)
+            $isSubmitted = BillStatus::where('user_id', $ownerUserId)
                 ->where('ca_number', $bill->ca_number)
                 ->where('billing_month', $bill->billing_month)
                 ->where('billing_year', $bill->billing_year)
@@ -768,13 +812,13 @@ class DashboardController extends Controller
 
         $readingSource = $request->input('source', 'manual');
 
-        $bill = DB::transaction(function () use ($userId, $bill, $readingVal, $readingSource) {
+        $bill = DB::transaction(function () use ($ownerUserId, $bill, $readingVal, $readingSource) {
             $bill->working_reading = $readingVal;
             $bill->reading_source = $readingSource;
             if (is_numeric($readingVal)) {
                 $prev = is_numeric($bill->previous_reading) ? (int) $bill->previous_reading : 0;
                 if ($prev <= 0) {
-                    $consumer = ConsumerAccount::where('user_id', $userId)->where('ca_number', $bill->ca_number)->first();
+                    $consumer = ConsumerAccount::where('user_id', $ownerUserId)->where('ca_number', $bill->ca_number)->first();
                     $resolved = $this->smartAverageService->resolvePreviousReading($bill->ca_number, $bill->billing_month, $bill->billing_year, $bill, $consumer, null);
                     if (! empty($resolved['reading'])) {
                         $prev = (int) $resolved['reading'];
@@ -802,7 +846,7 @@ class DashboardController extends Controller
             }
 
             // 1. Update Master Reading Ledger on ConsumerAccount
-            $consumer = ConsumerAccount::where('user_id', $userId)
+            $consumer = ConsumerAccount::where('user_id', $ownerUserId)
                 ->where('ca_number', $bill->ca_number)
                 ->first();
 
@@ -823,7 +867,7 @@ class DashboardController extends Controller
             }
 
             // 2. Cascade Auto-Sync to subsequent future cycles in DB for this CA
-            $subsequentBills = BillRecord::where('user_id', $userId)
+            $subsequentBills = BillRecord::where('user_id', $ownerUserId)
                 ->where('ca_number', $bill->ca_number)
                 ->where(function ($q) use ($bill) {
                     $q->where('billing_year', '>', $bill->billing_year)
@@ -836,7 +880,7 @@ class DashboardController extends Controller
                 ->orderBy('billing_month', 'asc')
                 ->get();
 
-            $submittedFutureStatuses = BillStatus::where('user_id', $userId)
+            $submittedFutureStatuses = BillStatus::where('user_id', $ownerUserId)
                 ->where('ca_number', $bill->ca_number)
                 ->whereRaw('LOWER(status) = ?', ['submitted'])
                 ->get()
@@ -900,6 +944,9 @@ class DashboardController extends Controller
     public function bulkProjectReadings(Request $request): JsonResponse
     {
         $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
         $month = (int) $request->input('month', now()->month);
         $year = (int) $request->input('year', now()->year);
         $mruId = $request->input('mru_id');
@@ -922,7 +969,8 @@ class DashboardController extends Controller
             $adjPercent = (float) session('dashboard_tuning_percent', 0);
         }
 
-        $query = BillRecord::where('user_id', $userId)
+        $query = BillRecord::query()
+            ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
             ->where('billing_month', $month)
             ->where('billing_year', $year)
             ->where(function ($q) {
@@ -935,11 +983,15 @@ class DashboardController extends Controller
             });
 
         // Exclude accounts already marked submitted in bill_statuses
-        $submittedCas = BillStatus::where('user_id', $userId)
-            ->where('billing_month', $month)
+        $submittedCasQuery = BillStatus::where('billing_month', $month)
             ->where('billing_year', $year)
-            ->whereRaw('LOWER(status) = ?', ['submitted'])
-            ->pluck('ca_number');
+            ->whereRaw('LOWER(status) = ?', ['submitted']);
+
+        if (! $isAdmin && $userId) {
+            $submittedCasQuery->where('user_id', $userId);
+        }
+
+        $submittedCas = $submittedCasQuery->pluck('ca_number');
 
         if ($submittedCas->isNotEmpty()) {
             $query->whereNotIn('ca_number', $submittedCas);
@@ -951,23 +1003,23 @@ class DashboardController extends Controller
 
         $bills = $query->get();
 
-        $count = DB::transaction(function () use ($userId, $bills, $month, $year, $adjPercent, $tuningSteps) {
+        $count = DB::transaction(function () use ($userId, $isAdmin, $bills, $month, $year, $adjPercent, $tuningSteps) {
             $count = 0;
             $caNumbers = $bills->pluck('ca_number')->unique()->values();
-            $historicalBills = BillRecord::where('user_id', $userId)
-                ->whereIn('ca_number', $caNumbers)
+            $historicalBills = BillRecord::whereIn('ca_number', $caNumbers)
+                ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
                 ->orderBy('billing_year', 'desc')
                 ->orderBy('billing_month', 'desc')
                 ->get()
                 ->groupBy('ca_number');
 
-            $consumers = ConsumerAccount::where('user_id', $userId)
-                ->whereIn('ca_number', $caNumbers)
+            $consumers = ConsumerAccount::whereIn('ca_number', $caNumbers)
+                ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
                 ->get()
                 ->keyBy('ca_number');
 
-            $meterHistories = MeterReadingHistory::where('user_id', $userId)
-                ->whereIn('ca_number', $caNumbers)
+            $meterHistories = MeterReadingHistory::whereIn('ca_number', $caNumbers)
+                ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
                 ->where(function ($q) use ($month, $year) {
                     $q->where('billing_year', '<', $year)
                         ->orWhere(function ($q2) use ($month, $year) {
@@ -1083,15 +1135,22 @@ class DashboardController extends Controller
         ]);
 
         $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
 
-        $bill = DB::transaction(function () use ($userId, $request) {
-            $bill = BillRecord::where('user_id', $userId)->findOrFail($request->id);
+        $bill = DB::transaction(function () use ($userId, $isAdmin, $request) {
+            $bill = BillRecord::query()
+                ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
+                ->findOrFail($request->id);
+
+            $ownerUserId = $bill->user_id;
             $bill->review_status = $request->review_status;
             $bill->save();
 
             // Synchronize with bill_statuses table
             if ($request->review_status === 'pending') {
-                $statusRecord = BillStatus::where('user_id', $userId)
+                $statusRecord = BillStatus::where('user_id', $ownerUserId)
                     ->where('ca_number', $bill->ca_number)
                     ->where('billing_month', $bill->billing_month)
                     ->where('billing_year', $bill->billing_year)
@@ -1107,7 +1166,7 @@ class DashboardController extends Controller
             } else {
                 BillStatus::updateOrCreate(
                     [
-                        'user_id' => $userId,
+                        'user_id' => $ownerUserId,
                         'ca_number' => $bill->ca_number,
                         'billing_month' => $bill->billing_month,
                         'billing_year' => $bill->billing_year,
@@ -1121,7 +1180,7 @@ class DashboardController extends Controller
             // Synchronize with meter_reading_histories table
             try {
                 $isSubmitted = ($request->review_status === 'submitted');
-                MeterReadingHistory::where('user_id', $userId)
+                MeterReadingHistory::where('user_id', $ownerUserId)
                     ->where('ca_number', $bill->ca_number)
                     ->where('billing_month', $bill->billing_month)
                     ->where('billing_year', $bill->billing_year)
@@ -1152,17 +1211,24 @@ class DashboardController extends Controller
         ]);
 
         $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
         $remark = $request->remark ? trim($request->remark) : null;
 
-        $bill = DB::transaction(function () use ($userId, $request, $remark) {
-            $bill = BillRecord::where('user_id', $userId)->findOrFail($request->id);
+        $bill = DB::transaction(function () use ($userId, $isAdmin, $request, $remark) {
+            $bill = BillRecord::query()
+                ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
+                ->findOrFail($request->id);
+
+            $ownerUserId = $bill->user_id;
             $bill->remark = $remark;
             $bill->save();
 
             // Synchronize with bill_statuses table
             BillStatus::updateOrCreate(
                 [
-                    'user_id' => $userId,
+                    'user_id' => $ownerUserId,
                     'ca_number' => $bill->ca_number,
                     'billing_month' => $bill->billing_month,
                     'billing_year' => $bill->billing_year,
@@ -1196,16 +1262,19 @@ class DashboardController extends Controller
         ]);
 
         $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
         $tag = trim((string) $request->tag) ?: 'OK';
 
-        $bill = DB::transaction(function () use ($userId, $request, $tag) {
+        $bill = DB::transaction(function () use ($userId, $isAdmin, $request, $tag) {
             $bill = null;
+            $billQuery = BillRecord::query()->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId));
             if ($request->id) {
-                $bill = BillRecord::where('user_id', $userId)->find($request->id);
+                $bill = (clone $billQuery)->find($request->id);
             }
             if (! $bill && $request->ca_number && $request->billing_month && $request->billing_year) {
-                $bill = BillRecord::where('user_id', $userId)
-                    ->where('ca_number', $request->ca_number)
+                $bill = (clone $billQuery)->where('ca_number', $request->ca_number)
                     ->where('billing_month', (int) $request->billing_month)
                     ->where('billing_year', (int) $request->billing_year)
                     ->first();
@@ -1216,6 +1285,7 @@ class DashboardController extends Controller
                 $bill->save();
             }
 
+            $ownerUserId = $bill ? $bill->user_id : $userId;
             $ca = $bill ? $bill->ca_number : $request->ca_number;
             $month = $bill ? $bill->billing_month : (int) $request->billing_month;
             $year = $bill ? $bill->billing_year : (int) $request->billing_year;
@@ -1223,7 +1293,7 @@ class DashboardController extends Controller
             if ($ca && $month && $year) {
                 BillStatus::updateOrCreate(
                     [
-                        'user_id' => $userId,
+                        'user_id' => $ownerUserId,
                         'ca_number' => $ca,
                         'billing_month' => $month,
                         'billing_year' => $year,
@@ -1389,9 +1459,12 @@ class DashboardController extends Controller
     public function getMeterMatrix(Request $request, string $caNumber): JsonResponse
     {
         $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
         $year = $request->filled('year') ? (int) $request->input('year') : null;
 
-        $matrix = $this->meterHistoryService->getConsumerMonthlyMatrix($userId, $caNumber, $year);
+        $matrix = $this->meterHistoryService->getConsumerMonthlyMatrix($isAdmin ? null : $userId, $caNumber, $year);
 
         return response()->json([
             'success' => true,

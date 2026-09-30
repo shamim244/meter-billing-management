@@ -404,10 +404,10 @@ class MeterReadingHistoryService
      * Get two-dimensional consumption history matrix for a consumer across periods.
      * Combines both PDF official records and working month live entries.
      */
-    public function getConsumerMonthlyMatrix(int $userId, string $caNumber, ?int $year = null): array
+    public function getConsumerMonthlyMatrix(?int $userId, string $caNumber, ?int $year = null): array
     {
         $query = MeterReadingHistory::with('mru')
-            ->where('user_id', $userId)
+            ->when($userId !== null, fn ($q) => $q->where('user_id', $userId))
             ->where('ca_number', $caNumber);
 
         if ($year !== null) {

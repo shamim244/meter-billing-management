@@ -2471,9 +2471,9 @@
                             this.selectedMonth = first.month;
                             this.selectedYear = first.year;
                         } else {
-                            this.selectedPeriodKey = '';
-                            this.selectedMonth = new Date().getMonth() + 1;
-                            this.selectedYear = new Date().getFullYear();
+                            this.selectedPeriodKey = '{{ $selectedMonth }}_{{ $selectedYear }}';
+                            this.selectedMonth = {{ $selectedMonth }};
+                            this.selectedYear = {{ $selectedYear }};
                         }
                         localStorage.setItem('dashboard_period', this.selectedPeriodKey);
                     } else if (this.selectedPeriodKey) {

@@ -64,13 +64,7 @@ trait BelongsToUser
         }
 
         if (method_exists($user, 'hasRole') && $user->hasRole('admin')) {
-            // In CLI / test environment without active web routing, admin bypasses scope
-            if (! request() || ! request()->route()) {
-                return true;
-            }
-
-            // On web requests, only bypass scope on admin routes
-            return request()->is('admin*');
+            return true;
         }
 
         return false;
