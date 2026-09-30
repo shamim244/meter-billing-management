@@ -2096,8 +2096,8 @@
                 shortcutLabels: @json(Auth::user()->getShortcutLabels()),
                 cardDensity: '{{ session('pref_card_density', 'compact') }}',
                 amountSize: '{{ session('pref_amount_size', 'standard') }}',
-                showRemarkPresets: {{ json_encode(session('pref_remark_presets', false)) }},
-                colorSettings: {{ json_encode($colorSettings ?? ['enabled' => true, 'amount_safe_ceiling' => 500, 'amount_warning_ceiling' => 1500, 'amount_danger_floor' => 2500, 'units_safe_ceiling' => 50, 'units_warning_ceiling' => 120, 'units_danger_floor' => 200]) }},
+                showRemarkPresets: {{ session('pref_remark_presets', false) ? 'true' : 'false' }},
+                colorSettings: {!! json_encode($colorSettings ?? ['enabled' => true, 'amount_safe_ceiling' => 500, 'amount_warning_ceiling' => 1500, 'amount_danger_floor' => 2500, 'units_safe_ceiling' => 50, 'units_warning_ceiling' => 120, 'units_danger_floor' => 200]) !!},
 
                 cycleMonth: {{ $selectedMonth }},
                 cycleYear: {{ $selectedYear }},
