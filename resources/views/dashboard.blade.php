@@ -478,16 +478,26 @@
                         </div>
                     </div>
 
-                    <!-- Right: Table / Card View Mode Switcher -->
-                    <div class="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 self-start md:self-auto">
-                        <button @click="setViewMode('table')" :class="viewMode === 'table' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-cyan-300 shadow-sm font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'" class="px-4 py-2 rounded-xl text-xs transition flex items-center gap-1.5">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-                            Table View
+                    <!-- Right: Bulk Mobile & Table / Card View Mode Switcher -->
+                    <div class="flex items-center gap-2 self-start md:self-auto flex-wrap">
+                        <button type="button" 
+                                @click="openBulkMobileModal()" 
+                                class="px-3 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95" 
+                                title="Bulk Update Consumer Mobile Numbers">
+                            <span>📱</span>
+                            <span class="hidden sm:inline">Bulk Mobiles</span>
                         </button>
-                        <button @click="setViewMode('card')" :class="viewMode === 'card' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-cyan-300 shadow-sm font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'" class="px-4 py-2 rounded-xl text-xs transition flex items-center gap-1.5">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-                            Cards View
-                        </button>
+
+                        <div class="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
+                            <button @click="setViewMode('table')" :class="viewMode === 'table' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-cyan-300 shadow-sm font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'" class="px-4 py-2 rounded-xl text-xs transition flex items-center gap-1.5">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                                Table View
+                            </button>
+                            <button @click="setViewMode('card')" :class="viewMode === 'card' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-cyan-300 shadow-sm font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'" class="px-4 py-2 rounded-xl text-xs transition flex items-center gap-1.5">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                                Cards View
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -618,8 +628,26 @@
                                                             ⚠️ Reverted
                                                         </span>
                                                     </template>
+                                                <div class="flex items-center gap-1.5 flex-wrap">
+                                                    <span class="text-slate-900 dark:text-white font-semibold truncate max-w-[140px] text-xs" x-text="bill.consumer_name || '—'"></span>
+                                                    <template x-if="bill.mobile">
+                                                        <span class="inline-flex items-center rounded text-[10px] font-mono font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                                            <button type="button" @click.stop="copyMobile(bill)" class="px-1.5 py-0.5 hover:underline inline-flex items-center gap-0.5 cursor-pointer" :title="'Copy mobile: ' + bill.mobile">
+                                                                <span class="text-[9px]">📱</span>
+                                                                <span x-text="copiedMobileId === bill.id ? 'Copied!' : bill.mobile"></span>
+                                                            </button>
+                                                            <button type="button" @click.stop="openMobileModal(bill)" class="px-1 py-0.5 border-l border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 cursor-pointer" title="Edit Mobile">
+                                                                ✏️
+                                                            </button>
+                                                        </span>
+                                                    </template>
+                                                    <template x-if="!bill.mobile">
+                                                        <button type="button" @click.stop="openMobileModal(bill)" class="text-[9px] text-slate-400 hover:text-blue-600 dark:hover:text-cyan-400 font-mono hover:underline inline-flex items-center gap-0.5 cursor-pointer" title="Add Mobile Number">
+                                                            <span>📱</span>
+                                                            <span>+Add</span>
+                                                        </button>
+                                                    </template>
                                                 </div>
-                                                <div class="text-slate-900 dark:text-white font-semibold truncate max-w-[150px] text-xs" x-text="bill.consumer_name || '—'"></div>
                                             </div>
                                         </div>
                                     </td>
@@ -858,6 +886,37 @@
                                                             <span x-text="copiedCaId === bill.id ? 'Copied!' : 'Copy'"></span>
                                                             <span x-show="copiedCaId !== bill.id" class="hidden sm:inline-block text-[8px] opacity-75 font-mono" x-text="'[' + (shortcuts.copy_ca?.toUpperCase() || 'C') + ']'"></span>
                                                         </button>
+
+                                                        <!-- Consumer Mobile Number (Compact, Zero Size Impact, 1-Click Copy & Override) -->
+                                                        <div class="inline-flex items-center gap-1">
+                                                            <template x-if="bill.mobile">
+                                                                <div class="inline-flex items-center rounded-md text-[10px] font-bold font-mono transition border select-none overflow-hidden"
+                                                                     :class="copiedMobileId === bill.id ? 'bg-emerald-500/40 border-emerald-400 text-emerald-100' : 'bg-emerald-950/50 hover:bg-emerald-900/60 text-emerald-300 border-emerald-500/40'">
+                                                                    <button type="button" 
+                                                                            @click.stop="copyMobile(bill)"
+                                                                            class="inline-flex items-center gap-1 px-1.5 py-0.5 hover:text-white transition active:scale-95 touch-manipulation cursor-pointer"
+                                                                            :title="'Tap to copy mobile: ' + bill.mobile">
+                                                                        <span class="text-[9px]">📱</span>
+                                                                        <span x-text="copiedMobileId === bill.id ? 'Copied!' : bill.mobile"></span>
+                                                                    </button>
+                                                                    <button type="button"
+                                                                            @click.stop="openMobileModal(bill)"
+                                                                            class="px-1 py-0.5 border-l border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-200 hover:text-white transition cursor-pointer"
+                                                                            title="Edit / Override Mobile Number">
+                                                                        <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                                                                    </button>
+                                                                </div>
+                                                            </template>
+                                                            <template x-if="!bill.mobile">
+                                                                <button type="button"
+                                                                        @click.stop="openMobileModal(bill)"
+                                                                        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold font-mono transition border border-dashed border-white/20 text-slate-300 hover:text-white hover:bg-white/10 active:scale-95 select-none cursor-pointer"
+                                                                        title="Add consumer mobile number">
+                                                                    <span class="text-[9px]">📱</span>
+                                                                    <span>+Mobile</span>
+                                                                </button>
+                                                            </template>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -2001,6 +2060,135 @@
                 </div>
             </div>
 
+            <!-- MODAL 6: Consumer Mobile Number (Individual Quick Add / Override) -->
+            <div x-show="showMobileModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+                <div @click.outside="showMobileModal = false" class="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md my-auto max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                    <div class="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-base">
+                                📱
+                            </div>
+                            <div>
+                                <h3 class="text-base font-bold text-slate-900 dark:text-white">Consumer Mobile Number</h3>
+                                <p class="text-[11px] text-slate-400 dark:text-slate-500 font-mono" x-text="'CA: ' + (editingMobileBill?.ca_number || '—') + (editingMobileBill?.consumer_name ? ' • ' + editingMobileBill.consumer_name : '')"></p>
+                            </div>
+                        </div>
+                        <button type="button" @click="showMobileModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1">✕</button>
+                    </div>
+
+                    <div class="overflow-y-auto p-4 sm:p-6 space-y-4">
+                        <div>
+                            <label for="consumerMobileInput" class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Mobile Number (10 Digits)</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-mono text-xs">+91</span>
+                                <input type="tel" id="consumerMobileInput" x-model="mobileInput" placeholder="9876543210" maxlength="15" @keyup.enter="saveConsumerMobile()" class="w-full text-sm font-mono rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white pl-11 pr-3.5 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition">
+                            </div>
+                            <p class="text-[11px] text-slate-400 mt-1.5">Standard 10-digit mobile number. Enter to save, or clear to remove.</p>
+                        </div>
+
+                        <!-- Current Saved Status -->
+                        <template x-if="editingMobileBill?.mobile">
+                            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-slate-400 text-[11px]">Currently saved:</span>
+                                    <span class="font-mono font-bold text-emerald-600 dark:text-emerald-400" x-text="editingMobileBill.mobile"></span>
+                                </div>
+                                <button type="button" @click="copyMobile(editingMobileBill)" class="text-[11px] text-blue-600 dark:text-cyan-400 hover:underline font-medium cursor-pointer">
+                                    Copy Number
+                                </button>
+                            </div>
+                        </template>
+
+                        <!-- Error Message -->
+                        <div x-show="mobileModalError" class="p-3 rounded-xl text-xs font-semibold bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800" x-text="mobileModalError"></div>
+                    </div>
+
+                    <div class="p-4 sm:p-6 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                        <div>
+                            <template x-if="editingMobileBill?.mobile">
+                                <button type="button" @click="saveConsumerMobile(true)" :disabled="savingMobile" class="w-full sm:w-auto px-3.5 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition text-center cursor-pointer">
+                                    Remove Number
+                                </button>
+                            </template>
+                        </div>
+                        <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                            <button type="button" @click="showMobileModal = false" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition text-center">
+                                Cancel
+                            </button>
+                            <button type="button" @click="saveConsumerMobile()" :disabled="savingMobile" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-1.5 cursor-pointer">
+                                <span x-show="!savingMobile">💾 Save Mobile</span>
+                                <span x-show="savingMobile" class="flex items-center gap-1.5">
+                                    <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                    Saving...
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL 7: Bulk Mobile Numbers Update -->
+            <div x-show="showBulkMobileModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+                <div @click.outside="showBulkMobileModal = false" class="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg my-auto max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                    <div class="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-cyan-400 flex items-center justify-center font-bold text-base">
+                                📋
+                            </div>
+                            <div>
+                                <h3 class="text-base font-bold text-slate-900 dark:text-white">Bulk Mobile Numbers Update</h3>
+                                <p class="text-[11px] text-slate-400 dark:text-slate-500">Paste multiple CA numbers and mobile numbers at once</p>
+                            </div>
+                        </div>
+                        <button type="button" @click="showBulkMobileModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1">✕</button>
+                    </div>
+
+                    <div class="overflow-y-auto p-4 sm:p-6 space-y-4">
+                        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300">
+                            <p class="font-bold text-slate-700 dark:text-slate-200 mb-1">Expected Format (One entry per line):</p>
+                            <code class="block font-mono bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-700 text-[10px] text-slate-800 dark:text-slate-200 select-all">
+                                10230041576, 9876543210<br>
+                                10230014993, 9123456789
+                            </code>
+                            <p class="text-[10px] text-slate-400 mt-1">Supports comma, tab, space, or semicolon separated columns. Leading +91 or 91 country codes are automatically trimmed.</p>
+                        </div>
+
+                        <div>
+                            <label for="bulkMobileInput" class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Paste Data List</label>
+                            <textarea id="bulkMobileInput" x-model="bulkMobileText" rows="6" placeholder="10230041576, 9876543210&#10;10230014993, 9123456789" class="w-full text-xs font-mono rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white p-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"></textarea>
+                        </div>
+
+                        <!-- Results Card -->
+                        <template x-if="bulkMobileResult">
+                            <div class="p-3.5 rounded-xl border" :class="bulkMobileResult.updated_count > 0 ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300' : 'bg-amber-50 dark:bg-amber-950/60 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'">
+                                <div class="text-xs font-bold" x-text="bulkMobileResult.message"></div>
+                                <div class="flex items-center gap-4 mt-2 text-[11px] font-mono">
+                                    <span>✅ Updated: <b x-text="bulkMobileResult.updated_count"></b></span>
+                                    <span>⚠️ Not Found: <b x-text="bulkMobileResult.not_found_count"></b></span>
+                                    <span>❌ Invalid: <b x-text="bulkMobileResult.invalid_count"></b></span>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Error Message -->
+                        <div x-show="bulkMobileError" class="p-3 rounded-xl text-xs font-semibold bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800" x-text="bulkMobileError"></div>
+                    </div>
+
+                    <div class="p-4 sm:p-6 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2.5">
+                        <button type="button" @click="showBulkMobileModal = false" class="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition text-center">
+                            Close
+                        </button>
+                        <button type="button" @click="submitBulkMobile()" :disabled="submittingBulkMobile || !bulkMobileText.trim()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-500/20 transition flex items-center justify-center gap-1.5 cursor-pointer">
+                            <span x-show="!submittingBulkMobile">🚀 Update All</span>
+                            <span x-show="submittingBulkMobile" class="flex items-center gap-1.5">
+                                <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                Updating...
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -2164,6 +2352,20 @@
                 activeHistoryConsumerName: '',
                 meterHistoryLoading: false,
                 meterHistoryData: null,
+
+                // Consumer Mobile Management
+                copiedMobileId: null,
+                copiedMobileTimeout: null,
+                showMobileModal: false,
+                editingMobileBill: null,
+                mobileInput: '',
+                savingMobile: false,
+                mobileModalError: null,
+                showBulkMobileModal: false,
+                bulkMobileText: '',
+                submittingBulkMobile: false,
+                bulkMobileResult: null,
+                bulkMobileError: null,
 
                 // Dynamic Counts & Stats
                 counts: {
@@ -3265,6 +3467,142 @@
                         });
                 },
 
+                // --- CONSUMER MOBILE NUMBER MANAGEMENT ---
+                copyMobile(bill) {
+                    if (!bill || !bill.mobile) return;
+                    const mob = bill.mobile;
+                    const self = this;
+                    const onCopied = () => {
+                        self.copiedMobileId = bill.id;
+                        if (self.copiedMobileTimeout) clearTimeout(self.copiedMobileTimeout);
+                        self.copiedMobileTimeout = setTimeout(() => {
+                            self.copiedMobileId = null;
+                        }, 2000);
+                        self.showToastNotification('📱', `Copied Mobile: ${mob}`, null);
+                    };
+
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(mob)
+                            .then(onCopied)
+                            .catch(err => {
+                                console.warn('Clipboard API failed, using fallback:', err);
+                                self.fallbackCopyText(mob, onCopied);
+                            });
+                    } else {
+                        self.fallbackCopyText(mob, onCopied);
+                    }
+                },
+
+                openMobileModal(bill) {
+                    if (!bill) return;
+                    this.editingMobileBill = bill;
+                    this.mobileInput = bill.mobile || '';
+                    this.mobileModalError = null;
+                    this.showMobileModal = true;
+                    this.$nextTick(() => {
+                        const input = document.getElementById('consumerMobileInput');
+                        if (input) input.focus();
+                    });
+                },
+
+                async saveConsumerMobile(clearMobile = false) {
+                    if (!this.editingMobileBill) return;
+                    this.savingMobile = true;
+                    this.mobileModalError = null;
+
+                    const targetCa = this.editingMobileBill.ca_number;
+                    const targetMobile = clearMobile ? '' : this.mobileInput.trim();
+
+                    try {
+                        const res = await fetch('/consumers/update-mobile', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                ca_number: targetCa,
+                                mobile: targetMobile
+                            })
+                        });
+
+                        const data = await res.json();
+                        if (res.ok && data.success) {
+                            const newMobile = data.mobile || null;
+                            this.items.forEach(item => {
+                                if (item.ca_number === targetCa) {
+                                    item.mobile = newMobile;
+                                }
+                            });
+                            if (this.editingMobileBill) {
+                                this.editingMobileBill.mobile = newMobile;
+                            }
+                            this.showToastNotification(newMobile ? '📱' : '🗑️', data.message || 'Mobile number updated', null);
+                            this.showMobileModal = false;
+                        } else {
+                            this.mobileModalError = data.message || (data.errors ? Object.values(data.errors).flat().join(', ') : 'Failed to update mobile number');
+                        }
+                    } catch (err) {
+                        console.error('saveConsumerMobile error:', err);
+                        this.mobileModalError = 'Network error while updating mobile number';
+                    } finally {
+                        this.savingMobile = false;
+                    }
+                },
+
+                openBulkMobileModal() {
+                    this.bulkMobileText = '';
+                    this.bulkMobileResult = null;
+                    this.bulkMobileError = null;
+                    this.showBulkMobileModal = true;
+                },
+
+                async submitBulkMobile() {
+                    if (!this.bulkMobileText.trim()) {
+                        this.bulkMobileError = 'Please paste or enter at least one CA and mobile pair.';
+                        return;
+                    }
+
+                    this.submittingBulkMobile = true;
+                    this.bulkMobileError = null;
+                    this.bulkMobileResult = null;
+
+                    try {
+                        const res = await fetch('/consumers/bulk-update-mobile', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                raw_data: this.bulkMobileText.trim()
+                            })
+                        });
+
+                        const data = await res.json();
+                        if (res.ok && data.success) {
+                            this.bulkMobileResult = data;
+                            if (data.updated_map) {
+                                this.items.forEach(item => {
+                                    if (data.updated_map.hasOwnProperty(item.ca_number)) {
+                                        item.mobile = data.updated_map[item.ca_number];
+                                    }
+                                });
+                            }
+                            this.showToastNotification('📱', data.message || `Updated ${data.updated_count} mobile numbers!`, null);
+                        } else {
+                            this.bulkMobileError = data.message || 'Failed to update bulk mobile numbers.';
+                        }
+                    } catch (err) {
+                        console.error('submitBulkMobile error:', err);
+                        this.bulkMobileError = 'Network error while processing bulk update.';
+                    } finally {
+                        this.submittingBulkMobile = false;
+                    }
+                },
+
                 launchBillingCycle(actionType = 'download_all') {
                     if (!this.filterMru) return;
 
@@ -4141,7 +4479,7 @@
                     }
 
                     // Do nothing if any modal is open or rebinding
-                    if (this.showShortcutsModal || this.showCreateMruModal || this.showExistingMruPopup || this.showNewCycleModal || this.showPdfViewerModal || this.showQuickPullModal || this.rebindingAction) return;
+                    if (this.showShortcutsModal || this.showCreateMruModal || this.showExistingMruPopup || this.showNewCycleModal || this.showPdfViewerModal || this.showQuickPullModal || this.showTuningModal || this.showMeterHistoryModal || this.showMobileModal || this.showBulkMobileModal || this.rebindingAction) return;
 
                     // If typing inside an input/textarea
                     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {

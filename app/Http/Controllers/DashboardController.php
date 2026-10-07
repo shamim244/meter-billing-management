@@ -274,8 +274,8 @@ class DashboardController extends Controller
         $currentUser = Auth::user();
         $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
 
-        $month = (int) $request->get('month', now()->month);
-        $year = (int) $request->get('year', now()->year);
+        $month = (int) $request->get('month', $request->get('billing_month', now()->month));
+        $year = (int) $request->get('year', $request->get('billing_year', now()->year));
         $mruId = $request->get('mru_id');
         $filter = $request->get('filter', $request->get('status', 'all'));
         $search = strtolower(trim($request->get('search', '')));
@@ -314,7 +314,8 @@ class DashboardController extends Controller
                         $caQ->where('consumer_name', 'like', "%{$escapedSearch}%")
                             ->orWhere('meter_no', 'like', "%{$escapedSearch}%")
                             ->orWhere('tariff_category', 'like', "%{$escapedSearch}%")
-                            ->orWhere('billing_basis', 'like', "%{$escapedSearch}%");
+                            ->orWhere('billing_basis', 'like', "%{$escapedSearch}%")
+                            ->orWhere('mobile', 'like', "%{$escapedSearch}%");
                     });
             });
         }
@@ -407,6 +408,8 @@ class DashboardController extends Controller
 
             // Master-First Identity & Profile Resolution
             $consumerAcc = $bill->consumerAccount ?? ($consumers[$bill->ca_number] ?? null);
+            $bill->mobile = $consumerAcc?->mobile ?: null;
+            $bill->consumer_account_id = $consumerAcc?->id ?: null;
             $masterName = $consumerAcc?->consumer_name;
             if (! empty($masterName) && ! str_starts_with($masterName, 'Consumer ')) {
                 $bill->consumer_name = $masterName;
@@ -1469,6 +1472,189 @@ class DashboardController extends Controller
         return response()->json([
             'success' => true,
             'data' => $matrix,
+        ]);
+    }
+
+    /**
+     * Update or override a single consumer's mobile number.
+     */
+    public function updateConsumerMobile(Request $request): JsonResponse
+    {
+        $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
+
+        $validated = $request->validate([
+            'ca_number' => ['required', 'string', 'max:50'],
+            'mobile' => ['nullable', 'string', 'max:20'],
+        ]);
+
+        $caNumber = trim($validated['ca_number']);
+        $rawMobile = $validated['mobile'] !== null ? trim($validated['mobile']) : null;
+
+        // Clean mobile number (strip non-digits, normalize 10 digits)
+        $cleanMobile = null;
+        if (! empty($rawMobile)) {
+            $digitsOnly = preg_replace('/[^0-9]/', '', $rawMobile);
+            if (strlen($digitsOnly) === 10) {
+                $cleanMobile = $digitsOnly;
+            } elseif (strlen($digitsOnly) > 10 && str_starts_with($digitsOnly, '91') && strlen($digitsOnly) === 12) {
+                $cleanMobile = substr($digitsOnly, 2);
+            } else {
+                $cleanMobile = substr($digitsOnly, 0, 15);
+            }
+        }
+
+        // Locate consumer account for this user or as admin
+        $consumerQuery = ConsumerAccount::where('ca_number', $caNumber);
+        if (! $isAdmin && $userId) {
+            $consumerQuery->where('user_id', $userId);
+        }
+        $consumer = $consumerQuery->first();
+
+        if (! $consumer) {
+            // Find MRU ID from existing bill if available
+            $bill = BillRecord::where('ca_number', $caNumber)
+                ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
+                ->first();
+
+            $consumer = ConsumerAccount::create([
+                'user_id' => $userId,
+                'ca_number' => $caNumber,
+                'mru_id' => $bill?->mru_id,
+                'consumer_name' => $bill?->consumer_name ?? "Consumer {$caNumber}",
+                'meter_no' => $bill?->meter_no,
+                'tariff_category' => $bill?->tariff_category ?? 'DS-II',
+                'billing_basis' => $bill?->billing_basis ?? 'OK',
+                'mobile' => $cleanMobile,
+            ]);
+        } else {
+            $consumer->mobile = $cleanMobile;
+            $consumer->save();
+        }
+
+        return response()->json([
+            'success' => true,
+            'ca_number' => $caNumber,
+            'mobile' => $consumer->mobile,
+            'message' => $cleanMobile ? "Mobile number updated to {$cleanMobile}" : 'Mobile number cleared',
+        ]);
+    }
+
+    /**
+     * Bulk update consumer mobile numbers from list or pasted CSV/multiline text.
+     */
+    public function bulkUpdateConsumerMobile(Request $request): JsonResponse
+    {
+        $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
+
+        $entries = [];
+
+        // Check if passed as raw multiline string or structured array
+        if ($request->has('raw_data') && is_string($request->input('raw_data'))) {
+            $lines = preg_split('/\r\n|\r|\n/', trim($request->input('raw_data')));
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if (empty($line) || str_starts_with($line, '#')) {
+                    continue;
+                }
+                $parts = preg_split('/[\t,;|]+/', $line);
+                if (count($parts) >= 2) {
+                    $entries[] = [
+                        'ca_number' => trim($parts[0]),
+                        'mobile' => trim($parts[1]),
+                    ];
+                }
+            }
+        } elseif ($request->has('list') && is_array($request->input('list'))) {
+            $entries = $request->input('list');
+        }
+
+        if (empty($entries)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No valid CA and mobile number pairs provided. Format: CA Number, Mobile (one per line).',
+            ], 422);
+        }
+
+        $updatedCount = 0;
+        $notFoundCount = 0;
+        $invalidCount = 0;
+        $updatedMap = [];
+
+        $normalizedMap = [];
+        foreach ($entries as $entry) {
+            $ca = trim($entry['ca_number'] ?? '');
+            $mob = trim($entry['mobile'] ?? '');
+            if (empty($ca)) {
+                $invalidCount++;
+
+                continue;
+            }
+
+            $digitsOnly = preg_replace('/[^0-9]/', '', $mob);
+            if (strlen($digitsOnly) === 10) {
+                $cleanMob = $digitsOnly;
+            } elseif (strlen($digitsOnly) === 12 && str_starts_with($digitsOnly, '91')) {
+                $cleanMob = substr($digitsOnly, 2);
+            } elseif (! empty($digitsOnly)) {
+                $cleanMob = substr($digitsOnly, 0, 15);
+            } else {
+                $cleanMob = null;
+            }
+
+            $normalizedMap[$ca] = $cleanMob;
+        }
+
+        $caList = array_keys($normalizedMap);
+
+        $existingConsumers = ConsumerAccount::whereIn('ca_number', $caList)
+            ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
+            ->get()
+            ->keyBy('ca_number');
+
+        foreach ($normalizedMap as $ca => $mob) {
+            if ($existingConsumers->has($ca)) {
+                $consumer = $existingConsumers->get($ca);
+                $consumer->mobile = $mob;
+                $consumer->save();
+                $updatedCount++;
+                $updatedMap[$ca] = $mob;
+            } else {
+                $bill = BillRecord::where('ca_number', $ca)
+                    ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
+                    ->first();
+
+                if ($bill) {
+                    ConsumerAccount::create([
+                        'user_id' => $userId,
+                        'ca_number' => $ca,
+                        'mru_id' => $bill->mru_id,
+                        'consumer_name' => $bill->consumer_name ?? "Consumer {$ca}",
+                        'meter_no' => $bill->meter_no,
+                        'tariff_category' => $bill->tariff_category ?? 'DS-II',
+                        'billing_basis' => $bill->billing_basis ?? 'OK',
+                        'mobile' => $mob,
+                    ]);
+                    $updatedCount++;
+                    $updatedMap[$ca] = $mob;
+                } else {
+                    $notFoundCount++;
+                }
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'updated_count' => $updatedCount,
+            'not_found_count' => $notFoundCount,
+            'invalid_count' => $invalidCount,
+            'updated_map' => $updatedMap,
+            'message' => "Successfully updated {$updatedCount} consumer mobile numbers.",
         ]);
     }
 }

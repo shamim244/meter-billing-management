@@ -94,6 +94,8 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
     Route::post('/bills/update-remark', [DashboardController::class, 'updateRemark'])->name('bills.update-remark');
     Route::post('/bills/tag', [DashboardController::class, 'updateTag'])->name('bills.tag');
     Route::post('/bills/bulk-project-readings', [DashboardController::class, 'bulkProjectReadings'])->name('bills.bulk-project-readings');
+    Route::post('/consumers/update-mobile', [DashboardController::class, 'updateConsumerMobile'])->name('consumers.update-mobile');
+    Route::post('/consumers/bulk-update-mobile', [DashboardController::class, 'bulkUpdateConsumerMobile'])->name('consumers.bulk-update-mobile');
     Route::get('/user/shortcuts', [DashboardController::class, 'getShortcuts'])->name('user.shortcuts');
     Route::post('/user/shortcuts', [DashboardController::class, 'saveShortcuts'])->name('user.shortcuts.save');
     Route::post('/user/shortcuts/reset', [DashboardController::class, 'resetShortcuts'])->name('user.shortcuts.reset');
