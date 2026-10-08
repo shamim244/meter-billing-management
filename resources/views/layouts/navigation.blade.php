@@ -27,6 +27,11 @@
                         <span>Dashboard</span>
                     </x-nav-link>
 
+                    <x-nav-link :href="route('field-desk.index')" :active="request()->routeIs('field-desk.*')">
+                        <span>📋</span>
+                        <span>FieldDesk</span>
+                    </x-nav-link>
+
                     <x-nav-link :href="route('mrus.index')" :active="request()->routeIs('mrus.*')">
                         <span>🗂️</span>
                         <span>MRUs</span>
@@ -320,6 +325,11 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 <span>📊</span>
                 <span class="font-bold">Dashboard</span>
+            </x-responsive-nav-link>
+
+            <x-responsive-nav-link :href="route('field-desk.index')" :active="request()->routeIs('field-desk.*')">
+                <span>📋</span>
+                <span class="font-bold">FieldDesk</span>
             </x-responsive-nav-link>
 
             <x-responsive-nav-link :href="route('mrus.index')" :active="request()->routeIs('mrus.*')">

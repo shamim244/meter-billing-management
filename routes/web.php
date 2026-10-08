@@ -29,6 +29,7 @@ use App\Http\Controllers\BillController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeveloperDocumentationController;
 use App\Http\Controllers\DocsController;
+use App\Http\Controllers\FieldDeskController;
 use App\Http\Controllers\Install\InstallerController;
 use App\Http\Controllers\IssueReportController;
 use App\Http\Controllers\MruController;
@@ -104,6 +105,21 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
     Route::get('/bills/export-zip', [BillController::class, 'exportZip'])->middleware('throttle:30,1')->name('bills.export-zip');
     Route::get('/bills/export-csv', [BillController::class, 'exportCsv'])->name('bills.export-csv');
     Route::get('/bills/history/{ca_number}', [BillController::class, 'history'])->name('bills.history');
+
+    // FieldDesk (Module 11) Dedicated Hub & Asynchronous API
+    Route::get('/field-desk', [FieldDeskController::class, 'index'])->name('field-desk.index');
+    Route::prefix('api/field-desk')->name('api.field-desk.')->group(function () {
+        Route::get('/data', [FieldDeskController::class, 'getData'])->name('data');
+        Route::post('/actions', [FieldDeskController::class, 'store'])->name('store');
+        Route::get('/actions/{id}', [FieldDeskController::class, 'show'])->name('show');
+        Route::put('/actions/{id}', [FieldDeskController::class, 'update'])->name('update');
+        Route::delete('/actions/{id}', [FieldDeskController::class, 'destroy'])->name('destroy');
+        Route::post('/actions/{id}/reschedule', [FieldDeskController::class, 'quickReschedule'])->name('reschedule');
+        Route::post('/actions/{id}/complete', [FieldDeskController::class, 'complete'])->name('complete');
+        Route::post('/actions/{id}/activity', [FieldDeskController::class, 'logActivity'])->name('activity');
+        Route::get('/consumer/{ca}', [FieldDeskController::class, 'forConsumer'])->name('consumer');
+        Route::get('/categories', [FieldDeskController::class, 'getCategories'])->name('categories');
+    });
 
     // Usage Tracking & ROI Reports
     Route::get('/reports', [UsageReportController::class, 'index'])->name('reports.usage');

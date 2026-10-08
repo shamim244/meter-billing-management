@@ -6,6 +6,7 @@ use App\Models\BillingBasisHistory;
 use App\Models\BillRecord;
 use App\Models\BillStatus;
 use App\Models\ConsumerAccount;
+use App\Models\FieldDeskAction;
 use App\Models\MeterReadingHistory;
 use App\Models\Mru;
 use App\Models\SystemSetting;
@@ -709,6 +710,47 @@ class DashboardController extends Controller
         $page = min($page, $totalPages);
         $offset = ($page - 1) * $perPage;
         $items = $sorted->slice($offset, $perPage)->values();
+
+        // Attach active FieldDesk summary bridge to each paginated bill item
+        $itemCas = $items->pluck('ca_number')->filter()->unique()->all();
+        $activeActions = ! empty($itemCas) && $userId
+            ? FieldDeskAction::withoutGlobalScopes()
+                ->where('user_id', $userId)
+                ->whereIn('ca_number', $itemCas)
+                ->whereIn('status', ['open', 'rescheduled'])
+                ->with('category')
+                ->orderBy('target_date', 'asc')
+                ->get()
+                ->groupBy('ca_number')
+            : collect();
+
+        foreach ($items as $item) {
+            /** @var FieldDeskAction|null $action */
+            $action = $activeActions->get($item->ca_number)?->first();
+            if ($action) {
+                $item->field_desk_action = [
+                    'id' => $action->id,
+                    'category_code' => $action->category?->code ?? 'general_note',
+                    'category_name' => $action->category?->name ?? 'Action',
+                    'category_icon' => $action->category?->icon ?? '📋',
+                    'category_color' => $action->category?->color ?? '#10b981',
+                    'priority' => $action->priority,
+                    'status' => $action->status,
+                    'target_date' => $action->target_date?->toDateString(),
+                    'target_date_formatted' => $action->target_date?->format('d M'),
+                    'target_amount' => (float) ($action->target_amount ?? 0),
+                    'collected_amount' => (float) ($action->collected_amount ?? 0),
+                    'remaining_amount' => $action->remaining_amount,
+                    'is_due_today' => $action->isDueToday(),
+                    'is_overdue' => $action->isOverdue(),
+                    'is_upcoming' => $action->isUpcoming(),
+                    'reschedule_count' => (int) $action->reschedule_count,
+                    'private_note' => $action->private_note,
+                ];
+            } else {
+                $item->field_desk_action = null;
+            }
+        }
 
         $availablePeriods = BillRecord::select('billing_month', 'billing_year')
             ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))

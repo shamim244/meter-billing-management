@@ -313,6 +313,14 @@ class User extends Authenticatable implements Wallet, WalletFloat
     }
 
     /**
+     * FieldDesk actions owned by this user.
+     */
+    public function fieldDeskActions(): HasMany
+    {
+        return $this->hasMany(FieldDeskAction::class);
+    }
+
+    /**
      * Send password reset notification via platform NotificationDispatchService and standard notifier.
      */
     public function sendPasswordResetNotification($token): void

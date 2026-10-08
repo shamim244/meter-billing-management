@@ -122,6 +122,14 @@ class ConsumerAccount extends Model
     }
 
     /**
+     * Get all FieldDesk actions for this consumer account.
+     */
+    public function fieldDeskActions(): HasMany
+    {
+        return $this->hasMany(FieldDeskAction::class, 'consumer_account_id');
+    }
+
+    /**
      * Scope: active accounts only.
      */
     public function scopeActive($query)
