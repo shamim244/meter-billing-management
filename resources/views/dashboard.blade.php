@@ -628,6 +628,7 @@
                                                             ⚠️ Reverted
                                                         </span>
                                                     </template>
+                                                </div>
                                                 <div class="flex items-center gap-1.5 flex-wrap">
                                                     <span class="text-slate-900 dark:text-white font-semibold truncate max-w-[140px] text-xs" x-text="bill.consumer_name || '—'"></span>
                                                     <template x-if="bill.mobile">
@@ -927,6 +928,7 @@
                                                                     <span class="text-[9px]">📱</span>
                                                                     <span>+Mobile</span>
                                                                 </button>
+                                                            </template>
                                                         </div>
 
                                                         <!-- FieldDesk Bridge Badge (Module 11) - Zero Card Size Expansion -->
