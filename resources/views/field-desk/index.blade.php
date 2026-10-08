@@ -1,5 +1,7 @@
 <x-app-layout>
-    <div x-data="fieldDeskApp()" x-init="initApp()" class="py-6 sm:py-8 min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors">
+    <div x-data="fieldDeskApp()" x-init="initApp()"
+         @keydown.escape.window="modals.create = false; modals.complete = false; modals.timeline = false; modals.edit = false"
+         class="py-6 sm:py-8 min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
 
             <!-- Hero Header & Stats Banner -->
@@ -399,6 +401,15 @@
                                                 class="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition active:scale-95"
                                                 title="Snooze target date by 5 days">
                                             +5d
+                                        </button>
+                                    </template>
+
+                                    <!-- +7 Days Quick Snooze -->
+                                    <template x-if="item.status !== 'completed'">
+                                        <button @click="quickReschedule(item.id, 7)"
+                                                class="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition active:scale-95"
+                                                title="Snooze target date by 7 days">
+                                            +7d
                                         </button>
                                     </template>
 
@@ -859,15 +870,13 @@
                     icon: '✅'
                 },
 
-                initApp() {
-                    this.fetchData();
+                async initApp() {
+                    await this.fetchData();
                     // If initial CA passed via deep link, open create modal if not found
                     if (@json($initialCa ?? '')) {
-                        setTimeout(() => {
-                            if (this.items.length === 0) {
-                                this.openCreateModal(@json($initialCa));
-                            }
-                        }, 500);
+                        if (this.items.length === 0) {
+                            this.openCreateModal(@json($initialCa));
+                        }
                     }
                 },
 
@@ -894,7 +903,11 @@
                             page: this.page,
                             per_page: 25
                         });
-                        const res = await fetch(`{{ route('api.field-desk.data') }}?${params.toString()}`);
+                        const res = await fetch(`{{ route('api.field-desk.data') }}?${params.toString()}`, {
+                            headers: {
+                                'Accept': 'application/json'
+                            }
+                        });
                         const json = await res.json();
                         if (json.success) {
                             this.items = json.data;
@@ -929,7 +942,8 @@
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'Accept': 'application/json'
                             },
                             body: JSON.stringify(this.form)
                         });
@@ -965,7 +979,8 @@
                             method: 'PUT',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'Accept': 'application/json'
                             },
                             body: JSON.stringify(this.editForm)
                         });
@@ -974,6 +989,8 @@
                             this.modals.edit = false;
                             this.showToast('Action updated successfully', '✅');
                             this.fetchData();
+                        } else {
+                            this.showToast(json.message || 'Validation error', '⚠️');
                         }
                     } catch (e) {
                         this.showToast('Error updating action', '❌');
@@ -986,7 +1003,8 @@
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'Accept': 'application/json'
                             },
                             body: JSON.stringify({ days: days })
                         });
@@ -1016,7 +1034,8 @@
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'Accept': 'application/json'
                             },
                             body: JSON.stringify(this.completeForm)
                         });
@@ -1035,7 +1054,11 @@
                     this.timelineActivities = [];
                     this.modals.timeline = true;
                     try {
-                        const res = await fetch(`/api/field-desk/actions/${id}`);
+                        const res = await fetch(`/api/field-desk/actions/${id}`, {
+                            headers: {
+                                'Accept': 'application/json'
+                            }
+                        });
                         const json = await res.json();
                         if (json.success) {
                             this.timelineActivities = json.activities || [];
@@ -1051,7 +1074,8 @@
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'Accept': 'application/json'
                             },
                             body: JSON.stringify({ action_type: type, note: note })
                         });
@@ -1064,7 +1088,8 @@
                         const res = await fetch(`/api/field-desk/actions/${id}`, {
                             method: 'DELETE',
                             headers: {
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'Accept': 'application/json'
                             }
                         });
                         const json = await res.json();

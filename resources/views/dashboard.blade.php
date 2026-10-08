@@ -2232,7 +2232,9 @@
             </div>
 
             <!-- MODAL 8: FieldDesk Quick Bridge Modal (Tier 2 Fast Pop-up) -->
-            <div x-show="showFieldDeskModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+            <div x-show="showFieldDeskModal" x-cloak
+                 @keydown.escape.window="showFieldDeskModal = false"
+                 class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
                 <div @click.outside="showFieldDeskModal = false" class="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg my-auto max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
                     
                     <!-- Header -->
@@ -2319,12 +2321,14 @@
                                     <div class="flex flex-wrap items-center gap-2 pt-1">
                                         <template x-if="fieldDeskAction.whatsapp_link">
                                             <a :href="fieldDeskAction.whatsapp_link" target="_blank"
+                                               @click="logFieldDeskActivity(fieldDeskAction.id, 'whatsapp_sent', 'WhatsApp reminder initiated from Billing Dashboard')"
                                                class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition active:scale-95">
                                                 <span>💬</span> WhatsApp
                                             </a>
                                         </template>
                                         <template x-if="fieldDeskAction.clean_mobile">
                                             <a :href="'tel:' + fieldDeskAction.clean_mobile"
+                                               @click="logFieldDeskActivity(fieldDeskAction.id, 'call_made', 'Phone call placed from Billing Dashboard')"
                                                class="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition active:scale-95">
                                                 <span>📞</span> Call
                                             </a>
@@ -2356,10 +2360,16 @@
                                     <div>
                                         <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Category</label>
                                         <select x-model="quickDeskForm.category_id" class="w-full py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white">
-                                            <option value="1">💳 Payment Commitment</option>
-                                            <option value="2">🔧 Technical / Grievance</option>
-                                            <option value="3">🚶 Scheduled Visit</option>
-                                            <option value="4">📝 Field Dossier Note</option>
+                                            @if(isset($fieldDeskCategories) && count($fieldDeskCategories) > 0)
+                                                @foreach($fieldDeskCategories as $cat)
+                                                    <option value="{{ $cat->id }}">{{ $cat->icon }} {{ $cat->name }}</option>
+                                                @endforeach
+                                            @else
+                                                <option value="1">💳 Payment Commitment</option>
+                                                <option value="2">🔧 Technical / Grievance</option>
+                                                <option value="3">🚶 Scheduled Visit</option>
+                                                <option value="4">📝 Field Dossier Note</option>
+                                            @endif
                                         </select>
                                     </div>
 
@@ -3851,7 +3861,7 @@
                     this.fieldDeskBill = bill;
                     this.fieldDeskAction = bill.field_desk_action || null;
                     this.quickDeskForm = {
-                        category_id: '1',
+                        category_id: '{{ isset($fieldDeskCategories) && count($fieldDeskCategories) > 0 ? $fieldDeskCategories->first()->id : 1 }}',
                         target_date: new Date().toISOString().split('T')[0],
                         target_amount: bill.total_amount ? Number(bill.total_amount).toFixed(2) : '',
                         priority: 'normal',
@@ -3941,6 +3951,9 @@
 
                 async completeActionFromModal(id) {
                     try {
+                        const collected = (this.fieldDeskAction && this.fieldDeskAction.target_amount > 0)
+                            ? (this.fieldDeskAction.remaining_amount !== undefined && this.fieldDeskAction.remaining_amount !== null ? this.fieldDeskAction.remaining_amount : this.fieldDeskAction.target_amount)
+                            : null;
                         const res = await fetch(`/api/field-desk/actions/${id}/complete`, {
                             method: 'POST',
                             headers: {
@@ -3948,7 +3961,10 @@
                                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
                                 'Accept': 'application/json'
                             },
-                            body: JSON.stringify({ note: 'Resolved from Billing Dashboard' })
+                            body: JSON.stringify({
+                                collected_amount: collected,
+                                note: 'Resolved from Billing Dashboard'
+                            })
                         });
                         const data = await res.json();
                         if (res.ok && data.success) {
@@ -3961,6 +3977,20 @@
                     } catch (err) {
                         this.showToastNotification('❌', 'Error resolving action', null);
                     }
+                },
+
+                async logFieldDeskActivity(id, type, note) {
+                    try {
+                        await fetch(`/api/field-desk/actions/${id}/activity`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({ action_type: type, note: note })
+                        });
+                    } catch (err) {}
                 },
 
                 launchBillingCycle(actionType = 'download_all') {
@@ -4836,6 +4866,12 @@
                             this.openShortcutsModal();
                             return;
                         }
+                    }
+
+                    if (this.showFieldDeskModal && (e.key === 'Escape' || e.key === 'Esc')) {
+                        e.preventDefault();
+                        this.showFieldDeskModal = false;
+                        return;
                     }
 
                     // Do nothing if any modal is open or rebinding

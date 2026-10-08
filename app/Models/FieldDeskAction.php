@@ -49,6 +49,20 @@ class FieldDeskAction extends Model
     ];
 
     /**
+     * The "booted" method of the model.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (FieldDeskAction $action) {
+            if ($action->status === 'completed' && empty($action->resolved_at)) {
+                $action->resolved_at = now();
+            } elseif ($action->isDirty('status') && $action->status !== 'completed') {
+                $action->resolved_at = null;
+            }
+        });
+    }
+
+    /**
      * Get the owner user of this action.
      */
     public function user(): BelongsTo

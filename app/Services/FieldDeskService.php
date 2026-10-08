@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\BillRecord;
 use App\Models\ConsumerAccount;
 use App\Models\FieldDeskAction;
 use App\Models\FieldDeskActivity;
@@ -22,7 +23,7 @@ class FieldDeskService
         $query = FieldDeskAction::query()
             ->withoutGlobalScopes()
             ->where('field_desk_actions.user_id', $userId)
-            ->with(['category', 'consumerAccount', 'mru']);
+            ->with(['category', 'consumerAccount', 'mru', 'user']);
 
         // Timeline filter (today, overdue, upcoming, resolved, all)
         $timeline = $filters['timeline'] ?? 'all_active';
@@ -102,7 +103,12 @@ class FieldDeskService
 
         $resolvedThisMonth = (clone $base)
             ->where('status', 'completed')
-            ->where('resolved_at', '>=', $startOfMonth)
+            ->where(function ($q) use ($startOfMonth) {
+                $q->where('resolved_at', '>=', $startOfMonth)
+                    ->orWhere(function ($sub) use ($startOfMonth) {
+                        $sub->whereNull('resolved_at')->where('updated_at', '>=', $startOfMonth);
+                    });
+            })
             ->count();
 
         return [
@@ -124,8 +130,8 @@ class FieldDeskService
         ?int $userId = null
     ): FieldDeskAction {
         return DB::transaction(function () use ($action, $days, $reason, $userId) {
-            $oldDate = $action->target_date ? Carbon::parse($action->target_date) : Carbon::today();
-            $baseDate = $oldDate->isPast() ? Carbon::today() : $oldDate;
+            $oldDate = $action->target_date ? Carbon::parse($action->target_date)->startOfDay() : Carbon::today();
+            $baseDate = $oldDate->lt(Carbon::today()) ? Carbon::today() : $oldDate;
             $newDate = $baseDate->copy()->addDays($days);
 
             $action->target_date = $newDate->toDateString();
@@ -216,13 +222,13 @@ class FieldDeskService
         }
 
         $cleaned = preg_replace('/\D+/', '', $raw);
+        $cleaned = ltrim($cleaned, '0');
+
         if (strlen($cleaned) === 12 && str_starts_with($cleaned, '91')) {
             $cleaned = substr($cleaned, 2);
-        } elseif (strlen($cleaned) === 11 && str_starts_with($cleaned, '0')) {
-            $cleaned = substr($cleaned, 1);
         }
 
-        return strlen($cleaned) === 10 ? $cleaned : null;
+        return (strlen($cleaned) === 10 && preg_match('/^[6-9]\d{9}$/', $cleaned)) ? $cleaned : null;
     }
 
     /**
@@ -238,21 +244,23 @@ class FieldDeskService
             }
         }
 
-        // 2. Query consumer account by ca_number
-        $account = ConsumerAccount::withoutGlobalScopes()
-            ->where('user_id', $action->user_id)
-            ->where('ca_number', $action->ca_number)
-            ->first();
+        // 2. Query consumer account by ca_number if not linked
+        if (! $action->consumer_account_id) {
+            $account = ConsumerAccount::withoutGlobalScopes()
+                ->where('user_id', $action->user_id)
+                ->where('ca_number', $action->ca_number)
+                ->first();
 
-        if ($account && ! empty($account->mobile)) {
-            $clean = $this->sanitizeMobile($account->mobile);
-            if ($clean) {
-                return $clean;
+            if ($account && ! empty($account->mobile)) {
+                $clean = $this->sanitizeMobile($account->mobile);
+                if ($clean) {
+                    return $clean;
+                }
             }
         }
 
-        // 3. Look in private note for 10-digit phone
-        if (! empty($action->private_note) && preg_match('/(?:91)?[6-9]\d{9}/', $action->private_note, $matches)) {
+        // 3. Look in private note for formatted 10-digit phone
+        if (! empty($action->private_note) && preg_match('/(?:(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5})|(?:(?:\+?91[\s-]?)?[6-9](?:[\s-]?\d){9})/', $action->private_note, $matches)) {
             $clean = $this->sanitizeMobile($matches[0]);
             if ($clean) {
                 return $clean;
@@ -267,11 +275,26 @@ class FieldDeskService
      */
     public function generateWhatsAppText(FieldDeskAction $action): string
     {
-        $consumerName = $action->consumerAccount?->consumer_name ?? 'Consumer';
+        $consumerName = $action->consumerAccount?->consumer_name;
+        if (! $consumerName || $consumerName === 'Consumer') {
+            $billName = BillRecord::withoutGlobalScopes()
+                ->where('user_id', $action->user_id)
+                ->where('ca_number', $action->ca_number)
+                ->latest()
+                ->value('consumer_name');
+            $consumerName = $billName ?: 'Consumer';
+        }
+
         $ca = $action->ca_number;
-        $workerName = $action->user?->name ?? 'Bijli Vibhag Sahayak';
+        $workerName = ($action->relationLoaded('user') && $action->user)
+            ? $action->user->name
+            : (auth()->user()?->name ?? 'Bijli Vibhag Sahayak');
+
         $dateFormatted = $action->target_date ? Carbon::parse($action->target_date)->format('d M Y') : 'aaj';
-        $amountFormatted = number_format((float) ($action->target_amount ?? 0), 2);
+        $dueAmount = ($action->collected_amount > 0 && $action->remaining_amount !== null)
+            ? $action->remaining_amount
+            : (float) ($action->target_amount ?? 0);
+        $amountFormatted = number_format($dueAmount, 2);
         $categoryCode = $action->category?->code ?? 'general_note';
 
         return match ($categoryCode) {

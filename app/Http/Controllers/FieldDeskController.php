@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BillRecord;
 use App\Models\ConsumerAccount;
 use App\Models\FieldDeskAction;
 use App\Models\FieldDeskCategory;
@@ -25,8 +26,23 @@ class FieldDeskController extends Controller
     public function index(Request $request): View
     {
         $userId = (int) Auth::id();
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
+
+        $mrusQuery = Mru::query();
+        if (! $isAdmin) {
+            $mrusQuery->where(function ($query) use ($userId) {
+                $query->where('user_id', $userId)
+                    ->orWhereHas('consumerAccounts', function ($q) use ($userId) {
+                        $q->where('user_id', $userId);
+                    })->orWhereHas('billRecords', function ($q) use ($userId) {
+                        $q->where('user_id', $userId);
+                    });
+            });
+        }
+        $mrus = $mrusQuery->orderBy('code')->get();
+
         $categories = FieldDeskCategory::active()->ordered()->get();
-        $mrus = Mru::where('user_id', $userId)->orderBy('code')->get();
         $counts = $this->fieldDeskService->getSummaryCounts($userId);
         $initialCa = $request->query('ca', '');
 
@@ -135,11 +151,32 @@ class FieldDeskController extends Controller
             'billing_year' => ['nullable', 'integer', 'min:2020', 'max:2040'],
         ]);
 
-        // Auto-link consumer account if exists
+        // Auto-link consumer account if exists, or auto-create from existing BillRecord
         $consumer = ConsumerAccount::withoutGlobalScopes()
             ->where('user_id', $userId)
             ->where('ca_number', $validated['ca_number'])
             ->first();
+
+        if (! $consumer) {
+            $bill = BillRecord::withoutGlobalScopes()
+                ->where('user_id', $userId)
+                ->where('ca_number', $validated['ca_number'])
+                ->latest()
+                ->first();
+
+            if ($bill) {
+                $consumer = ConsumerAccount::create([
+                    'user_id' => $userId,
+                    'ca_number' => trim($validated['ca_number']),
+                    'mru_id' => $bill->mru_id,
+                    'consumer_name' => $bill->consumer_name ?: ('Consumer '.trim($validated['ca_number'])),
+                    'meter_no' => $bill->meter_no,
+                    'tariff_category' => $bill->tariff_category ?? 'DS-II',
+                    'billing_basis' => $bill->billing_basis ?? 'OK',
+                    'baseline_amount' => $bill->total_amount,
+                ]);
+            }
+        }
 
         $action = new FieldDeskAction;
         $action->user_id = $userId;
@@ -245,10 +282,15 @@ class FieldDeskController extends Controller
         $newDate = isset($validated['target_date']) ? Carbon::parse($validated['target_date'])->toDateString() : $oldDate;
 
         $action->fill($validated);
-        $action->save();
 
         // Check if date changed
         if ($oldDate && $newDate && $oldDate !== $newDate) {
+            $action->reschedule_count = (int) $action->reschedule_count + 1;
+            if ($action->status === 'open') {
+                $action->status = 'rescheduled';
+            }
+            $action->save();
+
             $this->fieldDeskService->logActivity(
                 $action,
                 'rescheduled',
@@ -257,10 +299,19 @@ class FieldDeskController extends Controller
                 $userId
             );
         } else {
+            if (isset($validated['status']) && $validated['status'] === 'completed' && empty($action->resolved_at)) {
+                $action->resolved_at = now();
+            }
+            $action->save();
+
+            $activityType = (isset($validated['status']) && $validated['status'] === 'completed')
+                ? 'completed'
+                : 'updated';
+
             $this->fieldDeskService->logActivity(
                 $action,
-                'updated',
-                'Action details modified',
+                $activityType,
+                $activityType === 'completed' ? 'Action marked as completed / resolved' : 'Action details modified',
                 [],
                 $userId
             );
@@ -403,6 +454,7 @@ class FieldDeskController extends Controller
             ->whereIn('status', ['open', 'rescheduled'])
             ->with(['category', 'consumerAccount', 'mru'])
             ->orderBy('target_date', 'asc')
+            ->orderByRaw("CASE priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 WHEN 'low' THEN 4 ELSE 5 END ASC")
             ->first();
 
         $consumer = ConsumerAccount::withoutGlobalScopes()
@@ -410,6 +462,25 @@ class FieldDeskController extends Controller
             ->where('ca_number', $ca)
             ->with('mru')
             ->first();
+
+        if (! $consumer) {
+            $bill = BillRecord::withoutGlobalScopes()
+                ->where('user_id', $userId)
+                ->where('ca_number', $ca)
+                ->with('mru')
+                ->latest()
+                ->first();
+
+            if ($bill) {
+                $consumer = (object) [
+                    'consumer_name' => $bill->consumer_name,
+                    'meter_no' => $bill->meter_no,
+                    'mobile' => null,
+                    'mru' => $bill->mru,
+                    'baseline_amount' => $bill->total_amount,
+                ];
+            }
+        }
 
         $waLink = $activeAction ? $this->fieldDeskService->generateWhatsAppLink($activeAction) : null;
         $waText = $activeAction ? $this->fieldDeskService->generateWhatsAppText($activeAction) : null;

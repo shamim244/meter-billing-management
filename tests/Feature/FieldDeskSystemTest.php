@@ -471,4 +471,232 @@ class FieldDeskSystemTest extends TestCase
         $textVisit = $service->generateWhatsAppText($actionVisit);
         $this->assertStringContainsString('inspection ke liye hum', $textVisit);
     }
+
+    public function test_action_model_lifecycle_auto_sets_and_clears_resolved_at(): void
+    {
+        $category = FieldDeskCategory::where('code', 'payment_promise')->first();
+
+        $action = FieldDeskAction::create([
+            'user_id' => $this->agent->id,
+            'ca_number' => 'CA_LIFECYCLE_101',
+            'category_id' => $category->id,
+            'target_date' => Carbon::today()->toDateString(),
+            'original_target_date' => Carbon::today()->toDateString(),
+            'status' => 'open',
+        ]);
+
+        $this->assertNull($action->resolved_at);
+
+        // Transition to completed -> resolved_at auto-set
+        $action->status = 'completed';
+        $action->save();
+
+        $action->refresh();
+        $this->assertNotNull($action->resolved_at);
+
+        // Transition back to open -> resolved_at cleared
+        $action->status = 'open';
+        $action->save();
+
+        $action->refresh();
+        $this->assertNull($action->resolved_at);
+    }
+
+    public function test_update_action_target_date_increments_reschedule_count_and_status_transition(): void
+    {
+        $category = FieldDeskCategory::where('code', 'payment_promise')->first();
+
+        $action = FieldDeskAction::create([
+            'user_id' => $this->agent->id,
+            'ca_number' => 'CA_UPDATE_202',
+            'category_id' => $category->id,
+            'target_date' => Carbon::today()->toDateString(),
+            'original_target_date' => Carbon::today()->toDateString(),
+            'status' => 'open',
+            'reschedule_count' => 0,
+        ]);
+
+        $newDate = Carbon::today()->addDays(5)->toDateString();
+
+        $response = $this->actingAs($this->agent)->putJson(route('api.field-desk.update', $action->id), [
+            'target_date' => $newDate,
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJson(['success' => true]);
+
+        $action->refresh();
+        $this->assertEquals(1, $action->reschedule_count);
+        $this->assertEquals('rescheduled', $action->status);
+        $this->assertEquals($newDate, $action->target_date->toDateString());
+
+        $this->assertDatabaseHas('field_desk_activities', [
+            'action_id' => $action->id,
+            'action_type' => 'rescheduled',
+        ]);
+    }
+
+    public function test_mobile_sanitizer_rejects_invalid_prefixes_and_sanitizes_complex_formats(): void
+    {
+        $service = app(FieldDeskService::class);
+
+        // Valid mobile formats
+        $this->assertEquals('9876543210', $service->sanitizeMobile('9876543210'));
+        $this->assertEquals('9876543210', $service->sanitizeMobile('+91 98765-43210'));
+        $this->assertEquals('9876543210', $service->sanitizeMobile('09876543210'));
+        $this->assertEquals('9876543210', $service->sanitizeMobile('919876543210'));
+        $this->assertEquals('7876543210', $service->sanitizeMobile('7876543210'));
+        $this->assertEquals('6876543210', $service->sanitizeMobile('6876543210'));
+
+        // Invalid: 10-digit non-mobile (e.g. CA number starting with 1, 2, 3, 4, 5)
+        $this->assertNull($service->sanitizeMobile('1023004157'));
+        $this->assertNull($service->sanitizeMobile('2023004157'));
+        $this->assertNull($service->sanitizeMobile('0000000000'));
+        $this->assertNull($service->sanitizeMobile(''));
+        $this->assertNull($service->sanitizeMobile(null));
+        $this->assertNull($service->sanitizeMobile('12345'));
+    }
+
+    public function test_deterministic_quick_reschedule_from_today_when_action_is_overdue(): void
+    {
+        $category = FieldDeskCategory::where('code', 'payment_promise')->first();
+
+        // Overdue by 5 days
+        $action = FieldDeskAction::create([
+            'user_id' => $this->agent->id,
+            'ca_number' => 'CA_OVERDUE_SNOOZE',
+            'category_id' => $category->id,
+            'target_date' => Carbon::today()->subDays(5)->toDateString(),
+            'original_target_date' => Carbon::today()->subDays(5)->toDateString(),
+            'status' => 'open',
+            'reschedule_count' => 0,
+        ]);
+
+        $service = app(FieldDeskService::class);
+        $updated = $service->quickReschedule($action, 2, 'Snoozed overdue', $this->agent->id);
+
+        // When overdue, base date is today, so target becomes Today + 2 days
+        $this->assertEquals(Carbon::today()->addDays(2)->toDateString(), $updated->target_date->toDateString());
+        $this->assertEquals(1, $updated->reschedule_count);
+        $this->assertEquals('rescheduled', $updated->status);
+    }
+
+    public function test_auto_creates_consumer_account_from_bill_record_if_not_present_on_store(): void
+    {
+        $mru = Mru::create([
+            'user_id' => $this->agent->id,
+            'code' => 'MRU_AUTO_LINK',
+            'name' => 'Auto Link Village',
+            'status' => 'active',
+        ]);
+
+        $bill = BillRecord::create([
+            'user_id' => $this->agent->id,
+            'ca_number' => '10239999999',
+            'mru_id' => $mru->id,
+            'billing_month' => 9,
+            'billing_year' => 2026,
+            'consumer_name' => 'Auto Linked Consumer',
+            'meter_no' => 'MTR-8888',
+            'total_amount' => 1750.00,
+            'tariff_category' => 'DS-II',
+            'billing_basis' => 'OK',
+            'download_status' => 'downloaded',
+            'parse_status' => 'parsed',
+        ]);
+
+        $category = FieldDeskCategory::where('code', 'payment_promise')->first();
+
+        $response = $this->actingAs($this->agent)->postJson(route('api.field-desk.store'), [
+            'ca_number' => '10239999999',
+            'category_id' => $category->id,
+            'target_date' => Carbon::today()->addDays(3)->toDateString(),
+            'target_amount' => 1750.00,
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJson(['success' => true]);
+
+        // Verify consumer_accounts row was created with bill details
+        $this->assertDatabaseHas('consumer_accounts', [
+            'user_id' => $this->agent->id,
+            'ca_number' => '10239999999',
+            'mru_id' => $mru->id,
+            'consumer_name' => 'Auto Linked Consumer',
+            'meter_no' => 'MTR-8888',
+        ]);
+
+        // Verify action linked the newly created consumer_account_id
+        $action = FieldDeskAction::where('ca_number', '10239999999')->first();
+        $this->assertNotNull($action->consumer_account_id);
+        $this->assertEquals($mru->id, $action->mru_id);
+    }
+
+    public function test_for_consumer_falls_back_to_bill_record_details_when_consumer_account_missing(): void
+    {
+        $mru = Mru::create([
+            'user_id' => $this->agent->id,
+            'code' => 'MRU_FALLBACK',
+            'name' => 'Fallback Village',
+            'status' => 'active',
+        ]);
+
+        BillRecord::create([
+            'user_id' => $this->agent->id,
+            'ca_number' => '10237777777',
+            'mru_id' => $mru->id,
+            'billing_month' => 9,
+            'billing_year' => 2026,
+            'consumer_name' => 'Fallback Bill Consumer',
+            'meter_no' => 'MTR-FALLBACK',
+            'total_amount' => 3200.00,
+            'tariff_category' => 'DS-II',
+            'billing_basis' => 'OK',
+            'download_status' => 'downloaded',
+            'parse_status' => 'parsed',
+        ]);
+
+        $response = $this->actingAs($this->agent)
+            ->getJson(route('api.field-desk.consumer', '10237777777'));
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'ca_number' => '10237777777',
+                'consumer' => [
+                    'name' => 'Fallback Bill Consumer',
+                    'meter_no' => 'MTR-FALLBACK',
+                    'mru_code' => 'MRU_FALLBACK',
+                ],
+            ]);
+    }
+
+    public function test_whatsapp_link_with_partial_amount_reflects_remaining_balance(): void
+    {
+        $service = app(FieldDeskService::class);
+        $payCat = FieldDeskCategory::where('code', 'payment_promise')->first();
+
+        $consumer = ConsumerAccount::create([
+            'user_id' => $this->agent->id,
+            'ca_number' => 'CA_PARTIAL_WA',
+            'consumer_name' => 'Partial Consumer',
+            'mobile' => '9876543210',
+        ]);
+
+        $action = FieldDeskAction::create([
+            'user_id' => $this->agent->id,
+            'ca_number' => 'CA_PARTIAL_WA',
+            'consumer_account_id' => $consumer->id,
+            'category_id' => $payCat->id,
+            'target_date' => Carbon::today()->toDateString(),
+            'original_target_date' => Carbon::today()->toDateString(),
+            'target_amount' => 1500.00,
+            'collected_amount' => 500.00,
+            'status' => 'open',
+        ]);
+
+        $text = $service->generateWhatsAppText($action);
+        // Reminds about remaining balance 1,000.00
+        $this->assertStringContainsString('1,000.00', $text);
+    }
 }

@@ -7,6 +7,7 @@ use App\Models\BillRecord;
 use App\Models\BillStatus;
 use App\Models\ConsumerAccount;
 use App\Models\FieldDeskAction;
+use App\Models\FieldDeskCategory;
 use App\Models\MeterReadingHistory;
 use App\Models\Mru;
 use App\Models\SystemSetting;
@@ -245,6 +246,8 @@ class DashboardController extends Controller
             'units_danger_floor' => (int) SystemSetting::get('color_units_danger_floor', 200),
         ];
 
+        $fieldDeskCategories = FieldDeskCategory::active()->ordered()->get();
+
         return view('dashboard', compact(
             'periods',
             'mruPeriodsMap',
@@ -261,7 +264,8 @@ class DashboardController extends Controller
             'activeTags',
             'defaultTag',
             'activeSubscription',
-            'colorSettings'
+            'colorSettings',
+            'fieldDeskCategories'
         ));
     }
 
@@ -713,13 +717,14 @@ class DashboardController extends Controller
 
         // Attach active FieldDesk summary bridge to each paginated bill item
         $itemCas = $items->pluck('ca_number')->filter()->unique()->all();
-        $activeActions = ! empty($itemCas) && $userId
+        $activeActions = ! empty($itemCas) && ($userId || $isAdmin)
             ? FieldDeskAction::withoutGlobalScopes()
-                ->where('user_id', $userId)
+                ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
                 ->whereIn('ca_number', $itemCas)
                 ->whereIn('status', ['open', 'rescheduled'])
                 ->with('category')
                 ->orderBy('target_date', 'asc')
+                ->orderByRaw("CASE priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 WHEN 'low' THEN 4 ELSE 5 END ASC")
                 ->get()
                 ->groupBy('ca_number')
             : collect();
