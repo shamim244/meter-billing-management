@@ -154,6 +154,7 @@ class ServerMigrationSystemTest extends TestCase
         $response->assertSee('Type 1: Shared Hosting', false);
         $response->assertSee('Type 2: Docker', false);
         $response->assertSee('Type 3: Native VPS', false);
+        $response->assertSee('migration-app.js', false);
     }
 
     public function test_admin_can_export_migration_package(): void
