@@ -254,4 +254,31 @@ class PlanDurationManagementAndDayWiseTest extends TestCase
         $response->assertSee('1530');
         $response->assertDontSee('570'); // Disabled duration price (₹570) must NOT be passed or displayed
     }
+
+    public function test_admin_plan_durations_view_obeys_modularity_and_decoupling_standard(): void
+    {
+        $viewPath = resource_path('views/admin/plans/durations.blade.php');
+        $this->assertFileExists($viewPath);
+
+        $lineCount = count(file($viewPath));
+        $this->assertLessThanOrEqual(120, $lineCount, "Master view admin/plans/durations.blade.php has {$lineCount} lines, exceeding the 120 lines master limit.");
+
+        $jsPath = public_path('js/admin/plans/plan-durations-app.js');
+        $this->assertFileExists($jsPath);
+        $jsContent = file_get_contents($jsPath);
+        $this->assertStringNotContainsString('{{', $jsContent, 'External JS file must not contain raw Blade directives.');
+
+        $expectedPartials = [
+            'header.blade.php',
+            'alerts.blade.php',
+            'summary-strip.blade.php',
+            'table.blade.php',
+            'modal-add.blade.php',
+            'modal-edit.blade.php',
+        ];
+
+        foreach ($expectedPartials as $partial) {
+            $this->assertFileExists(resource_path('views/admin/plans/partials/durations/'.$partial));
+        }
+    }
 }
