@@ -1,0 +1,39 @@
+/* 3-Box Meter Reading Containers (Prev, Working, Official PDF) */
+.reading-box-container {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+}
+
+@media (min-width: 640px) {
+    .reading-box-container {
+        gap: 0.75rem;
+    }
+}
+
+.reading-box-item {
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.75rem;
+    border-width: 1px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.reading-input-field {
+    width: 100%;
+    font-family: monospace;
+    font-weight: 800;
+    font-size: 1.125rem;
+    line-height: 1.75rem;
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 0;
+}
+
+.reading-input-field:focus {
+    box-shadow: none;
+}

@@ -1,0 +1,19 @@
+/* Layout & Containers for NBPDCL Main Billing Dashboard */
+.dashboard-viewport {
+    width: 100%;
+    min-height: 100vh;
+}
+
+.sticky-stats-ribbon {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.swipe-card-container {
+    touch-action: pan-y pinch-zoom;
+    user-select: none;
+    -webkit-user-select: none;
+}

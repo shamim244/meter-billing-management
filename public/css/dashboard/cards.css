@@ -1,0 +1,35 @@
+/* Bill Card Component Styles */
+.bill-card {
+    border-radius: 1.5rem;
+    padding: 1rem;
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (min-width: 640px) {
+    .bill-card {
+        padding: 1.25rem;
+    }
+}
+
+.bill-card-interactive {
+    cursor: default;
+}
+
+.bill-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.bill-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 0.75rem;
+    border-top-width: 1px;
+}
