@@ -343,6 +343,9 @@ class WalletSystemTest extends TestCase
         $resShow->assertSeeText('1,000.00');
         $resShow->assertSeeText('Add Balance');
         $resShow->assertSeeText('Deduct Balance');
+        $resShow->assertSee('wallet-show-app.js');
+        $resShow->assertSeeText('Full Ledger Activity (Immutable)');
+        $resShow->assertSeeText('Referral Reward & Program Override');
     }
 
     public function test_admin_can_perform_adjustment_via_http_form(): void
