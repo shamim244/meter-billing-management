@@ -152,5 +152,7 @@ class HostingerMailIntegrationTest extends TestCase
         $response->assertStatus(200);
         $response->assertSee('Live Hostinger Mailbox Inspector');
         $response->assertSee('agent@nexgenhub.site');
+        $response->assertSee('mailbox-app.js');
+        $response->assertSee('mailboxApp()');
     }
 }
