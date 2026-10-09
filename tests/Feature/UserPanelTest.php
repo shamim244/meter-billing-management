@@ -205,4 +205,33 @@ class UserPanelTest extends TestCase
 
         $this->assertDatabaseHas('api_keys', ['id' => $keyId]);
     }
+
+    public function test_user_panel_api_keys_view_obeys_modularity_and_decoupling_standard(): void
+    {
+        $viewPath = resource_path('views/user-panel/api-keys.blade.php');
+        $this->assertFileExists($viewPath);
+
+        $lineCount = count(file($viewPath));
+        $this->assertLessThanOrEqual(120, $lineCount, "Master view user-panel/api-keys.blade.php has {$lineCount} lines, exceeding the 120 lines master limit.");
+
+        $jsPath = public_path('js/user-panel/api-keys-app.js');
+        $this->assertFileExists($jsPath);
+        $jsContent = file_get_contents($jsPath);
+        $this->assertStringNotContainsString('{{', $jsContent, 'External JS file must not contain raw Blade directives.');
+
+        $expectedPartials = [
+            'header.blade.php',
+            'alerts.blade.php',
+            'secret-banner.blade.php',
+            'metrics.blade.php',
+            'table.blade.php',
+            'integration-card.blade.php',
+            'modal-create.blade.php',
+            'modal-revoke.blade.php',
+        ];
+
+        foreach ($expectedPartials as $partial) {
+            $this->assertFileExists(resource_path('views/user-panel/api-keys/partials/'.$partial));
+        }
+    }
 }
