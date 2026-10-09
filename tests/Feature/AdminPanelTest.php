@@ -111,6 +111,8 @@ class AdminPanelTest extends TestCase
         $resSim = $this->actingAs($admin)->get(route('admin.payments.simulator'));
         $resSim->assertStatus(200);
         $resSim->assertSeeText('Sandbox & Gateway Testing Console');
+        $resSim->assertSee('payments-simulator-app.js');
+        $resSim->assertSee('paymentSimulatorApp(window.paymentSimulatorConfig)');
 
         // 6. Gateway Settings
         $resSettings = $this->actingAs($admin)->get(route('admin.payments.settings'));
