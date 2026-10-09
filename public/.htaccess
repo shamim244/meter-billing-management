@@ -18,10 +18,29 @@
     RewriteCond %{REQUEST_URI} (.+)/$
     RewriteRule ^ %1 [L,R=301]
 
+    # Serve pre-compressed .gz files directly if client supports gzip and file exists (Zero-CPU serving)
+    RewriteCond %{HTTP:Accept-Encoding} gzip
+    RewriteCond %{REQUEST_FILENAME}\.gz -s
+    RewriteRule ^(.+)\.(css|js)$ $1\.$2\.gz [L]
+
     # Send Requests To Front Controller...
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
+</IfModule>
+
+# Handle Content-Encoding for pre-compressed static assets
+<IfModule mod_headers.c>
+    <FilesMatch "\.css\.gz$">
+        ForceType text/css
+        Header set Content-Encoding gzip
+        Header append Vary Accept-Encoding
+    </FilesMatch>
+    <FilesMatch "\.js\.gz$">
+        ForceType application/javascript
+        Header set Content-Encoding gzip
+        Header append Vary Accept-Encoding
+    </FilesMatch>
 </IfModule>
 
 # ----------------------------------------------------------------------

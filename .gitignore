@@ -40,4 +40,6 @@ public/VHOST-TEST.txt
 .agents/php_brotli*
 *.dll
 *.pdb
+*.gz
+*.br
 graphify-out/

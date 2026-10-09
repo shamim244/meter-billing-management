@@ -12,21 +12,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <!-- Tailwind CSS & Alpine.js CDNs -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Pre-compiled Production Stylesheet via Vite -->
+    @vite(['resources/css/app.css'])
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="/js/keyboard-shortcuts.js"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Outfit', 'sans-serif'],
-                    }
-                }
-            }
-        }
-    </script>
 </head>
 <body x-data="{ sidebarOpen: false }" class="font-sans antialiased bg-slate-900 text-slate-100 min-h-screen flex flex-col md:flex-row">
 

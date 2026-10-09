@@ -11,14 +11,8 @@
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800,900&display=swap" rel="stylesheet" />
 
-        <!-- Tailwind Dark Mode Config -->
-        <script>
-            tailwind = {
-                darkMode: 'class'
-            }
-        </script>
-        <!-- Tailwind & Alpine CDNs -->
-        <script src="https://cdn.tailwindcss.com"></script>
+        <!-- Pre-compiled Production Stylesheet via Vite -->
+        @vite(['resources/css/app.css'])
         <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
         <script src="/js/keyboard-shortcuts.js"></script>
         <style>

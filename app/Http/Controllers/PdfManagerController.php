@@ -9,6 +9,7 @@ use App\Services\EngineService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
@@ -116,29 +117,83 @@ class PdfManagerController extends Controller
             ->paginate(24)
             ->withQueryString();
 
-        // 3. Compute Live Storage Metrics for User
+        // 3. Compute Live Storage Metrics for User (Cached with 10-minute TTL to prevent disk I/O thrashing)
+        $currentMonth = (int) now()->month;
+        $currentYear = (int) now()->year;
         $userPdfBaseDir = "users/{$userId}/pdfs";
-        $totalBytes = 0;
-        $totalDiskFiles = 0;
 
-        if (Storage::disk('local')->exists($userPdfBaseDir)) {
-            $allFiles = Storage::disk('local')->allFiles($userPdfBaseDir);
-            foreach ($allFiles as $filePath) {
-                if (str_ends_with(strtolower($filePath), '.pdf')) {
-                    $totalDiskFiles++;
-                    $totalBytes += Storage::disk('local')->size($filePath);
+        $storageCache = Cache::remember("user_{$userId}_pdf_storage_stats", 600, function () use ($userId, $userPdfBaseDir, $availableCycles, $currentMonth, $currentYear) {
+            $totalBytes = 0;
+            $totalDiskFiles = 0;
+
+            if (Storage::disk('local')->exists($userPdfBaseDir)) {
+                $allFiles = Storage::disk('local')->allFiles($userPdfBaseDir);
+                foreach ($allFiles as $filePath) {
+                    if (str_ends_with(strtolower($filePath), '.pdf')) {
+                        $totalDiskFiles++;
+                        $totalBytes += Storage::disk('local')->size($filePath);
+                    }
                 }
             }
-        }
 
-        $allUserBillsCount = BillRecord::where('user_id', $userId)->count();
-        $downloadedBillsCount = BillRecord::where('user_id', $userId)
-            ->where('download_status', 'downloaded')
-            ->whereNotNull('pdf_path')
-            ->count();
-        $parsedBillsCount = BillRecord::where('user_id', $userId)
-            ->where('parse_status', 'parsed')
-            ->count();
+            $cycleStats = [];
+            foreach ($availableCycles as $cycle) {
+                $cMonth = (int) $cycle->billing_month;
+                $cYear = (int) $cycle->billing_year;
+                $isCurrent = ($cMonth === $currentMonth && $cYear === $currentYear);
+
+                $cycleBills = BillRecord::where('user_id', $userId)
+                    ->where('billing_month', $cMonth)
+                    ->where('billing_year', $cYear)
+                    ->select('id', 'pdf_path')
+                    ->get();
+
+                $cycleBytes = 0;
+                $cyclePdfCount = 0;
+
+                foreach ($cycleBills as $cb) {
+                    if (! empty($cb->pdf_path) && Storage::disk('local')->exists($cb->pdf_path)) {
+                        $cyclePdfCount++;
+                        $cycleBytes += Storage::disk('local')->size($cb->pdf_path);
+                    }
+                }
+
+                $cycleStats[] = [
+                    'month' => $cMonth,
+                    'year' => $cYear,
+                    'label' => date('F Y', mktime(0, 0, 0, $cMonth, 1, $cYear)),
+                    'is_current' => $isCurrent,
+                    'is_older' => ($cYear < $currentYear) || ($cYear === $currentYear && $cMonth < $currentMonth),
+                    'total_bills' => $cycleBills->count(),
+                    'pdf_count' => $cyclePdfCount,
+                    'total_bytes' => $cycleBytes,
+                    'total_size_formatted' => $this->formatBytes($cycleBytes),
+                ];
+            }
+
+            return [
+                'disk_files_count' => $totalDiskFiles,
+                'total_size_bytes' => $totalBytes,
+                'cycle_stats' => $cycleStats,
+            ];
+        });
+
+        $totalDiskFiles = $storageCache['disk_files_count'];
+        $totalBytes = $storageCache['total_size_bytes'];
+        $cycleStats = $storageCache['cycle_stats'];
+
+        // Single consolidated query for user bill counters
+        $billCounts = BillRecord::where('user_id', $userId)
+            ->selectRaw("
+                COUNT(*) as total_bills,
+                SUM(CASE WHEN download_status = 'downloaded' AND pdf_path IS NOT NULL THEN 1 ELSE 0 END) as downloaded_count,
+                SUM(CASE WHEN parse_status = 'parsed' THEN 1 ELSE 0 END) as parsed_count
+            ")
+            ->first();
+
+        $allUserBillsCount = (int) ($billCounts->total_bills ?? 0);
+        $downloadedBillsCount = (int) ($billCounts->downloaded_count ?? 0);
+        $parsedBillsCount = (int) ($billCounts->parsed_count ?? 0);
 
         $metrics = [
             'total_bills' => $allUserBillsCount,
@@ -174,44 +229,6 @@ class PdfManagerController extends Controller
             ->orderBy('billing_year', 'desc')
             ->pluck('total', 'billing_year')
             ->toArray();
-
-        // 5. Compute Cycle-by-Cycle Storage Breakdown for Old Cycle Purge
-        $currentMonth = (int) now()->month;
-        $currentYear = (int) now()->year;
-        $cycleStats = [];
-
-        foreach ($availableCycles as $cycle) {
-            $cMonth = (int) $cycle->billing_month;
-            $cYear = (int) $cycle->billing_year;
-            $isCurrent = ($cMonth === $currentMonth && $cYear === $currentYear);
-
-            $cycleBills = BillRecord::where('user_id', $userId)
-                ->where('billing_month', $cMonth)
-                ->where('billing_year', $cYear)
-                ->get();
-
-            $cycleBytes = 0;
-            $cyclePdfCount = 0;
-
-            foreach ($cycleBills as $cb) {
-                if (! empty($cb->pdf_path) && Storage::disk('local')->exists($cb->pdf_path)) {
-                    $cyclePdfCount++;
-                    $cycleBytes += Storage::disk('local')->size($cb->pdf_path);
-                }
-            }
-
-            $cycleStats[] = [
-                'month' => $cMonth,
-                'year' => $cYear,
-                'label' => date('F Y', mktime(0, 0, 0, $cMonth, 1, $cYear)),
-                'is_current' => $isCurrent,
-                'is_older' => ($cYear < $currentYear) || ($cYear === $currentYear && $cMonth < $currentMonth),
-                'total_bills' => $cycleBills->count(),
-                'pdf_count' => $cyclePdfCount,
-                'total_bytes' => $cycleBytes,
-                'total_size_formatted' => $this->formatBytes($cycleBytes),
-            ];
-        }
 
         // Attach file sizes for current page items
         foreach ($bills as $b) {
@@ -389,6 +406,8 @@ class PdfManagerController extends Controller
             $totalCount += count($cas);
         }
 
+        $this->clearUserStorageCache($userId);
+
         return response()->json([
             'success' => true,
             'message' => "Re-downloaded {$totalSuccess} out of {$totalCount} selected bills.",
@@ -432,6 +451,8 @@ class PdfManagerController extends Controller
                 'error_message' => null,
             ]);
         }
+
+        $this->clearUserStorageCache($userId);
 
         return response()->json([
             'success' => true,
@@ -599,6 +620,8 @@ class PdfManagerController extends Controller
             }
         }
 
+        $this->clearUserStorageCache($userId);
+
         return response()->json([
             'success' => true,
             'message' => "Storage Sync completed: Resolved {$healedMissing} missing file references and registered {$registeredOrphans} orphaned PDFs.",
@@ -677,6 +700,8 @@ class PdfManagerController extends Controller
         }
 
         $freedFormatted = $this->formatBytes($freedBytes);
+
+        $this->clearUserStorageCache($userId);
 
         return response()->json([
             'success' => true,
@@ -817,11 +842,21 @@ class PdfManagerController extends Controller
             }
         }
 
+        $this->clearUserStorageCache($userId);
+
         return response()->json([
             'success' => true,
             'message' => "Successfully uploaded and processed {$uploadedCount} PDF bill(s).",
             'uploaded_count' => $uploadedCount,
         ]);
+    }
+
+    /**
+     * Clear cached storage statistics for user.
+     */
+    public function clearUserStorageCache(int $userId): void
+    {
+        Cache::forget("user_{$userId}_pdf_storage_stats");
     }
 
     /**
