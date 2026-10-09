@@ -300,4 +300,32 @@ class IssueReportingAndAiTriageTest extends TestCase
             ->assertSee('Sample calculation bug')
             ->assertSee('Fixed algorithm base formula');
     }
+
+    public function test_user_panel_issues_view_obeys_modularity_and_decoupling_standard(): void
+    {
+        $viewPath = resource_path('views/user-panel/issues.blade.php');
+        $this->assertFileExists($viewPath);
+
+        $lineCount = count(file($viewPath));
+        $this->assertLessThanOrEqual(120, $lineCount, "Master view user-panel/issues.blade.php has {$lineCount} lines, exceeding the 120 lines master limit.");
+
+        $jsPath = public_path('js/user-panel/issues-tracker-app.js');
+        $this->assertFileExists($jsPath);
+        $jsContent = file_get_contents($jsPath);
+        $this->assertStringNotContainsString('{{', $jsContent, 'External JS file must not contain raw Blade directives.');
+
+        $expectedPartials = [
+            'header.blade.php',
+            'lookup-card.blade.php',
+            'metrics-cards.blade.php',
+            'filters-bar.blade.php',
+            'tickets-table.blade.php',
+            'details-modal.blade.php',
+            'toast.blade.php',
+        ];
+
+        foreach ($expectedPartials as $partial) {
+            $this->assertFileExists(resource_path('views/user-panel/issues/partials/'.$partial));
+        }
+    }
 }
