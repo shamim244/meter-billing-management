@@ -90,6 +90,10 @@
                                     </span>
                                 </div>
                             </div>
+                            <div class="font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between text-xs">
+                                <span>Included Consumers:</span>
+                                <span class="font-mono text-indigo-600 dark:text-indigo-400 font-black">{{ number_format($plan->included_consumers) }}</span>
+                            </div>
                             <div class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between border-t border-slate-200/60 dark:border-slate-700/60 pt-1.5">
                                 <span>Extra MRU Rate:</span>
                                 <span class="font-mono">₹{{ number_format($plan->extra_mru_rate, 2) }}</span>
