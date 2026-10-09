@@ -63,6 +63,9 @@ class EmailProviderKeyRotationTest extends TestCase
         $response->assertOk();
         $response->assertSee('Server Encryption Key (APP_KEY) Rotated');
         $response->assertSee('Re-enter Credentials');
+        $response->assertSee('email-providers-app.js');
+        $response->assertSee('Configured Email Providers (Fallback Order)');
+        $response->assertSee('Recent Email Delivery Attempts (Last 25)');
 
         // 4. Updating the provider via edit form should re-encrypt config with current APP_KEY
         $updateResponse = $this->actingAs($this->admin)->put(route('admin.notifications.email_providers.update', $provider), [
