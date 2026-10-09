@@ -48,6 +48,8 @@ class AdminShortcutSettingsTest extends TestCase
 
         $response->assertOk()
             ->assertSee('Platform Default Keybindings')
+            ->assertSee('shortcuts-app.js')
+            ->assertSee('adminShortcutsApp(window.adminShortcutsConfig)')
             ->assertSee('Save System Defaults');
     }
 
