@@ -206,6 +206,8 @@ class AdaptiveCompressionTest extends TestCase
         $response->assertSee('Gzip / Deflate (zlib)');
         $response->assertSee('Cascading Fallback Hierarchy');
         $response->assertSee('Live Diagnostic Compression Benchmarker');
+        $response->assertSee('compression-manager-app.js');
+        $response->assertSee('window.compressionConfig');
     }
 
     /**
