@@ -116,6 +116,9 @@ class AdminPanelTest extends TestCase
         $resSettings = $this->actingAs($admin)->get(route('admin.payments.settings'));
         $resSettings->assertStatus(200);
         $resSettings->assertSeeText('Payment Gateway & Channel Settings');
+        $resSettings->assertSee('payment-settings-app.js');
+        $resSettings->assertSee('window.paymentSettingsConfig');
+        $resSettings->assertSeeText('Razorpay PG API Credentials');
     }
 
     public function test_admin_can_simulate_successful_checkout(): void
