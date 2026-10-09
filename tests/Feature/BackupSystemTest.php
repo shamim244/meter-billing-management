@@ -195,6 +195,9 @@ class BackupSystemTest extends TestCase
         $response->assertStatus(200);
         $response->assertSee('Disaster Recovery');
         $response->assertSee('On-Demand Backup Generators');
+        $response->assertSee('backup-manager-app.js');
+        $response->assertSee('Backup Archives Ledger');
+        $response->assertSee('Backup Archive Size');
 
         // Trigger backup via web
         $postResponse = $this->actingAs($this->adminUser)->post(route('admin.backups.store'), [
