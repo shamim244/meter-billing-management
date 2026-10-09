@@ -90,6 +90,8 @@ class CouponCodeManagementSystemTest extends TestCase
         $response->assertStatus(200);
         $response->assertSee('SAVE20');
         $response->assertSee('Coupon Code Campaigns');
+        $response->assertSee('coupons-index-app.js');
+        $response->assertSee('couponsIndexApp()');
     }
 
     public function test_admin_can_create_subscription_discount_coupon(): void
