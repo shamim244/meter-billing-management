@@ -94,4 +94,44 @@ class AdminBillingEngineSettingsTest extends TestCase
 
         $response->assertStatus(403);
     }
+
+    public function test_engine_settings_master_view_is_compact_under_60_lines(): void
+    {
+        $viewPath = resource_path('views/admin/bills/engine-settings.blade.php');
+        $this->assertFileExists($viewPath);
+
+        $lines = file($viewPath, FILE_IGNORE_NEW_LINES);
+        $this->assertLessThan(60, count($lines), 'Master engine-settings.blade.php must be under 60 lines');
+
+        $partials = [
+            'toolbar.blade.php',
+            'alerts.blade.php',
+            'driver-section.blade.php',
+            'extraction-section.blade.php',
+            'spike-filter-section.blade.php',
+            'colorization-section.blade.php',
+            'connection-section.blade.php',
+            'performance-section.blade.php',
+            'diagnostic-sandbox.blade.php',
+        ];
+
+        foreach ($partials as $partial) {
+            $path = resource_path("views/admin/bills/partials/{$partial}");
+            $this->assertFileExists($path, "Partial {$partial} must exist in admin/bills/partials/");
+        }
+    }
+
+    public function test_decoupled_engine_settings_js_exists_and_contains_no_blade_syntax(): void
+    {
+        $jsPath = public_path('js/admin/engine-settings-app.js');
+        $this->assertFileExists($jsPath);
+
+        $jsContent = file_get_contents($jsPath);
+        $this->assertStringContainsString('function engineSettingsManager()', $jsContent);
+        $this->assertStringContainsString('window.engineSettingsConfig', $jsContent);
+
+        $this->assertDoesNotMatchRegularExpression('/\{\{/', $jsContent, 'JS file must not contain raw Blade mustache {{ brackets');
+        $this->assertDoesNotMatchRegularExpression('/\{!!/', $jsContent, 'JS file must not contain raw Blade {!! tags');
+        $this->assertDoesNotMatchRegularExpression('/@json/', $jsContent, 'JS file must not contain @json Blade directive');
+    }
 }
