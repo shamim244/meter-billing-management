@@ -434,4 +434,33 @@ class PlanVisibilityAndPaymentSeparationTest extends TestCase
             $this->assertFileExists(resource_path('views/payments/partials/'.$partial));
         }
     }
+
+    public function test_subscription_purchase_view_obeys_modularity_and_decoupling_standard(): void
+    {
+        $viewPath = resource_path('views/subscription/purchase.blade.php');
+        $this->assertFileExists($viewPath);
+
+        $lineCount = count(file($viewPath));
+        $this->assertLessThanOrEqual(120, $lineCount, "Master view subscription/purchase.blade.php has {$lineCount} lines, exceeding the 120 lines master limit.");
+
+        $jsPath = public_path('js/subscription/purchase-app.js');
+        $this->assertFileExists($jsPath);
+        $jsContent = file_get_contents($jsPath);
+        $this->assertStringNotContainsString('{{', $jsContent, 'External JS file must not contain raw Blade directives.');
+
+        $expectedPartials = [
+            'header.blade.php',
+            'alerts.blade.php',
+            'summary-card.blade.php',
+            'mode-selector.blade.php',
+            'mode-pg.blade.php',
+            'mode-upi.blade.php',
+            'mode-bank.blade.php',
+            'actions.blade.php',
+        ];
+
+        foreach ($expectedPartials as $partial) {
+            $this->assertFileExists(resource_path('views/subscription/purchase/partials/'.$partial));
+        }
+    }
 }
