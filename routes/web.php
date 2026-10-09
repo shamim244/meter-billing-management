@@ -118,6 +118,7 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
         Route::post('/actions/{id}/complete', [FieldDeskController::class, 'complete'])->name('complete')->whereNumber('id');
         Route::post('/actions/{id}/activity', [FieldDeskController::class, 'logActivity'])->name('activity')->whereNumber('id');
         Route::get('/consumer/{ca}', [FieldDeskController::class, 'forConsumer'])->name('consumer');
+        Route::post('/consumer/{ca}/contact', [FieldDeskController::class, 'updateConsumerContact'])->name('consumer.contact');
         Route::get('/categories', [FieldDeskController::class, 'getCategories'])->name('categories');
     });
 

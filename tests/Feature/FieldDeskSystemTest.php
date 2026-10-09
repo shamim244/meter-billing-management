@@ -699,4 +699,108 @@ class FieldDeskSystemTest extends TestCase
         // Reminds about remaining balance 1,000.00
         $this->assertStringContainsString('1,000.00', $text);
     }
+
+    public function test_user_can_create_action_with_gps_coordinates_and_sync_to_consumer_account(): void
+    {
+        $consumer = ConsumerAccount::create([
+            'user_id' => $this->agent->id,
+            'ca_number' => 'CA_GPS_TEST_101',
+            'consumer_name' => 'Geocoded Consumer',
+            'mobile' => '9876500001',
+        ]);
+
+        $category = FieldDeskCategory::where('code', 'payment_promise')->first();
+
+        $response = $this->actingAs($this->agent)->postJson(route('api.field-desk.store'), [
+            'ca_number' => 'CA_GPS_TEST_101',
+            'category_id' => $category->id,
+            'target_date' => Carbon::today()->toDateString(),
+            'priority' => 'high',
+            'latitude' => 26.12345678,
+            'longitude' => 85.98765432,
+            'location_accuracy' => 4.5,
+            'save_to_consumer' => true,
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJson(['success' => true]);
+
+        // Verify action stored coordinates
+        $this->assertDatabaseHas('field_desk_actions', [
+            'ca_number' => 'CA_GPS_TEST_101',
+            'latitude' => 26.12345678,
+            'longitude' => 85.98765432,
+            'location_accuracy' => 4.5,
+        ]);
+
+        // Verify consumer account synced coordinates
+        $consumer->refresh();
+        $this->assertEquals('26.12345678', (string) $consumer->latitude);
+        $this->assertEquals('85.98765432', (string) $consumer->longitude);
+        $this->assertEquals(4.5, (float) $consumer->location_accuracy);
+        $this->assertNotNull($consumer->location_updated_at);
+        $this->assertStringContainsString('https://www.google.com/maps?q=26.12345678,85.98765432', $consumer->map_link);
+    }
+
+    public function test_user_can_update_consumer_contact_and_gps_via_dedicated_endpoint(): void
+    {
+        $consumer = ConsumerAccount::create([
+            'user_id' => $this->agent->id,
+            'ca_number' => 'CA_CONTACT_202',
+            'consumer_name' => 'Contact Update Target',
+        ]);
+
+        $response = $this->actingAs($this->agent)->postJson('/api/field-desk/consumer/CA_CONTACT_202/contact', [
+            'mobile' => '9123456789',
+            'latitude' => 25.61234567,
+            'longitude' => 85.12345678,
+            'location_accuracy' => 6.2,
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'consumer' => [
+                    'mobile' => '9123456789',
+                    'latitude' => 25.61234567,
+                    'longitude' => 85.12345678,
+                    'location_accuracy' => 6.2,
+                ],
+            ]);
+
+        $consumer->refresh();
+        $this->assertEquals('9123456789', $consumer->mobile);
+        $this->assertEquals('25.61234567', (string) $consumer->latitude);
+        $this->assertEquals('85.12345678', (string) $consumer->longitude);
+        $this->assertEquals(6.2, (float) $consumer->location_accuracy);
+        $this->assertNotNull($consumer->location_updated_at);
+    }
+
+    public function test_api_field_desk_consumer_endpoint_returns_gps_and_contact(): void
+    {
+        ConsumerAccount::create([
+            'user_id' => $this->agent->id,
+            'ca_number' => 'CA_ENDPOINT_303',
+            'consumer_name' => 'Endpoint Verification',
+            'mobile' => '9988776655',
+            'latitude' => 26.55555555,
+            'longitude' => 85.44444444,
+            'location_accuracy' => 8.0,
+            'location_updated_at' => Carbon::now(),
+        ]);
+
+        $response = $this->actingAs($this->agent)->getJson(route('api.field-desk.consumer', 'CA_ENDPOINT_303'));
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'ca_number' => 'CA_ENDPOINT_303',
+                'consumer' => [
+                    'mobile' => '9988776655',
+                    'latitude' => 26.55555555,
+                    'longitude' => 85.44444444,
+                    'location_accuracy' => 8.0,
+                ],
+            ]);
+    }
 }

@@ -302,11 +302,38 @@
                                             </span>
                                         </template>
                                         <template x-if="item.mobile">
-                                            <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-mono cursor-pointer hover:underline"
+                                            <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-mono cursor-pointer hover:underline flex items-center gap-1"
                                                   @click="copyText(item.mobile, 'Mobile copied!')"
                                                   title="Click to copy mobile">
                                                 📱 <span x-text="item.mobile"></span>
                                             </span>
+                                        </template>
+                                        <template x-if="!item.mobile">
+                                            <button type="button" @click="openQuickMobileModal(item)"
+                                                    class="px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[10px] font-bold transition flex items-center gap-1"
+                                                    title="Add mobile number for this consumer">
+                                                <span>📱+</span> Add Mobile
+                                            </button>
+                                        </template>
+
+                                        <!-- GPS Coordinates Tag -->
+                                        <template x-if="item.latitude && item.longitude">
+                                            <a :href="item.map_link" target="_blank"
+                                               class="px-2 py-0.5 rounded bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-[10px] font-mono hover:underline flex items-center gap-1"
+                                               :title="'Open GPS Location: ' + item.latitude + ', ' + item.longitude + (item.location_accuracy ? ' (±' + Math.round(item.location_accuracy) + 'm)' : '')">
+                                                <span>📍</span>
+                                                <span x-text="Number(item.latitude).toFixed(4) + ', ' + Number(item.longitude).toFixed(4)"></span>
+                                                <template x-if="item.location_accuracy">
+                                                    <span class="text-[9px] text-rose-500 font-bold" x-text="'(±' + Math.round(item.location_accuracy) + 'm)'"></span>
+                                                </template>
+                                            </a>
+                                        </template>
+                                        <template x-if="!item.latitude">
+                                            <button type="button" @click="openQuickGpsModal(item)"
+                                                    class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-500 hover:text-rose-600 dark:hover:text-rose-300 border border-dashed border-slate-300 dark:border-slate-700 text-[10px] font-bold transition flex items-center gap-1"
+                                                    title="Tag GPS satellite location for this consumer">
+                                                <span>📍+</span> Tag GPS
+                                            </button>
                                         </template>
                                     </div>
                                 </div>
@@ -383,6 +410,15 @@
                                            class="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold shadow-sm transition active:scale-95"
                                            title="Call consumer directly">
                                             <span>📞</span> Call
+                                        </a>
+                                    </template>
+
+                                    <!-- 1-Click GPS Navigation -->
+                                    <template x-if="item.map_link">
+                                        <a :href="item.map_link" target="_blank"
+                                           class="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold shadow-sm transition active:scale-95"
+                                           title="Open GPS navigation in Google Maps">
+                                            <span>📍</span> Map
                                         </a>
                                     </template>
 
@@ -497,14 +533,28 @@
 
                 <form @submit.prevent="submitCreate()" class="space-y-3.5 text-xs">
                     
-                    <!-- CA Number Input -->
-                    <div>
-                        <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Consumer CA Number *</label>
-                        <input type="text"
-                               x-model="form.ca_number"
-                               required
-                               placeholder="e.g. 10230041576"
-                               class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-emerald-500">
+                    <!-- CA Number & Mobile Grid -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Consumer CA Number *</label>
+                            <input type="text"
+                                   x-model="form.ca_number"
+                                   @change="if(form.ca_number) openCreateModal(form.ca_number)"
+                                   required
+                                   placeholder="e.g. 10230041576"
+                                   class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Consumer Mobile (Optional)</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs font-mono">📱 +91</span>
+                                <input type="tel"
+                                       x-model="form.mobile"
+                                       maxlength="10"
+                                       placeholder="10-digit mobile"
+                                       class="w-full pl-14 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-emerald-500">
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Category Picker -->
@@ -586,6 +636,77 @@
                                   rows="2"
                                   placeholder="e.g. PhonePe: 9876543210 • Salary on 10th • 2nd house near temple"
                                   class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"></textarea>
+                    </div>
+
+                    <!-- High-Precision Zero-API GPS Coordinates Box -->
+                    <div class="p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2.5">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                                    <span>📍</span> Consumer GPS Coordinates
+                                </span>
+                                <span class="text-[10px] text-slate-500 dark:text-slate-400">Zero-API satellite geolocation (high precision target &lt; 10m)</span>
+                            </div>
+                            <button type="button"
+                                    @click="captureGpsLocation('create')"
+                                    :disabled="gpsLoading"
+                                    class="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50">
+                                <template x-if="gpsLoading">
+                                    <span class="inline-flex items-center gap-1">
+                                        <svg class="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                                        <span>Locking GPS...</span>
+                                    </span>
+                                </template>
+                                <template x-if="!gpsLoading">
+                                    <span>📍 Capture My GPS</span>
+                                </template>
+                            </button>
+                        </div>
+
+                        <!-- Accuracy & Status Notification -->
+                        <template x-if="form.location_accuracy">
+                            <div class="flex items-center justify-between text-xs p-2 rounded-xl border"
+                                 :class="form.location_accuracy <= 10 ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 text-emerald-700 dark:text-emerald-300' : (form.location_accuracy <= 25 ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 text-amber-700 dark:text-amber-300' : 'bg-orange-50 dark:bg-orange-950/40 border-orange-200 text-orange-700 dark:text-orange-300')">
+                                <span class="font-bold flex items-center gap-1">
+                                    <span x-text="form.location_accuracy <= 10 ? '🟢 High Precision' : (form.location_accuracy <= 25 ? '🟡 Good Accuracy' : '🟠 Moderate Accuracy')"></span>
+                                    <span class="font-mono text-[11px]">(±<span x-text="Math.round(form.location_accuracy)"></span>m radius)</span>
+                                </span>
+                                <template x-if="form.latitude && form.longitude">
+                                    <a :href="'https://www.google.com/maps?q=' + form.latitude + ',' + form.longitude"
+                                       target="_blank"
+                                       class="font-bold underline text-blue-600 dark:text-cyan-400">
+                                        🗺️ Preview in Maps
+                                    </a>
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- Lat/Lng Grid -->
+                        <div class="grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-500 uppercase">Latitude</label>
+                                <input type="number" step="0.00000001" x-model="form.latitude" placeholder="e.g. 26.123456"
+                                       class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-mono text-xs">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-500 uppercase">Longitude</label>
+                                <input type="number" step="0.00000001" x-model="form.longitude" placeholder="e.g. 85.123456"
+                                       class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-mono text-xs">
+                            </div>
+                        </div>
+
+                        <!-- Toggle to store permanently with Consumer Account -->
+                        <div class="flex items-center justify-between pt-1">
+                            <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                <input type="checkbox" x-model="form.save_to_consumer" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                                <span>Save coordinates permanently to Consumer Account</span>
+                            </label>
+                            <button type="button" x-show="form.latitude || form.longitude"
+                                    @click="form.latitude = ''; form.longitude = ''; form.location_accuracy = null"
+                                    class="text-[10px] text-slate-400 hover:text-rose-500">
+                                ✕ Clear
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Modal Actions -->
@@ -776,11 +897,95 @@
                         </div>
                     </div>
 
+                    <!-- Mobile Input -->
+                    <div>
+                        <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Consumer Mobile</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs font-mono">📱 +91</span>
+                            <input type="tel"
+                                   x-model="editForm.mobile"
+                                   maxlength="10"
+                                   placeholder="10-digit mobile number"
+                                   class="w-full pl-14 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono">
+                        </div>
+                    </div>
+
                     <div>
                         <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Private Field Note</label>
                         <textarea x-model="editForm.private_note"
                                   rows="2"
                                   class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"></textarea>
+                    </div>
+
+                    <!-- High-Precision Zero-API GPS Coordinates Box (Edit) -->
+                    <div class="p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2.5">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                                    <span>📍</span> Consumer GPS Coordinates
+                                </span>
+                                <span class="text-[10px] text-slate-500 dark:text-slate-400">Zero-API satellite geolocation (high precision target &lt; 10m)</span>
+                            </div>
+                            <button type="button"
+                                    @click="captureGpsLocation('edit')"
+                                    :disabled="gpsLoading"
+                                    class="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50">
+                                <template x-if="gpsLoading">
+                                    <span class="inline-flex items-center gap-1">
+                                        <svg class="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                                        <span>Locking GPS...</span>
+                                    </span>
+                                </template>
+                                <template x-if="!gpsLoading">
+                                    <span>📍 Capture My GPS</span>
+                                </template>
+                            </button>
+                        </div>
+
+                        <!-- Accuracy & Status Notification -->
+                        <template x-if="editForm.location_accuracy">
+                            <div class="flex items-center justify-between text-xs p-2 rounded-xl border"
+                                 :class="editForm.location_accuracy <= 10 ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 text-emerald-700 dark:text-emerald-300' : (editForm.location_accuracy <= 25 ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 text-amber-700 dark:text-amber-300' : 'bg-orange-50 dark:bg-orange-950/40 border-orange-200 text-orange-700 dark:text-orange-300')">
+                                <span class="font-bold flex items-center gap-1">
+                                    <span x-text="editForm.location_accuracy <= 10 ? '🟢 High Precision' : (editForm.location_accuracy <= 25 ? '🟡 Good Accuracy' : '🟠 Moderate Accuracy')"></span>
+                                    <span class="font-mono text-[11px]">(±<span x-text="Math.round(editForm.location_accuracy)"></span>m radius)</span>
+                                </span>
+                                <template x-if="editForm.latitude && editForm.longitude">
+                                    <a :href="'https://www.google.com/maps?q=' + editForm.latitude + ',' + editForm.longitude"
+                                       target="_blank"
+                                       class="font-bold underline text-blue-600 dark:text-cyan-400">
+                                        🗺️ Preview in Maps
+                                    </a>
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- Lat/Lng Grid -->
+                        <div class="grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-500 uppercase">Latitude</label>
+                                <input type="number" step="0.00000001" x-model="editForm.latitude" placeholder="e.g. 26.123456"
+                                       class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-mono text-xs">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-500 uppercase">Longitude</label>
+                                <input type="number" step="0.00000001" x-model="editForm.longitude" placeholder="e.g. 85.123456"
+                                       class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-mono text-xs">
+                            </div>
+                        </div>
+
+                        <!-- Toggle to store permanently with Consumer Account -->
+                        <div class="flex items-center justify-between pt-1">
+                            <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                <input type="checkbox" x-model="editForm.save_to_consumer" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                                <span>Sync coordinates to Consumer Account</span>
+                            </label>
+                            <button type="button" x-show="editForm.latitude || editForm.longitude"
+                                    @click="editForm.latitude = ''; editForm.longitude = ''; editForm.location_accuracy = null"
+                                    class="text-[10px] text-slate-400 hover:text-rose-500">
+                                ✕ Clear
+                            </button>
+                        </div>
                     </div>
 
                     <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -793,6 +998,104 @@
                     </div>
                 </form>
 
+            </div>
+        </div>
+
+        <!-- 5. QUICK GPS TAGGING MODAL -->
+        <div x-show="modals.quickGps"
+             x-cloak
+             class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div @click.away="modals.quickGps = false"
+                 class="bg-white dark:bg-slate-900 rounded-3xl max-w-sm w-full p-5 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                    <h3 class="text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <span>📍</span> Tag GPS Coordinates
+                    </h3>
+                    <button @click="modals.quickGps = false" class="text-slate-400 hover:text-slate-600 text-sm">✕</button>
+                </div>
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <span class="text-slate-500 dark:text-slate-400">Tagging CA:</span>
+                        <span class="font-bold font-mono text-slate-900 dark:text-white ml-1" x-text="quickGpsForm.ca_number"></span>
+                    </div>
+                    <button type="button"
+                            @click="captureGpsLocation('quick')"
+                            :disabled="gpsLoading"
+                            class="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-md shadow-rose-500/20 disabled:opacity-50">
+                        <template x-if="gpsLoading">
+                            <span class="flex items-center gap-2">
+                                <svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                                <span>Locking Hardware GPS...</span>
+                            </span>
+                        </template>
+                        <template x-if="!gpsLoading">
+                            <span>📍 Capture My Current Position</span>
+                        </template>
+                    </button>
+                    <template x-if="quickGpsForm.location_accuracy">
+                        <div class="p-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-center space-y-1">
+                            <div class="font-mono text-slate-800 dark:text-slate-200 text-xs">
+                                <span x-text="quickGpsForm.latitude"></span>, <span x-text="quickGpsForm.longitude"></span>
+                            </div>
+                            <div class="text-[10px] font-bold"
+                                 :class="quickGpsForm.location_accuracy <= 10 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'"
+                                 x-text="'Precision: ±' + Math.round(quickGpsForm.location_accuracy) + 'm (target < 10m)'"></div>
+                            <a :href="'https://www.google.com/maps?q=' + quickGpsForm.latitude + ',' + quickGpsForm.longitude"
+                               target="_blank"
+                               class="text-[11px] font-bold text-blue-600 dark:text-cyan-400 underline block pt-0.5">
+                                🗺️ Verify in Google Maps
+                            </a>
+                        </div>
+                    </template>
+                    <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <button type="button" @click="modals.quickGps = false" class="px-3 py-1.5 rounded-xl text-slate-500 font-bold">
+                            Cancel
+                        </button>
+                        <button type="button" @click="submitQuickGps()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+                            💾 Save to Consumer
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. QUICK MOBILE UPDATE MODAL -->
+        <div x-show="modals.quickMobile"
+             x-cloak
+             class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div @click.away="modals.quickMobile = false"
+                 class="bg-white dark:bg-slate-900 rounded-3xl max-w-sm w-full p-5 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                    <h3 class="text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <span>📱</span> Update Consumer Mobile
+                    </h3>
+                    <button @click="modals.quickMobile = false" class="text-slate-400 hover:text-slate-600 text-sm">✕</button>
+                </div>
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <span class="text-slate-500 dark:text-slate-400">Updating CA:</span>
+                        <span class="font-bold font-mono text-slate-900 dark:text-white ml-1" x-text="quickMobileForm.ca_number"></span>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">10-Digit Mobile Number</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs font-mono">📱 +91</span>
+                            <input type="tel"
+                                   x-model="quickMobileForm.mobile"
+                                   maxlength="10"
+                                   placeholder="9876543210"
+                                   class="w-full pl-14 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono">
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <button type="button" @click="modals.quickMobile = false" class="px-3 py-1.5 rounded-xl text-slate-500 font-bold">
+                            Cancel
+                        </button>
+                        <button type="button" @click="submitQuickMobile()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+                            💾 Save Mobile
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -836,8 +1139,11 @@
                     create: false,
                     complete: false,
                     timeline: false,
-                    edit: false
+                    edit: false,
+                    quickGps: false,
+                    quickMobile: false
                 },
+                gpsLoading: false,
                 form: {
                     ca_number: '',
                     category_id: '{{ $categories->first()?->id ?? 1 }}',
@@ -846,7 +1152,12 @@
                     mru_id: '',
                     target_amount: '',
                     payment_mode: '',
-                    private_note: ''
+                    private_note: '',
+                    mobile: '',
+                    latitude: '',
+                    longitude: '',
+                    location_accuracy: null,
+                    save_to_consumer: true
                 },
                 editForm: {
                     id: null,
@@ -855,7 +1166,22 @@
                     priority: 'normal',
                     target_amount: '',
                     payment_mode: '',
-                    private_note: ''
+                    private_note: '',
+                    mobile: '',
+                    latitude: '',
+                    longitude: '',
+                    location_accuracy: null,
+                    save_to_consumer: true
+                },
+                quickGpsForm: {
+                    ca_number: '',
+                    latitude: '',
+                    longitude: '',
+                    location_accuracy: null
+                },
+                quickMobileForm: {
+                    ca_number: '',
+                    mobile: ''
                 },
                 completeForm: {
                     id: null,
@@ -933,7 +1259,138 @@
                     this.form.target_amount = '';
                     this.form.payment_mode = '';
                     this.form.private_note = '';
+                    this.form.mobile = '';
+                    this.form.latitude = '';
+                    this.form.longitude = '';
+                    this.form.location_accuracy = null;
+                    this.form.save_to_consumer = true;
                     this.modals.create = true;
+                },
+
+                captureGpsLocation(mode = 'create') {
+                    if (!navigator.geolocation) {
+                        this.showToast('Geolocation is not supported by your browser', '❌');
+                        return;
+                    }
+                    this.gpsLoading = true;
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const lat = Number(position.coords.latitude.toFixed(8));
+                            const lng = Number(position.coords.longitude.toFixed(8));
+                            const acc = position.coords.accuracy ? Number(position.coords.accuracy.toFixed(1)) : null;
+
+                            if (mode === 'create') {
+                                this.form.latitude = lat;
+                                this.form.longitude = lng;
+                                this.form.location_accuracy = acc;
+                            } else if (mode === 'edit') {
+                                this.editForm.latitude = lat;
+                                this.editForm.longitude = lng;
+                                this.editForm.location_accuracy = acc;
+                            } else if (mode === 'quick') {
+                                this.quickGpsForm.latitude = lat;
+                                this.quickGpsForm.longitude = lng;
+                                this.quickGpsForm.location_accuracy = acc;
+                            }
+
+                            this.gpsLoading = false;
+                            const precisionMsg = acc && acc <= 10 ? `🎯 Locked! Sub-10m precision (±${Math.round(acc)}m)` : `📍 Position captured (±${Math.round(acc || 0)}m)`;
+                            this.showToast(precisionMsg, '🟢');
+                        },
+                        (error) => {
+                            this.gpsLoading = false;
+                            let msg = 'Failed to get location';
+                            if (error.code === 1) msg = 'Location permission denied by user';
+                            else if (error.code === 2) msg = 'Position unavailable. Check device GPS';
+                            else if (error.code === 3) msg = 'GPS timeout. Stand under open sky';
+                            this.showToast(msg, '⚠️');
+                        },
+                        {
+                            enableHighAccuracy: true,
+                            timeout: 15000,
+                            maximumAge: 0
+                        }
+                    );
+                },
+
+                openQuickGpsModal(item) {
+                    this.quickGpsForm = {
+                        ca_number: item.ca_number,
+                        latitude: item.latitude || item.consumer_latitude || '',
+                        longitude: item.longitude || item.consumer_longitude || '',
+                        location_accuracy: item.location_accuracy || item.consumer_accuracy || null
+                    };
+                    this.modals.quickGps = true;
+                },
+
+                async submitQuickGps() {
+                    if (!this.quickGpsForm.latitude || !this.quickGpsForm.longitude) {
+                        this.showToast('Please capture or enter coordinates first', '⚠️');
+                        return;
+                    }
+                    try {
+                        const res = await fetch(`/api/field-desk/consumer/${this.quickGpsForm.ca_number}/contact`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                latitude: this.quickGpsForm.latitude,
+                                longitude: this.quickGpsForm.longitude,
+                                location_accuracy: this.quickGpsForm.location_accuracy
+                            })
+                        });
+                        const json = await res.json();
+                        if (json.success) {
+                            this.modals.quickGps = false;
+                            this.showToast('GPS coordinates saved to Consumer! 📍', '✅');
+                            this.fetchData();
+                        } else {
+                            this.showToast(json.message || 'Failed to save coordinates', '⚠️');
+                        }
+                    } catch (e) {
+                        this.showToast('Error saving GPS coordinates', '❌');
+                    }
+                },
+
+                openQuickMobileModal(item) {
+                    this.quickMobileForm = {
+                        ca_number: item.ca_number,
+                        mobile: item.consumer_mobile || ''
+                    };
+                    this.modals.quickMobile = true;
+                },
+
+                async submitQuickMobile() {
+                    if (!this.quickMobileForm.mobile || this.quickMobileForm.mobile.trim().length !== 10) {
+                        this.showToast('Please enter a valid 10-digit mobile number', '⚠️');
+                        return;
+                    }
+                    try {
+                        const res = await fetch(`/api/field-desk/consumer/${this.quickMobileForm.ca_number}/contact`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                mobile: this.quickMobileForm.mobile.trim()
+                            })
+                        });
+                        const json = await res.json();
+                        if (json.success) {
+                            this.modals.quickMobile = false;
+                            this.showToast('Mobile number saved to Consumer! 📱', '✅');
+                            this.fetchData();
+                        } else {
+                            this.showToast(json.message || 'Failed to save mobile', '⚠️');
+                        }
+                    } catch (e) {
+                        this.showToast('Error saving mobile number', '❌');
+                    }
                 },
 
                 async submitCreate() {
@@ -968,7 +1425,12 @@
                         priority: item.priority,
                         target_amount: item.target_amount || '',
                         payment_mode: item.payment_mode || '',
-                        private_note: item.private_note || ''
+                        private_note: item.private_note || '',
+                        mobile: item.consumer_mobile || '',
+                        latitude: item.latitude || item.consumer_latitude || '',
+                        longitude: item.longitude || item.consumer_longitude || '',
+                        location_accuracy: item.location_accuracy || item.consumer_accuracy || null,
+                        save_to_consumer: true
                     };
                     this.modals.edit = true;
                 },

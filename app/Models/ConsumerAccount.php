@@ -29,6 +29,10 @@ class ConsumerAccount extends Model
         'last_working_month',
         'last_working_year',
         'baseline_previous_reading',
+        'latitude',
+        'longitude',
+        'location_accuracy',
+        'location_updated_at',
     ];
 
     protected $casts = [
@@ -36,7 +40,21 @@ class ConsumerAccount extends Model
         'last_working_month' => 'integer',
         'last_working_year' => 'integer',
         'baseline_previous_reading' => 'integer',
+        'latitude' => 'float',
+        'longitude' => 'float',
+        'location_accuracy' => 'float',
+        'location_updated_at' => 'datetime',
     ];
+
+    /**
+     * Get Google Maps navigation link.
+     */
+    public function getMapLinkAttribute(): ?string
+    {
+        return ($this->latitude && $this->longitude)
+            ? "https://www.google.com/maps?q={$this->latitude},{$this->longitude}"
+            : null;
+    }
 
     /**
      * Get initial / baseline reading alias.

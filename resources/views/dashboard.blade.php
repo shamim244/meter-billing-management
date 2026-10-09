@@ -660,6 +660,16 @@
                                                             <span x-text="bill.field_desk_action.is_due_today ? 'Today' : (bill.field_desk_action.is_overdue ? 'Overdue' : bill.field_desk_action.target_date_formatted)"></span>
                                                         </button>
                                                     </template>
+                                                    <template x-if="bill.latitude && bill.longitude">
+                                                        <a :href="bill.map_link || ('https://www.google.com/maps?q=' + bill.latitude + ',' + bill.longitude)"
+                                                           target="_blank"
+                                                           @click.stop
+                                                           class="ml-1 text-[9px] font-mono px-1.5 py-0.2 rounded font-bold inline-flex items-center gap-0.5 bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/60 cursor-pointer"
+                                                           :title="'Open GPS Location in Google Maps' + (bill.location_accuracy ? ' (±' + Math.round(bill.location_accuracy) + 'm)' : '')">
+                                                            <span>📍</span>
+                                                            <span>Map</span>
+                                                        </a>
+                                                    </template>
                                                 </div>
                                             </div>
                                         </div>
@@ -961,6 +971,18 @@
                                                                 </button>
                                                             </template>
                                                         </div>
+
+                                                        <!-- GPS Map Badge - Zero Card Size Expansion -->
+                                                        <template x-if="bill.latitude && bill.longitude">
+                                                            <a :href="bill.map_link || ('https://www.google.com/maps?q=' + bill.latitude + ',' + bill.longitude)"
+                                                               target="_blank"
+                                                               @click.stop
+                                                               class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold font-mono transition bg-rose-500/30 border border-rose-400/70 text-rose-100 hover:bg-rose-500/50 hover:text-white select-none active:scale-95 cursor-pointer"
+                                                               :title="'Open GPS coordinates in Google Maps' + (bill.location_accuracy ? ' (±' + Math.round(bill.location_accuracy) + 'm)' : '')">
+                                                                <span class="text-[9px]">📍</span>
+                                                                <span>Map</span>
+                                                            </a>
+                                                        </template>
                                                     </div>
                                                 </div>
                                             </div>
@@ -2256,6 +2278,54 @@
                         <button type="button" @click="showFieldDeskModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1">✕</button>
                     </div>
 
+                    <!-- Consumer Contact & GPS Quick Bar -->
+                    <div class="px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
+                        <!-- Consumer Mobile -->
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-slate-400 font-bold">📱 Mobile:</span>
+                            <template x-if="fieldDeskBill?.mobile || fieldDeskAction?.consumer_mobile">
+                                <span class="inline-flex items-center gap-1 font-mono font-bold text-slate-800 dark:text-slate-200">
+                                    <span x-text="fieldDeskBill?.mobile || fieldDeskAction?.consumer_mobile"></span>
+                                    <a :href="'tel:' + (fieldDeskBill?.mobile || fieldDeskAction?.consumer_mobile)" class="px-1 text-[11px] text-blue-600 dark:text-cyan-400 hover:underline" title="Call">📞</a>
+                                    <a :href="'https://wa.me/91' + (fieldDeskBill?.mobile || fieldDeskAction?.consumer_mobile)" target="_blank" class="px-1 text-[11px] text-emerald-600 hover:underline" title="WhatsApp">💬</a>
+                                </span>
+                            </template>
+                            <template x-if="!fieldDeskBill?.mobile && !fieldDeskAction?.consumer_mobile">
+                                <span class="text-slate-400 italic">None</span>
+                            </template>
+                        </div>
+
+                        <!-- Consumer GPS Coordinates -->
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-slate-400 font-bold">📍 GPS:</span>
+                            <template x-if="(fieldDeskBill?.latitude && fieldDeskBill?.longitude) || (fieldDeskAction?.latitude && fieldDeskAction?.longitude)">
+                                <span class="inline-flex items-center gap-1">
+                                    <a :href="'https://www.google.com/maps?q=' + (fieldDeskBill?.latitude || fieldDeskAction?.latitude) + ',' + (fieldDeskBill?.longitude || fieldDeskAction?.longitude)"
+                                       target="_blank"
+                                       class="font-mono text-[11px] text-blue-600 dark:text-cyan-400 underline font-bold">
+                                        🗺️ Open Map
+                                    </a>
+                                    <template x-if="fieldDeskBill?.location_accuracy || fieldDeskAction?.location_accuracy">
+                                        <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
+                                            (±<span x-text="Math.round(fieldDeskBill?.location_accuracy || fieldDeskAction?.location_accuracy)"></span>m)
+                                        </span>
+                                    </template>
+                                </span>
+                            </template>
+                            <template x-if="!((fieldDeskBill?.latitude && fieldDeskBill?.longitude) || (fieldDeskAction?.latitude && fieldDeskAction?.longitude))">
+                                <span class="text-slate-400 italic">Not Tagged</span>
+                            </template>
+                            <!-- 1-Click On-the-spot GPS Lock Button -->
+                            <button type="button"
+                                    @click="captureFieldDeskGps(true)"
+                                    :disabled="fieldDeskGpsLoading"
+                                    class="ml-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/40 cursor-pointer disabled:opacity-50">
+                                <span x-show="!fieldDeskGpsLoading">📍 Tag GPS</span>
+                                <span x-show="fieldDeskGpsLoading">🛰️ Locking...</span>
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Body -->
                     <div class="overflow-y-auto p-4 sm:p-6 space-y-4">
                         
@@ -2375,6 +2445,15 @@
                                         </select>
                                     </div>
 
+                                    <!-- Consumer Mobile (Optional override) -->
+                                    <div>
+                                        <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Consumer Mobile (Optional)</label>
+                                        <div class="relative">
+                                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs font-mono">📱 +91</span>
+                                            <input type="tel" x-model="quickDeskForm.mobile" maxlength="10" placeholder="9876543210" class="w-full pl-14 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono">
+                                        </div>
+                                    </div>
+
                                     <div>
                                         <div class="flex items-center justify-between mb-1">
                                             <label class="font-bold text-slate-700 dark:text-slate-300">Target Date</label>
@@ -2405,6 +2484,36 @@
                                     <div>
                                         <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Private Note</label>
                                         <input type="text" x-model="quickDeskForm.private_note" placeholder="e.g. PhonePe: 9876543210 / Visit Sunday after 6pm" class="w-full py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white">
+                                    </div>
+
+                                    <!-- Zero-API Hardware GPS Coordinates Box -->
+                                    <div class="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
+                                        <div class="flex items-center justify-between">
+                                            <label class="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 text-xs">
+                                                <span>📍</span> GPS Coordinates (Sub-10m Satellite Lock)
+                                            </label>
+                                            <button type="button"
+                                                    @click="captureFieldDeskGps(false)"
+                                                    :disabled="fieldDeskGpsLoading"
+                                                    class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs disabled:opacity-50 flex items-center gap-1 cursor-pointer">
+                                                <span x-show="!fieldDeskGpsLoading">📍 Capture GPS</span>
+                                                <span x-show="fieldDeskGpsLoading">🛰️ Locking...</span>
+                                            </button>
+                                        </div>
+                                        <template x-if="quickDeskForm.location_accuracy">
+                                            <div class="text-[11px] flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-bold">
+                                                <span>🟢 Accuracy: ±<span x-text="Math.round(quickDeskForm.location_accuracy)"></span>m</span>
+                                                <a :href="'https://www.google.com/maps?q=' + quickDeskForm.latitude + ',' + quickDeskForm.longitude" target="_blank" class="underline text-blue-600 dark:text-cyan-400">🗺️ Preview Map</a>
+                                            </div>
+                                        </template>
+                                        <div class="grid grid-cols-2 gap-2 text-xs">
+                                            <input type="number" step="0.00000001" x-model="quickDeskForm.latitude" placeholder="Latitude" class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono text-xs">
+                                            <input type="number" step="0.00000001" x-model="quickDeskForm.longitude" placeholder="Longitude" class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono text-xs">
+                                        </div>
+                                        <label class="flex items-center gap-2 cursor-pointer text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                                            <input type="checkbox" x-model="quickDeskForm.save_to_consumer" class="rounded border-slate-300 text-emerald-600">
+                                            <span>Sync coordinates to Consumer Account permanently</span>
+                                        </label>
                                     </div>
 
                                     <button type="button" @click="saveQuickDeskAction()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md shadow-emerald-500/20 transition">
@@ -2614,12 +2723,18 @@
                 fieldDeskBill: null,
                 fieldDeskAction: null,
                 fieldDeskLoading: false,
+                fieldDeskGpsLoading: false,
                 quickDeskForm: {
                     category_id: '1',
                     target_date: new Date().toISOString().split('T')[0],
                     target_amount: '',
                     priority: 'normal',
-                    private_note: ''
+                    private_note: '',
+                    mobile: '',
+                    latitude: '',
+                    longitude: '',
+                    location_accuracy: null,
+                    save_to_consumer: true
                 },
 
                 // Dynamic Counts & Stats
@@ -3867,7 +3982,12 @@
                         target_date: new Date().toISOString().split('T')[0],
                         target_amount: bill.total_amount ? Number(bill.total_amount).toFixed(2) : '',
                         priority: 'normal',
-                        private_note: ''
+                        private_note: '',
+                        mobile: bill.mobile || '',
+                        latitude: bill.latitude || '',
+                        longitude: bill.longitude || '',
+                        location_accuracy: bill.location_accuracy || null,
+                        save_to_consumer: true
                     };
                     this.showFieldDeskModal = true;
                     this.fieldDeskLoading = true;
@@ -3883,12 +4003,89 @@
                                 this.fieldDeskAction = null;
                                 bill.field_desk_action = null;
                             }
+                            if (data.consumer) {
+                                if (data.consumer.mobile) bill.mobile = data.consumer.mobile;
+                                if (data.consumer.latitude) {
+                                    bill.latitude = data.consumer.latitude;
+                                    bill.longitude = data.consumer.longitude;
+                                    bill.location_accuracy = data.consumer.location_accuracy;
+                                    bill.map_link = data.consumer.map_link;
+                                }
+                            }
                         }
                     } catch (err) {
                         console.error('Error fetching FieldDesk consumer action:', err);
                     } finally {
                         this.fieldDeskLoading = false;
                     }
+                },
+
+                captureFieldDeskGps(instantSave = false) {
+                    if (!navigator.geolocation) {
+                        this.showToastNotification('❌', 'Geolocation is not supported by your browser', null);
+                        return;
+                    }
+                    this.fieldDeskGpsLoading = true;
+                    navigator.geolocation.getCurrentPosition(
+                        async (position) => {
+                            const lat = Number(position.coords.latitude.toFixed(8));
+                            const lng = Number(position.coords.longitude.toFixed(8));
+                            const acc = position.coords.accuracy ? Number(position.coords.accuracy.toFixed(1)) : null;
+
+                            this.quickDeskForm.latitude = lat;
+                            this.quickDeskForm.longitude = lng;
+                            this.quickDeskForm.location_accuracy = acc;
+                            this.fieldDeskGpsLoading = false;
+
+                            if (this.fieldDeskBill) {
+                                this.fieldDeskBill.latitude = lat;
+                                this.fieldDeskBill.longitude = lng;
+                                this.fieldDeskBill.location_accuracy = acc;
+                                this.fieldDeskBill.map_link = `https://www.google.com/maps?q=${lat},${lng}`;
+                            }
+
+                            const precisionMsg = acc && acc <= 10 ? `🎯 Locked! Sub-10m precision (±${Math.round(acc)}m)` : `📍 Position captured (±${Math.round(acc || 0)}m)`;
+                            this.showToastNotification('🟢', precisionMsg, null);
+
+                            // Instant save to consumer account if requested
+                            if (instantSave && this.fieldDeskBill) {
+                                try {
+                                    const res = await fetch(`/api/field-desk/consumer/${this.fieldDeskBill.ca_number}/contact`, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'X-CSRF-TOKEN': this.getCsrfToken ? this.getCsrfToken() : '{{ csrf_token() }}',
+                                            'Accept': 'application/json'
+                                        },
+                                        body: JSON.stringify({
+                                            latitude: lat,
+                                            longitude: lng,
+                                            location_accuracy: acc
+                                        })
+                                    });
+                                    const json = await res.json();
+                                    if (json.success) {
+                                        this.showToastNotification('✅', 'GPS coordinates saved to Consumer Account!', null);
+                                    }
+                                } catch (e) {
+                                    console.error('Error saving GPS:', e);
+                                }
+                            }
+                        },
+                        (error) => {
+                            this.fieldDeskGpsLoading = false;
+                            let msg = 'Failed to get location';
+                            if (error.code === 1) msg = 'Location permission denied';
+                            else if (error.code === 2) msg = 'Position unavailable. Check GPS';
+                            else if (error.code === 3) msg = 'GPS timeout. Stand under open sky';
+                            this.showToastNotification('⚠️', msg, null);
+                        },
+                        {
+                            enableHighAccuracy: true,
+                            timeout: 15000,
+                            maximumAge: 0
+                        }
+                    );
                 },
 
                 setQuickDeskPreset(days) {
@@ -3907,7 +4104,12 @@
                             priority: this.quickDeskForm.priority,
                             target_amount: this.quickDeskForm.target_amount,
                             private_note: this.quickDeskForm.private_note,
-                            mru_id: this.fieldDeskBill.mru_id
+                            mru_id: this.fieldDeskBill.mru_id,
+                            mobile: this.quickDeskForm.mobile,
+                            latitude: this.quickDeskForm.latitude,
+                            longitude: this.quickDeskForm.longitude,
+                            location_accuracy: this.quickDeskForm.location_accuracy,
+                            save_to_consumer: this.quickDeskForm.save_to_consumer
                         };
                         const res = await fetch('/api/field-desk/actions', {
                             method: 'POST',
@@ -3921,6 +4123,13 @@
                         const data = await res.json();
                         if (res.ok && data.success) {
                             this.showToastNotification('📋', 'FieldDesk action registered', null);
+                            if (this.quickDeskForm.mobile) this.fieldDeskBill.mobile = this.quickDeskForm.mobile;
+                            if (this.quickDeskForm.latitude && this.quickDeskForm.longitude) {
+                                this.fieldDeskBill.latitude = this.quickDeskForm.latitude;
+                                this.fieldDeskBill.longitude = this.quickDeskForm.longitude;
+                                this.fieldDeskBill.location_accuracy = this.quickDeskForm.location_accuracy;
+                                this.fieldDeskBill.map_link = `https://www.google.com/maps?q=${this.quickDeskForm.latitude},${this.quickDeskForm.longitude}`;
+                            }
                             await this.openFieldDeskModal(this.fieldDeskBill);
                         } else {
                             this.showToastNotification('⚠️', data.message || 'Error saving action', null);

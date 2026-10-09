@@ -415,6 +415,11 @@ class DashboardController extends Controller
             $consumerAcc = $bill->consumerAccount ?? ($consumers[$bill->ca_number] ?? null);
             $bill->mobile = $consumerAcc?->mobile ?: null;
             $bill->consumer_account_id = $consumerAcc?->id ?: null;
+            $bill->latitude = $consumerAcc?->latitude ? (float) $consumerAcc->latitude : null;
+            $bill->longitude = $consumerAcc?->longitude ? (float) $consumerAcc->longitude : null;
+            $bill->location_accuracy = $consumerAcc?->location_accuracy ? (float) $consumerAcc->location_accuracy : null;
+            $bill->location_updated_at = $consumerAcc?->location_updated_at ? $consumerAcc->location_updated_at->format('d M Y, h:i A') : null;
+            $bill->map_link = ($bill->latitude && $bill->longitude) ? "https://www.google.com/maps?q={$bill->latitude},{$bill->longitude}" : null;
             $masterName = $consumerAcc?->consumer_name;
             if (! empty($masterName) && ! str_starts_with($masterName, 'Consumer ')) {
                 $bill->consumer_name = $masterName;
@@ -733,6 +738,11 @@ class DashboardController extends Controller
             /** @var FieldDeskAction|null $action */
             $action = $activeActions->get($item->ca_number)?->first();
             if ($action) {
+                $actLat = $action->effective_latitude;
+                $actLng = $action->effective_longitude;
+                $actAccuracy = $action->effective_accuracy;
+                $actMapLink = $action->map_link;
+
                 $item->field_desk_action = [
                     'id' => $action->id,
                     'category_code' => $action->category?->code ?? 'general_note',
@@ -751,7 +761,18 @@ class DashboardController extends Controller
                     'is_upcoming' => $action->isUpcoming(),
                     'reschedule_count' => (int) $action->reschedule_count,
                     'private_note' => $action->private_note,
+                    'latitude' => $actLat,
+                    'longitude' => $actLng,
+                    'location_accuracy' => $actAccuracy,
+                    'map_link' => $actMapLink,
                 ];
+
+                if (empty($item->latitude) && $actLat && $actLng) {
+                    $item->latitude = $actLat;
+                    $item->longitude = $actLng;
+                    $item->location_accuracy = $actAccuracy;
+                    $item->map_link = $actMapLink;
+                }
             } else {
                 $item->field_desk_action = null;
             }

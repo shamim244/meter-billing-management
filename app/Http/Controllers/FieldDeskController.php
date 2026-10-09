@@ -82,11 +82,25 @@ class FieldDeskController extends Controller
             $waLink = $this->fieldDeskService->generateWhatsAppLink($action);
             $waText = $this->fieldDeskService->generateWhatsAppText($action);
 
+            $lat = $action->effective_latitude;
+            $lng = $action->effective_longitude;
+            $accuracy = $action->effective_accuracy;
+            $mapLink = $action->map_link;
+            $consumerAcc = $action->consumerAccount;
+
             return [
                 'id' => $action->id,
                 'ca_number' => $action->ca_number,
-                'consumer_name' => $action->consumerAccount?->consumer_name ?? 'Consumer '.$action->ca_number,
+                'consumer_name' => $consumerAcc?->consumer_name ?? 'Consumer '.$action->ca_number,
                 'mobile' => $mobile,
+                'latitude' => $lat,
+                'longitude' => $lng,
+                'location_accuracy' => $accuracy,
+                'map_link' => $mapLink,
+                'consumer_latitude' => $consumerAcc?->latitude ? (float) $consumerAcc->latitude : null,
+                'consumer_longitude' => $consumerAcc?->longitude ? (float) $consumerAcc->longitude : null,
+                'consumer_accuracy' => $consumerAcc?->location_accuracy ? (float) $consumerAcc->location_accuracy : null,
+                'consumer_mobile' => $consumerAcc?->mobile,
                 'category_id' => $action->category_id,
                 'category_name' => $action->category?->name ?? 'Action',
                 'category_code' => $action->category?->code ?? 'general_note',
@@ -149,6 +163,11 @@ class FieldDeskController extends Controller
             'mru_id' => ['nullable', 'integer', 'exists:mrus,id'],
             'billing_month' => ['nullable', 'integer', 'min:1', 'max:12'],
             'billing_year' => ['nullable', 'integer', 'min:2020', 'max:2040'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
+            'location_accuracy' => ['nullable', 'numeric', 'min:0'],
+            'save_to_consumer' => ['nullable', 'boolean'],
+            'mobile' => ['nullable', 'string', 'max:20'],
         ]);
 
         // Auto-link consumer account if exists, or auto-create from existing BillRecord
@@ -178,6 +197,22 @@ class FieldDeskController extends Controller
             }
         }
 
+        // Save mobile number to consumer if passed
+        if (! empty($validated['mobile']) && $consumer) {
+            $consumer->mobile = $this->fieldDeskService->sanitizeMobile($validated['mobile']) ?: trim($validated['mobile']);
+            $consumer->save();
+        }
+
+        // Save GPS coordinates to consumer if requested
+        $saveToConsumer = $request->boolean('save_to_consumer', true);
+        if (isset($validated['latitude']) && isset($validated['longitude']) && $consumer && $saveToConsumer) {
+            $consumer->latitude = (float) $validated['latitude'];
+            $consumer->longitude = (float) $validated['longitude'];
+            $consumer->location_accuracy = isset($validated['location_accuracy']) && is_numeric($validated['location_accuracy']) ? (float) $validated['location_accuracy'] : null;
+            $consumer->location_updated_at = now();
+            $consumer->save();
+        }
+
         $action = new FieldDeskAction;
         $action->user_id = $userId;
         $action->ca_number = trim($validated['ca_number']);
@@ -190,6 +225,9 @@ class FieldDeskController extends Controller
         $action->collected_amount = 0.00;
         $action->payment_mode = $validated['payment_mode'] ?? null;
         $action->private_note = $validated['private_note'] ?? null;
+        $action->latitude = isset($validated['latitude']) ? (float) $validated['latitude'] : null;
+        $action->longitude = isset($validated['longitude']) ? (float) $validated['longitude'] : null;
+        $action->location_accuracy = isset($validated['location_accuracy']) && is_numeric($validated['location_accuracy']) ? (float) $validated['location_accuracy'] : null;
         $action->status = 'open';
         $action->reschedule_count = 0;
         $action->mru_id = $validated['mru_id'] ?? $consumer?->mru_id;
@@ -211,7 +249,12 @@ class FieldDeskController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Action created successfully in FieldDesk',
-            'action' => $action,
+            'action' => array_merge($action->toArray(), [
+                'effective_latitude' => $action->effective_latitude,
+                'effective_longitude' => $action->effective_longitude,
+                'location_accuracy' => $action->effective_accuracy,
+                'map_link' => $action->map_link,
+            ]),
         ], 201);
     }
 
@@ -247,8 +290,23 @@ class FieldDeskController extends Controller
 
         return response()->json([
             'success' => true,
-            'action' => $action,
+            'action' => array_merge($action->toArray(), [
+                'effective_latitude' => $action->effective_latitude,
+                'effective_longitude' => $action->effective_longitude,
+                'location_accuracy' => $action->effective_accuracy,
+                'map_link' => $action->map_link,
+            ]),
             'mobile' => $mobile,
+            'consumer' => $action->consumerAccount ? [
+                'id' => $action->consumerAccount->id,
+                'name' => $action->consumerAccount->consumer_name,
+                'mobile' => $action->consumerAccount->mobile,
+                'latitude' => $action->consumerAccount->latitude ? (float) $action->consumerAccount->latitude : null,
+                'longitude' => $action->consumerAccount->longitude ? (float) $action->consumerAccount->longitude : null,
+                'location_accuracy' => $action->consumerAccount->location_accuracy ? (float) $action->consumerAccount->location_accuracy : null,
+                'location_updated_at' => $action->consumerAccount->location_updated_at?->format('d M Y, h:i A'),
+                'map_link' => $action->consumerAccount->map_link,
+            ] : null,
             'whatsapp_link' => $waLink,
             'whatsapp_text' => $waText,
             'activities' => $activities,
@@ -276,12 +334,43 @@ class FieldDeskController extends Controller
             'private_note' => ['nullable', 'string', 'max:1000'],
             'mru_id' => ['nullable', 'integer', 'exists:mrus,id'],
             'status' => ['sometimes', 'in:open,completed,rescheduled,cancelled'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
+            'location_accuracy' => ['nullable', 'numeric', 'min:0'],
+            'save_to_consumer' => ['nullable', 'boolean'],
+            'mobile' => ['nullable', 'string', 'max:20'],
         ]);
 
         $oldDate = $action->target_date ? Carbon::parse($action->target_date)->toDateString() : null;
         $newDate = isset($validated['target_date']) ? Carbon::parse($validated['target_date'])->toDateString() : $oldDate;
 
         $action->fill($validated);
+
+        if (array_key_exists('latitude', $validated)) {
+            $action->latitude = $validated['latitude'] !== null ? (float) $validated['latitude'] : null;
+        }
+        if (array_key_exists('longitude', $validated)) {
+            $action->longitude = $validated['longitude'] !== null ? (float) $validated['longitude'] : null;
+        }
+        if (array_key_exists('location_accuracy', $validated)) {
+            $action->location_accuracy = isset($validated['location_accuracy']) && is_numeric($validated['location_accuracy']) ? (float) $validated['location_accuracy'] : null;
+        }
+
+        // Also update consumer if mobile or coordinates passed
+        $consumer = $action->consumerAccount;
+        if (! empty($validated['mobile']) && $consumer) {
+            $consumer->mobile = $this->fieldDeskService->sanitizeMobile($validated['mobile']) ?: trim($validated['mobile']);
+            $consumer->save();
+        }
+
+        $saveToConsumer = $request->boolean('save_to_consumer', true);
+        if (isset($validated['latitude']) && isset($validated['longitude']) && $consumer && $saveToConsumer) {
+            $consumer->latitude = (float) $validated['latitude'];
+            $consumer->longitude = (float) $validated['longitude'];
+            $consumer->location_accuracy = isset($validated['location_accuracy']) && is_numeric($validated['location_accuracy']) ? (float) $validated['location_accuracy'] : null;
+            $consumer->location_updated_at = now();
+            $consumer->save();
+        }
 
         // Check if date changed
         if ($oldDate && $newDate && $oldDate !== $newDate) {
@@ -320,7 +409,12 @@ class FieldDeskController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Action updated successfully',
-            'action' => $action->fresh(['category', 'consumerAccount', 'mru']),
+            'action' => array_merge($action->fresh(['category', 'consumerAccount', 'mru'])->toArray(), [
+                'effective_latitude' => $action->effective_latitude,
+                'effective_longitude' => $action->effective_longitude,
+                'location_accuracy' => $action->effective_accuracy,
+                'map_link' => $action->map_link,
+            ]),
         ]);
     }
 
@@ -490,6 +584,7 @@ class FieldDeskController extends Controller
             'success' => true,
             'ca_number' => $ca,
             'consumer' => $consumer ? [
+                'id' => $consumer->id ?? null,
                 'name' => $consumer->consumer_name,
                 'meter_no' => $consumer->meter_no,
                 'mobile' => $consumer->mobile,
@@ -497,6 +592,13 @@ class FieldDeskController extends Controller
                 'mru_code' => $consumer->mru?->code,
                 'mru_name' => $consumer->mru?->name,
                 'baseline_amount' => $consumer->baseline_amount,
+                'latitude' => isset($consumer->latitude) && $consumer->latitude !== null ? (float) $consumer->latitude : null,
+                'longitude' => isset($consumer->longitude) && $consumer->longitude !== null ? (float) $consumer->longitude : null,
+                'location_accuracy' => isset($consumer->location_accuracy) && $consumer->location_accuracy !== null ? (float) $consumer->location_accuracy : null,
+                'location_updated_at' => isset($consumer->location_updated_at) && $consumer->location_updated_at ? Carbon::parse($consumer->location_updated_at)->format('d M Y, h:i A') : null,
+                'map_link' => (isset($consumer->latitude) && isset($consumer->longitude) && $consumer->latitude && $consumer->longitude)
+                    ? "https://www.google.com/maps?q={$consumer->latitude},{$consumer->longitude}"
+                    : null,
             ] : null,
             'action' => $activeAction ? [
                 'id' => $activeAction->id,
@@ -518,10 +620,101 @@ class FieldDeskController extends Controller
                 'payment_mode' => $activeAction->payment_mode,
                 'private_note' => $activeAction->private_note,
                 'reschedule_count' => (int) $activeAction->reschedule_count,
+                'latitude' => $activeAction->effective_latitude,
+                'longitude' => $activeAction->effective_longitude,
+                'location_accuracy' => $activeAction->effective_accuracy,
+                'map_link' => $activeAction->map_link,
                 'whatsapp_link' => $waLink,
                 'whatsapp_text' => $waText,
                 'clean_mobile' => $mobile,
             ] : null,
+        ]);
+    }
+
+    /**
+     * Update consumer mobile number and/or GPS coordinates directly.
+     */
+    public function updateConsumerContact(Request $request, string $ca): JsonResponse
+    {
+        $userId = (int) Auth::id();
+        $ca = trim($ca);
+
+        $validated = $request->validate([
+            'mobile' => ['nullable', 'string', 'max:20'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
+            'location_accuracy' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $consumer = ConsumerAccount::withoutGlobalScopes()
+            ->where('user_id', $userId)
+            ->where('ca_number', $ca)
+            ->first();
+
+        if (! $consumer) {
+            $bill = BillRecord::withoutGlobalScopes()
+                ->where('user_id', $userId)
+                ->where('ca_number', $ca)
+                ->latest()
+                ->first();
+
+            if ($bill) {
+                $consumer = ConsumerAccount::create([
+                    'user_id' => $userId,
+                    'ca_number' => $ca,
+                    'mru_id' => $bill->mru_id,
+                    'consumer_name' => $bill->consumer_name ?: ('Consumer '.$ca),
+                    'meter_no' => $bill->meter_no,
+                    'tariff_category' => $bill->tariff_category ?? 'DS-II',
+                    'billing_basis' => $bill->billing_basis ?? 'OK',
+                    'baseline_amount' => $bill->total_amount,
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Consumer account not found for CA: '.$ca,
+                ], 404);
+            }
+        }
+
+        if (array_key_exists('mobile', $validated)) {
+            $consumer->mobile = ! empty($validated['mobile'])
+                ? ($this->fieldDeskService->sanitizeMobile($validated['mobile']) ?: trim($validated['mobile']))
+                : null;
+        }
+
+        if (array_key_exists('latitude', $validated) && array_key_exists('longitude', $validated)) {
+            if ($validated['latitude'] !== null && $validated['longitude'] !== null) {
+                $consumer->latitude = (float) $validated['latitude'];
+                $consumer->longitude = (float) $validated['longitude'];
+                $consumer->location_accuracy = isset($validated['location_accuracy']) && is_numeric($validated['location_accuracy'])
+                    ? (float) $validated['location_accuracy']
+                    : null;
+                $consumer->location_updated_at = now();
+            } else {
+                $consumer->latitude = null;
+                $consumer->longitude = null;
+                $consumer->location_accuracy = null;
+                $consumer->location_updated_at = null;
+            }
+        }
+
+        $consumer->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Consumer contact & location updated successfully',
+            'consumer' => [
+                'id' => $consumer->id,
+                'ca_number' => $consumer->ca_number,
+                'mobile' => $consumer->mobile,
+                'clean_mobile' => $this->fieldDeskService->sanitizeMobile($consumer->mobile),
+                'latitude' => $consumer->latitude ? (float) $consumer->latitude : null,
+                'longitude' => $consumer->longitude ? (float) $consumer->longitude : null,
+                'location_accuracy' => $consumer->location_accuracy ? (float) $consumer->location_accuracy : null,
+                'location_updated_at' => $consumer->location_updated_at?->format('d M Y, h:i A'),
+                'map_link' => $consumer->map_link,
+            ],
         ]);
     }
 

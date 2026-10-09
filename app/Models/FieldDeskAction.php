@@ -28,6 +28,9 @@ class FieldDeskAction extends Model
         'collected_amount',
         'payment_mode',
         'private_note',
+        'latitude',
+        'longitude',
+        'location_accuracy',
         'status',
         'reschedule_count',
         'billing_month',
@@ -42,6 +45,9 @@ class FieldDeskAction extends Model
         'original_target_date' => 'date',
         'target_amount' => 'decimal:2',
         'collected_amount' => 'decimal:2',
+        'latitude' => 'float',
+        'longitude' => 'float',
+        'location_accuracy' => 'float',
         'reschedule_count' => 'integer',
         'billing_month' => 'integer',
         'billing_year' => 'integer',
@@ -211,5 +217,46 @@ class FieldDeskAction extends Model
         }
 
         return max(0.00, (float) $this->target_amount - (float) $this->collected_amount);
+    }
+
+    /**
+     * Get effective latitude (action's own coordinate, or consumer account fallback).
+     */
+    public function getEffectiveLatitudeAttribute(): ?float
+    {
+        return $this->latitude !== null
+            ? (float) $this->latitude
+            : ($this->consumerAccount?->latitude !== null ? (float) $this->consumerAccount->latitude : null);
+    }
+
+    /**
+     * Get effective longitude (action's own coordinate, or consumer account fallback).
+     */
+    public function getEffectiveLongitudeAttribute(): ?float
+    {
+        return $this->longitude !== null
+            ? (float) $this->longitude
+            : ($this->consumerAccount?->longitude !== null ? (float) $this->consumerAccount->longitude : null);
+    }
+
+    /**
+     * Get effective location accuracy in meters.
+     */
+    public function getEffectiveAccuracyAttribute(): ?float
+    {
+        return $this->location_accuracy !== null
+            ? (float) $this->location_accuracy
+            : ($this->consumerAccount?->location_accuracy !== null ? (float) $this->consumerAccount->location_accuracy : null);
+    }
+
+    /**
+     * Get Google Maps navigation link.
+     */
+    public function getMapLinkAttribute(): ?string
+    {
+        $lat = $this->effective_latitude;
+        $lng = $this->effective_longitude;
+
+        return ($lat && $lng) ? "https://www.google.com/maps?q={$lat},{$lng}" : null;
     }
 }

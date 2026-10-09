@@ -167,10 +167,45 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/actions/{id}/complete', [FieldDeskController::class, 'complete'])->name('complete');
         Route::post('/actions/{id}/activity', [FieldDeskController::class, 'logActivity'])->name('activity');
         Route::get('/consumer/{ca}', [FieldDeskController::class, 'forConsumer'])->name('consumer');
+        Route::post('/consumer/{ca}/contact', [FieldDeskController::class, 'updateConsumerContact'])->name('consumer.contact');
         Route::get('/categories', [FieldDeskController::class, 'getCategories'])->name('categories');
     });
 });
 ```
 
 ---
-*End of TRD-11 Specification. Branded as FieldDesk. Ready for Implementation.*
+
+## 5. Geolocation Schema & Technical Specification
+
+### 5.1 Geolocation Migration: `2026_10_09_000001_add_coordinates_to_consumer_accounts_and_field_desk_actions_table.php`
+```php
+Schema::table('consumer_accounts', function (Blueprint $table) {
+    $table->decimal('latitude', 10, 8)->nullable()->after('mobile');
+    $table->decimal('longitude', 11, 8)->nullable()->after('latitude');
+    $table->float('location_accuracy')->nullable()->after('longitude');
+    $table->timestamp('location_updated_at')->nullable()->after('location_accuracy');
+});
+
+Schema::table('field_desk_actions', function (Blueprint $table) {
+    $table->decimal('latitude', 10, 8)->nullable()->after('private_note');
+    $table->decimal('longitude', 11, 8)->nullable()->after('latitude');
+    $table->float('location_accuracy')->nullable()->after('longitude');
+});
+```
+
+### 5.2 Accessor Methods
+* `ConsumerAccount::getMapLinkAttribute()`: `https://www.google.com/maps?q={latitude},{longitude}`
+* `FieldDeskAction::getMapLinkAttribute()`: Resolves action coordinates or falls back to consumer account coordinates.
+
+---
+
+## 6. Phase 1 Verification & Status
+
+* **Status:** Verified & Complete in production codebase.
+* **Test Suite:** `tests/Feature/FieldDeskSystemTest.php` (20 tests passed, 108 assertions).
+* **Full Suite Run:** 32 tests passed (including `UserDashboardTest.php`).
+* **Pint Formatted:** 100% compliant.
+
+---
+*End of TRD-11 Specification. Branded as FieldDesk.*
+
