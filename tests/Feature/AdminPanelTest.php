@@ -96,6 +96,8 @@ class AdminPanelTest extends TestCase
         $resManual = $this->actingAs($admin)->get(route('admin.payments.manual'));
         $resManual->assertStatus(200);
         $resManual->assertSeeText('Manual Payment Verification Queue');
+        $resManual->assertSee('payments-manual-app.js');
+        $resManual->assertSee('paymentsManualApp()');
 
         // 3. Analytics & Reports
         $resAnalytics = $this->actingAs($admin)->get(route('admin.payments.analytics'));
