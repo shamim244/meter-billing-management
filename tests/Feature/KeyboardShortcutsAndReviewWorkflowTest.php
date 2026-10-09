@@ -245,4 +245,15 @@ class KeyboardShortcutsAndReviewWorkflowTest extends TestCase
             ->assertJsonPath('user_shortcuts.copy_ca', 'c')
             ->assertJsonPath('counts.critical', 1);
     }
+
+    public function test_user_can_view_shortcuts_page_with_modular_scripts_and_bridge(): void
+    {
+        $response = $this->actingAs($this->user)->get('/user-panel/shortcuts');
+
+        $response->assertOk()
+            ->assertSeeText('Review Keyboard Shortcuts')
+            ->assertSee('shortcuts-app.js')
+            ->assertSee('userShortcutsApp(window.userShortcutsConfig)')
+            ->assertSee('Active Key Assignments');
+    }
 }
