@@ -66,4 +66,37 @@ class DeveloperPortalTest extends TestCase
         $this->assertArrayHasKey('components', $json);
         $this->assertArrayHasKey('securitySchemes', $json['components']);
     }
+
+    public function test_developer_portal_view_obeys_modularity_and_decoupling_standard(): void
+    {
+        $viewPath = resource_path('views/docs/api.blade.php');
+        $this->assertFileExists($viewPath);
+
+        $lineCount = count(file($viewPath));
+        $this->assertLessThanOrEqual(120, $lineCount, "Master view docs/api.blade.php has {$lineCount} lines, exceeding the 120 lines master limit.");
+
+        $jsPath = public_path('js/docs/api-docs-app.js');
+        $this->assertFileExists($jsPath);
+        $jsContent = file_get_contents($jsPath);
+        $this->assertStringNotContainsString('{{', $jsContent, 'External JS file must not contain raw Blade directives.');
+
+        $cssPath = public_path('css/docs/api-docs.css');
+        $this->assertFileExists($cssPath);
+
+        $expectedPartials = [
+            'header-nav.blade.php',
+            'user-banner.blade.php',
+            'sidebar.blade.php',
+            'quickstart-section.blade.php',
+            'endpoints-catalog-section.blade.php',
+            'reason-codes-section.blade.php',
+            'try-it-out-console.blade.php',
+            'ai-copilot-section.blade.php',
+            'footer.blade.php',
+        ];
+
+        foreach ($expectedPartials as $partial) {
+            $this->assertFileExists(resource_path('views/docs/partials/'.$partial));
+        }
+    }
 }
