@@ -88,6 +88,9 @@ class AdminPanelTest extends TestCase
         $resIndex = $this->actingAs($admin)->get(route('admin.payments.index'));
         $resIndex->assertStatus(200);
         $resIndex->assertSeeText('All Transactions');
+        $resIndex->assertSee('payments-index-app.js');
+        $resIndex->assertSeeText('Pending Verification');
+        $resIndex->assertSeeText('Payment Gateway & Verification Queue');
 
         // 2. Manual Verification Queue
         $resManual = $this->actingAs($admin)->get(route('admin.payments.manual'));
