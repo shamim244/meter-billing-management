@@ -1,5 +1,7 @@
-﻿            <!-- TRUE SLIDING CARD CAROUSEL VIEW -->
-            <div x-show="!loading && items.length > 0 && viewMode === 'card'" class="space-y-6">
+            <!-- TRUE SLIDING CARD CAROUSEL VIEW -->
+            <div x-show="items.length > 0 && viewMode === 'card'"
+                 :class="loading ? 'opacity-40 pointer-events-none transition-opacity duration-150' : 'opacity-100 transition-opacity duration-150'"
+                 class="space-y-6">
                 <!-- Slider Window / Track Container with Swipe Gestures -->
                 <div class="overflow-hidden w-full max-w-lg mx-auto rounded-3xl touch-pan-y touch-pinch-zoom"
                      @touchstart="if ($event.touches && $event.touches.length > 1) { isPinching = true; } else { isPinching = false; touchStartX = $event.changedTouches[0].screenX; touchStartY = $event.changedTouches[0].screenY; }"

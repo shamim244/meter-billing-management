@@ -144,93 +144,69 @@ class DashboardController extends Controller
             $periodBillsQuery->where('mru_id', $selectedMruId);
         }
 
-        // Consolidated aggregate in 1 SQL query
-        $periodBillsAgg = (clone $periodBillsQuery)->selectRaw("
-            COUNT(*) as total_bills,
-            COALESCE(SUM(total_amount), 0) as total_amount,
-            COALESCE(SUM(units_consumed), 0) as total_units,
-            SUM(CASE WHEN pdf_path IS NULL OR download_status != 'downloaded' THEN 1 ELSE 0 END) as missing_pdf
-        ")->first();
+        // Consolidated 1-Query SQL Aggregation for 100% of the dataset in index()
+        $baseIndexQuery = BillRecord::withoutGlobalScope('belongs_to_user')
+            ->leftJoin('bill_statuses', function ($join) use ($userId, $isAdmin, $selectedMonth, $selectedYear) {
+                $join->on('bill_statuses.ca_number', '=', 'bill_records.ca_number')
+                    ->where('bill_statuses.billing_month', '=', $selectedMonth)
+                    ->where('bill_statuses.billing_year', '=', $selectedYear);
+                if (! $isAdmin && $userId) {
+                    $join->where('bill_statuses.user_id', '=', $userId);
+                }
+            })
+            ->leftJoin('consumer_accounts', function ($join) use ($userId, $isAdmin) {
+                $join->on('consumer_accounts.ca_number', '=', 'bill_records.ca_number');
+                if (! $isAdmin && $userId) {
+                    $join->where('consumer_accounts.user_id', '=', $userId);
+                }
+            })
+            ->where('bill_records.billing_month', $selectedMonth)
+            ->where('bill_records.billing_year', $selectedYear);
+
+        if (! $isAdmin && $userId) {
+            $baseIndexQuery->where('bill_records.user_id', $userId);
+        }
+
+        if (! empty($selectedMruId)) {
+            $baseIndexQuery->where('bill_records.mru_id', $selectedMruId);
+        }
+
+        $reviewStatusExpr = "COALESCE(CASE WHEN bill_records.review_status IS NOT NULL AND bill_records.review_status != '' AND bill_records.review_status != 'pending' THEN bill_records.review_status ELSE NULL END, bill_statuses.status, NULLIF(bill_records.review_status, ''), 'pending')";
+        $basisExpr = "UPPER(TRIM(COALESCE(NULLIF(bill_records.billing_basis, ''), NULLIF(consumer_accounts.billing_basis, ''), 'OK')))";
+
+        $periodBillsAgg = (clone $baseIndexQuery)
+            ->selectRaw('COUNT(bill_records.id) as total_bills')
+            ->selectRaw('COALESCE(SUM(bill_records.total_amount), 0) as total_amount')
+            ->selectRaw('COALESCE(SUM(bill_records.units_consumed), 0) as total_units')
+            ->selectRaw("SUM(CASE WHEN bill_records.pdf_path IS NULL OR bill_records.pdf_path = '' OR bill_records.download_status != 'downloaded' THEN 1 ELSE 0 END) as missing_pdf")
+            ->selectRaw("SUM(CASE WHEN ({$reviewStatusExpr}) = 'submitted' THEN 1 ELSE 0 END) as submitted")
+            ->selectRaw("SUM(CASE WHEN ({$reviewStatusExpr}) = 'critical' THEN 1 ELSE 0 END) as critical")
+            ->selectRaw("SUM(CASE WHEN ({$reviewStatusExpr}) = 'doubt' THEN 1 ELSE 0 END) as doubt")
+            ->selectRaw("SUM(CASE WHEN ({$reviewStatusExpr}) = 'pending' THEN 1 ELSE 0 END) as pending")
+            ->selectRaw("SUM(CASE WHEN ({$basisExpr}) = 'OK' THEN 1 ELSE 0 END) as basis_ok")
+            ->selectRaw("SUM(CASE WHEN ({$basisExpr}) = 'LK' THEN 1 ELSE 0 END) as basis_lk")
+            ->selectRaw("SUM(CASE WHEN ({$basisExpr}) = 'MD' THEN 1 ELSE 0 END) as basis_md")
+            ->selectRaw("SUM(CASE WHEN ({$basisExpr}) = 'PL' THEN 1 ELSE 0 END) as basis_pl")
+            ->selectRaw("SUM(CASE WHEN ({$basisExpr}) = 'RN' THEN 1 ELSE 0 END) as basis_rn")
+            ->first();
 
         $totalPeriodBills = (int) ($periodBillsAgg->total_bills ?? 0);
         $totalPeriodAmount = (float) ($periodBillsAgg->total_amount ?? 0);
         $totalPeriodUnits = (int) ($periodBillsAgg->total_units ?? 0);
         $missingPdfCount = (int) ($periodBillsAgg->missing_pdf ?? 0);
 
-        // Status counts for selected month & MRU in 1 SQL query
-        $statusCountsQuery = BillStatus::where('billing_month', $selectedMonth)
-            ->where('billing_year', $selectedYear);
-        if (! $isAdmin && $userId) {
-            $statusCountsQuery->where('user_id', $userId);
-        }
-
-        if (! empty($selectedMruId)) {
-            $statusCountsQuery->where(function ($q) use ($selectedMruId) {
-                $q->whereIn('ca_number', function ($sub) use ($selectedMruId) {
-                    $sub->select('ca_number')->from('consumer_accounts')->where('mru_id', $selectedMruId);
-                })->orWhereIn('ca_number', function ($sub) use ($selectedMruId) {
-                    $sub->select('ca_number')->from('bill_records')->where('mru_id', $selectedMruId);
-                });
-            });
-        }
-
-        $statusAgg = (clone $statusCountsQuery)->selectRaw("
-            SUM(CASE WHEN LOWER(status) = 'submitted' THEN 1 ELSE 0 END) as submitted,
-            SUM(CASE WHEN LOWER(status) = 'critical' THEN 1 ELSE 0 END) as critical,
-            SUM(CASE WHEN LOWER(status) = 'doubt' THEN 1 ELSE 0 END) as doubt
-        ")->first();
-
         $statusCounts = [
-            'submitted' => (int) ($statusAgg->submitted ?? 0),
-            'critical' => (int) ($statusAgg->critical ?? 0),
-            'doubt' => (int) ($statusAgg->doubt ?? 0),
+            'submitted' => (int) ($periodBillsAgg->submitted ?? 0),
+            'critical' => (int) ($periodBillsAgg->critical ?? 0),
+            'doubt' => (int) ($periodBillsAgg->doubt ?? 0),
+            'pending' => (int) ($periodBillsAgg->pending ?? 0),
             'missing_pdf' => $missingPdfCount,
+            'basis_ok' => (int) ($periodBillsAgg->basis_ok ?? 0),
+            'basis_lk' => (int) ($periodBillsAgg->basis_lk ?? 0),
+            'basis_md' => (int) ($periodBillsAgg->basis_md ?? 0),
+            'basis_pl' => (int) ($periodBillsAgg->basis_pl ?? 0),
+            'basis_rn' => (int) ($periodBillsAgg->basis_rn ?? 0),
         ];
-        $statusCounts['pending'] = max(0, $totalPeriodBills - ($statusCounts['submitted'] + $statusCounts['critical'] + $statusCounts['doubt']));
-
-        $statusCounts['basis_ok'] = (clone $periodBillsQuery)->where(function ($q) {
-            $q->where('billing_basis', 'OK')
-                ->orWhere(function ($sub) {
-                    $sub->where(function ($b) {
-                        $b->whereNull('billing_basis')->orWhere('billing_basis', '');
-                    })->where(function ($sub2) {
-                        $sub2->whereDoesntHave('consumerAccount')
-                            ->orWhereHas('consumerAccount', fn ($ca) => $ca->where('billing_basis', 'OK')->orWhereNull('billing_basis')->orWhere('billing_basis', ''));
-                    });
-                });
-        })->count();
-        $statusCounts['basis_lk'] = (clone $periodBillsQuery)->where(function ($q) {
-            $q->where('billing_basis', 'LK')
-                ->orWhere(function ($sub) {
-                    $sub->where(function ($b) {
-                        $b->whereNull('billing_basis')->orWhere('billing_basis', '');
-                    })->whereHas('consumerAccount', fn ($ca) => $ca->where('billing_basis', 'LK'));
-                });
-        })->count();
-        $statusCounts['basis_md'] = (clone $periodBillsQuery)->where(function ($q) {
-            $q->where('billing_basis', 'MD')
-                ->orWhere(function ($sub) {
-                    $sub->where(function ($b) {
-                        $b->whereNull('billing_basis')->orWhere('billing_basis', '');
-                    })->whereHas('consumerAccount', fn ($ca) => $ca->where('billing_basis', 'MD'));
-                });
-        })->count();
-        $statusCounts['basis_pl'] = (clone $periodBillsQuery)->where(function ($q) {
-            $q->where('billing_basis', 'PL')
-                ->orWhere(function ($sub) {
-                    $sub->where(function ($b) {
-                        $b->whereNull('billing_basis')->orWhere('billing_basis', '');
-                    })->whereHas('consumerAccount', fn ($ca) => $ca->where('billing_basis', 'PL'));
-                });
-        })->count();
-        $statusCounts['basis_rn'] = (clone $periodBillsQuery)->where(function ($q) {
-            $q->where('billing_basis', 'RN')
-                ->orWhere(function ($sub) {
-                    $sub->where(function ($b) {
-                        $b->whereNull('billing_basis')->orWhere('billing_basis', '');
-                    })->whereHas('consumerAccount', fn ($ca) => $ca->where('billing_basis', 'RN'));
-                });
-        })->count();
 
         $activeTags = $this->billTagService->getActiveTags();
         $defaultTag = $this->billTagService->getDefaultTag();

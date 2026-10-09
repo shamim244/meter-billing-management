@@ -612,12 +612,20 @@ function dashboardApp() {
                         url.searchParams.append('tuning_steps', JSON.stringify(this.avgTuningSteps));
                     }
 
-                    // If in card view and loading page 1 fresh, fetch 50 records for instant sub-50ms rendering
-                    if (this.viewMode === 'card' && !append) {
+                    // Standard enterprise pagination: 50 records per page for both table and card views
+                    if (!append) {
                         url.searchParams.append('per_page', '50');
                     }
 
-                    return fetch(url)
+                    if (!append && this._fetchDataController) {
+                        try { this._fetchDataController.abort(); } catch (e) {}
+                    }
+                    if (!append) {
+                        this._fetchDataController = new AbortController();
+                    }
+                    const fetchSignal = (!append && this._fetchDataController) ? this._fetchDataController.signal : null;
+
+                    return fetch(url, fetchSignal ? { signal: fetchSignal } : undefined)
                         .then(res => {
                             if (!res.ok) throw new Error('Network response not ok: ' + res.status);
                             return res.json();
@@ -699,13 +707,11 @@ function dashboardApp() {
                             }
                             this.loading = false;
                             this.loadingMoreCards = false;
-
-                            // If in card view and more pages exist, silently prefetch the next batch in background
-                            if (this.viewMode === 'card' && this.pagination.current_page < this.pagination.last_page) {
-                                this.fetchMoreCards();
-                            }
                         })
                         .catch(err => {
+                            if (err && err.name === 'AbortError') {
+                                return; // Stale in-flight request aborted cleanly
+                            }
                             console.warn('fetchData error (server offline/unreachable):', err);
                             this.isServerReachable = false;
                             this.loading = false;

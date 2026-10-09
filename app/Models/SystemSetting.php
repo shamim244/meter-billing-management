@@ -17,6 +17,8 @@ class SystemSetting extends Model
      */
     protected static array $runtimeCache = [];
 
+    protected static bool $isPreloaded = false;
+
     protected $fillable = [
         'key',
         'value',
@@ -30,6 +32,26 @@ class SystemSetting extends Model
     }
 
     /**
+     * Preload all system settings in a single database query.
+     */
+    public static function preloadAll(): void
+    {
+        if (static::$isPreloaded) {
+            return;
+        }
+
+        try {
+            $settings = static::all();
+            foreach ($settings as $setting) {
+                static::$runtimeCache[$setting->key] = $setting->value;
+            }
+            static::$isPreloaded = true;
+        } catch (\Throwable $e) {
+            // Table may not exist yet during migrations
+        }
+    }
+
+    /**
      * Retrieve a setting by key with optional fallback default.
      */
     public static function get(string $key, mixed $default = null): mixed
@@ -38,20 +60,15 @@ class SystemSetting extends Model
             return static::$runtimeCache[$key];
         }
 
-        try {
-            $value = Cache::remember("system_setting_{$key}", 3600, function () use ($key) {
-                $setting = static::where('key', $key)->first();
+        static::preloadAll();
 
-                return $setting ? $setting->value : null;
-            });
-
-            $result = $value !== null ? $value : $default;
-            static::$runtimeCache[$key] = $result;
-
-            return $result;
-        } catch (\Throwable $e) {
-            return $default;
+        if (array_key_exists($key, static::$runtimeCache)) {
+            return static::$runtimeCache[$key];
         }
+
+        static::$runtimeCache[$key] = $default;
+
+        return $default;
     }
 
     /**
@@ -76,5 +93,6 @@ class SystemSetting extends Model
     public static function clearRuntimeCache(): void
     {
         static::$runtimeCache = [];
+        static::$isPreloaded = false;
     }
 }

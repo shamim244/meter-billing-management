@@ -1,5 +1,7 @@
-﻿            <!-- TABLE VIEW -->
-            <div x-show="!loading && items.length > 0 && viewMode === 'table'" class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+            <!-- TABLE VIEW -->
+            <div x-show="items.length > 0 && viewMode === 'table'"
+                 :class="loading ? 'opacity-40 pointer-events-none transition-opacity duration-150' : 'opacity-100 transition-opacity duration-150'"
+                 class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-xs text-slate-600 dark:text-slate-300">
                         <thead class="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">
