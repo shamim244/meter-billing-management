@@ -223,3 +223,38 @@ Before relying on a package's API, confirm its installed version:
 - Run `vendor/bin/phpunit` to call the test runner directly. It accepts the same file path and `--filter=testName` arguments.
 
 </laravel-boost-guidelines>
+
+
+---
+
+# ⚡ PERMANENT PROJECT RULE: ARCHITECTURAL MODULARITY, SPEED & CPU EFFICIENCY
+
+## 🎯 MANDATORY CORE OBJECTIVE: MAXIMAL EFFICIENCY, LOW SERVER COST, ZERO CLUTTER
+
+To prevent technical debt, context window/token exhaust during AI pair programming, and unnecessary server calculation overhead, ALL new implementations, modifications, and refactors MUST strictly follow these universal laws:
+
+### 1. View Modularity Standard (< 120 Lines Master Rule)
+- ❌ **NEVER** write or commit a monolithic Blade template exceeding 120–150 lines.
+- ✅ Break all complex pages into single-responsibility partials under `resources/views/<domain>/partials/` (and subdirectories like `modals/`).
+- Master views must only contain layout tags, modular CSS links, `@include('...')` directives, and `<script>` configuration bridges.
+
+### 2. Zero Inline Script Bloat (<script> Decoupling Rule)
+- ❌ **NEVER** write large inline JavaScript blocks (> 25 lines) or inlined Alpine.js objects inside `.blade.php` files.
+- ✅ Extract all JavaScript application logic into dedicated, browser-cacheable files under `public/js/<domain>/<domain>-app.js`.
+- ✅ Bridge server-side data (routes, CSRF tokens, user settings) cleanly via a single `window.<domain>Config = { ... }` object in the Blade file.
+- The external JS file must contain ZERO Blade syntax (`{{ ... }}`) or raw Blade directives.
+
+### 3. Categorized, Reusable CSS Standard
+- ❌ **NEVER** repeat 30+ Tailwind utility classes across dozens of elements in the same file.
+- ✅ Abstract repeated patterns into semantic CSS files under `public/css/<domain>/` (e.g., cards, reading boxes, badges, modals, tables).
+- Aggregate via `public/css/<domain>/<domain>.css` using `@import` statements.
+
+### 4. Server Calculation Power & Cost Saving Standard
+- **CPU Cycles are Costly:** Prefer static assets, browser caching, and database set-based queries over repetitive PHP CPU calculations.
+- **Cache-Busting & Caching:** All CSS and JS must be cache-busted with filemtime query strings (`?v={{ filemtime(...) }}`) and served with immutable browser cache headers so workers' browsers download them once and never re-request them.
+- **Set-Based Database Writes:** Never write sequential 1-by-1 database save loops in API controllers. Always use bulk `upsert()` and pre-fetched keyed collections.
+
+### 5. Git Safety & Automated Verification
+- Before major structural changes, verify tests pass and check Git status.
+- Add or update automated tests for all architectural changes.
+- Ensure Pint formatting (`vendor/bin/pint --format agent`) is run before finalizing.
