@@ -296,40 +296,171 @@ class DashboardController extends Controller
         $sortCol = $request->get('sort_col', 'ca_number');
         $sortAsc = $request->get('sort_asc', 'true') === 'true' || $request->get('sort_asc', true) === true;
 
-        $baseQuery = BillRecord::with(['mru', 'consumerAccount'])
-            ->where('billing_month', $month)
-            ->where('billing_year', $year);
+        $baseQuery = BillRecord::withoutGlobalScope('belongs_to_user')
+            ->leftJoin('bill_statuses', function ($join) use ($userId, $isAdmin, $month, $year) {
+                $join->on('bill_statuses.ca_number', '=', 'bill_records.ca_number')
+                    ->where('bill_statuses.billing_month', '=', $month)
+                    ->where('bill_statuses.billing_year', '=', $year);
+                if (! $isAdmin && $userId) {
+                    $join->where('bill_statuses.user_id', '=', $userId);
+                }
+            })
+            ->leftJoin('consumer_accounts', function ($join) use ($userId, $isAdmin) {
+                $join->on('consumer_accounts.ca_number', '=', 'bill_records.ca_number');
+                if (! $isAdmin && $userId) {
+                    $join->where('consumer_accounts.user_id', '=', $userId);
+                }
+            })
+            ->where('bill_records.billing_month', $month)
+            ->where('bill_records.billing_year', $year);
 
         if (! $isAdmin && $userId) {
-            $baseQuery->where('user_id', $userId);
+            $baseQuery->where('bill_records.user_id', $userId);
         }
 
         if (! empty($mruId)) {
-            $baseQuery->where('mru_id', $mruId);
+            $baseQuery->where('bill_records.mru_id', $mruId);
         }
 
         if (! empty($search)) {
             $escapedSearch = addcslashes($search, '%_\\');
             $baseQuery->where(function ($q) use ($escapedSearch) {
-                $q->where('ca_number', 'like', "%{$escapedSearch}%")
-                    ->orWhere('consumer_name', 'like', "%{$escapedSearch}%")
-                    ->orWhere('meter_no', 'like', "%{$escapedSearch}%")
-                    ->orWhere('tariff_category', 'like', "%{$escapedSearch}%")
-                    ->orWhereHas('consumerAccount', function ($caQ) use ($escapedSearch) {
-                        $caQ->where('consumer_name', 'like', "%{$escapedSearch}%")
-                            ->orWhere('meter_no', 'like', "%{$escapedSearch}%")
-                            ->orWhere('tariff_category', 'like', "%{$escapedSearch}%")
-                            ->orWhere('billing_basis', 'like', "%{$escapedSearch}%")
-                            ->orWhere('mobile', 'like', "%{$escapedSearch}%");
-                    });
+                $q->where('bill_records.ca_number', 'like', "%{$escapedSearch}%")
+                    ->orWhere('bill_records.consumer_name', 'like', "%{$escapedSearch}%")
+                    ->orWhere('bill_records.meter_no', 'like', "%{$escapedSearch}%")
+                    ->orWhere('bill_records.tariff_category', 'like', "%{$escapedSearch}%")
+                    ->orWhere('consumer_accounts.consumer_name', 'like', "%{$escapedSearch}%")
+                    ->orWhere('consumer_accounts.meter_no', 'like', "%{$escapedSearch}%")
+                    ->orWhere('consumer_accounts.tariff_category', 'like', "%{$escapedSearch}%")
+                    ->orWhere('consumer_accounts.billing_basis', 'like', "%{$escapedSearch}%")
+                    ->orWhere('consumer_accounts.mobile', 'like', "%{$escapedSearch}%");
             });
         }
 
-        $allRecords = $baseQuery->get();
+        $reviewStatusExpr = "COALESCE(CASE WHEN bill_records.review_status IS NOT NULL AND bill_records.review_status != '' AND bill_records.review_status != 'pending' THEN bill_records.review_status ELSE NULL END, bill_statuses.status, NULLIF(bill_records.review_status, ''), 'pending')";
+        $basisExpr = "UPPER(TRIM(COALESCE(NULLIF(bill_records.billing_basis, ''), NULLIF(consumer_accounts.billing_basis, ''), 'OK')))";
+        $tagExpr = "UPPER(TRIM(COALESCE(CASE WHEN bill_records.tag IS NOT NULL AND bill_records.tag != '' AND UPPER(bill_records.tag) != 'OK' THEN bill_records.tag ELSE NULL END, bill_statuses.tag, NULLIF(bill_records.tag, ''), 'OK')))";
 
-        $caNumbers = $allRecords->pluck('ca_number')->unique()->values();
+        $consumersQuery = ConsumerAccount::query();
+        if (! $isAdmin && $userId) {
+            $consumersQuery->where('user_id', $userId);
+        }
+        if (! empty($mruId)) {
+            $consumersQuery->where('mru_id', $mruId);
+        }
+        $totalConsumers = $consumersQuery->count();
 
-        // Get user statuses & remarks for this period
+        // 1-Query SQL Aggregation for 100% of the dataset
+        $stats = (clone $baseQuery)
+            ->selectRaw('COUNT(bill_records.id) as count_all')
+            ->selectRaw("SUM(CASE WHEN ({$reviewStatusExpr}) = 'pending' THEN 1 ELSE 0 END) as count_pending")
+            ->selectRaw("SUM(CASE WHEN ({$reviewStatusExpr}) = 'submitted' THEN 1 ELSE 0 END) as count_submitted")
+            ->selectRaw("SUM(CASE WHEN ({$reviewStatusExpr}) = 'critical' THEN 1 ELSE 0 END) as count_critical")
+            ->selectRaw("SUM(CASE WHEN ({$reviewStatusExpr}) = 'doubt' THEN 1 ELSE 0 END) as count_doubt")
+            ->selectRaw("SUM(CASE WHEN bill_records.pdf_path IS NULL OR bill_records.pdf_path = '' OR bill_records.download_status != 'downloaded' THEN 1 ELSE 0 END) as count_missing_pdf")
+            ->selectRaw("SUM(CASE WHEN ({$basisExpr}) = 'OK' THEN 1 ELSE 0 END) as count_basis_ok")
+            ->selectRaw("SUM(CASE WHEN ({$basisExpr}) = 'LK' THEN 1 ELSE 0 END) as count_basis_lk")
+            ->selectRaw("SUM(CASE WHEN ({$basisExpr}) = 'MD' THEN 1 ELSE 0 END) as count_basis_md")
+            ->selectRaw("SUM(CASE WHEN ({$basisExpr}) = 'PL' THEN 1 ELSE 0 END) as count_basis_pl")
+            ->selectRaw("SUM(CASE WHEN ({$basisExpr}) = 'RN' THEN 1 ELSE 0 END) as count_basis_rn")
+            ->selectRaw('SUM(COALESCE(bill_records.units_consumed, 0)) as sum_units')
+            ->selectRaw('SUM(COALESCE(bill_records.total_amount, 0)) as sum_amount')
+            ->first();
+
+        $counts = [
+            'all' => (int) ($stats->count_all ?? 0),
+            'pending' => (int) ($stats->count_pending ?? 0),
+            'submitted' => (int) ($stats->count_submitted ?? 0),
+            'critical' => (int) ($stats->count_critical ?? 0),
+            'doubt' => (int) ($stats->count_doubt ?? 0),
+            'missing_pdf' => (int) ($stats->count_missing_pdf ?? 0),
+            'total_consumers' => $totalConsumers,
+            'basis_ok' => (int) ($stats->count_basis_ok ?? 0),
+            'basis_lk' => (int) ($stats->count_basis_lk ?? 0),
+            'basis_md' => (int) ($stats->count_basis_md ?? 0),
+            'basis_pl' => (int) ($stats->count_basis_pl ?? 0),
+            'basis_rn' => (int) ($stats->count_basis_rn ?? 0),
+        ];
+
+        $filteredUnits = (float) ($stats->sum_units ?? 0);
+        $filteredAmount = (float) ($stats->sum_amount ?? 0);
+
+        // Apply filters in database across 100% of data
+        $tagFilter = $request->get('tag_filter', $request->get('tag', 'all'));
+        $basisFilter = strtoupper(trim((string) $request->get('basis_filter', $request->get('basis', 'all'))));
+
+        $filteredQuery = clone $baseQuery;
+
+        if (! empty($filter) && $filter !== 'all') {
+            $filteredQuery->whereRaw("({$reviewStatusExpr}) = ?", [$filter]);
+        }
+
+        if (! empty($tagFilter) && $tagFilter !== 'all') {
+            $filteredQuery->whereRaw("({$tagExpr}) = ?", [strtoupper($tagFilter)]);
+        }
+
+        if (! empty($basisFilter) && $basisFilter !== 'ALL') {
+            $filteredQuery->whereRaw("({$basisExpr}) = ?", [$basisFilter]);
+        }
+
+        $totalMatching = (clone $filteredQuery)->count('bill_records.id');
+        $totalPages = max(1, (int) ceil($totalMatching / $perPage));
+        $page = min($page, $totalPages);
+        $offset = ($page - 1) * $perPage;
+
+        // Status Priority Sort Weights in SQL
+        $statusWeightSql = null;
+        if ($statusSort === 'pdcs') {
+            $statusWeightSql = "CASE ({$reviewStatusExpr}) WHEN 'pending' THEN 1 WHEN 'doubt' THEN 2 WHEN 'critical' THEN 3 WHEN 'submitted' THEN 4 ELSE 99 END";
+        } elseif ($statusSort === 'dcps') {
+            $statusWeightSql = "CASE ({$reviewStatusExpr}) WHEN 'doubt' THEN 1 WHEN 'critical' THEN 2 WHEN 'pending' THEN 3 WHEN 'submitted' THEN 4 ELSE 99 END";
+        } elseif ($statusSort === 'cdps') {
+            $statusWeightSql = "CASE ({$reviewStatusExpr}) WHEN 'critical' THEN 1 WHEN 'doubt' THEN 2 WHEN 'pending' THEN 3 WHEN 'submitted' THEN 4 ELSE 99 END";
+        } elseif ($statusSort === 'spdc') {
+            $statusWeightSql = "CASE ({$reviewStatusExpr}) WHEN 'submitted' THEN 1 WHEN 'pending' THEN 2 WHEN 'doubt' THEN 3 WHEN 'critical' THEN 4 ELSE 99 END";
+        }
+
+        if ($statusWeightSql) {
+            $filteredQuery->orderByRaw("{$statusWeightSql} ASC");
+        }
+
+        $dir = $sortAsc ? 'ASC' : 'DESC';
+        $numericCols = ['working_reading', 'current_reading', 'previous_reading', 'units_consumed', 'units', 'total_amount', 'amount', 'basis_priority', 'review_status', 'status'];
+
+        if (in_array($sortCol, $numericCols, true)) {
+            match ($sortCol) {
+                'working_reading' => $filteredQuery->orderByRaw("(bill_records.working_reading + 0) {$dir}"),
+                'current_reading' => $filteredQuery->orderByRaw("(bill_records.current_reading + 0) {$dir}"),
+                'previous_reading' => $filteredQuery->orderByRaw("(bill_records.previous_reading + 0) {$dir}"),
+                'units_consumed', 'units' => $filteredQuery->orderByRaw("bill_records.units_consumed {$dir}"),
+                'total_amount', 'amount' => $filteredQuery->orderByRaw("bill_records.total_amount {$dir}"),
+                'basis_priority' => $filteredQuery->orderByRaw("CASE ({$basisExpr}) WHEN 'OK' THEN 1 WHEN 'LK' THEN 2 WHEN 'MD' THEN 3 WHEN 'PL' THEN 4 WHEN 'RN' THEN 5 ELSE 6 END {$dir}"),
+                'review_status', 'status' => $filteredQuery->orderByRaw("CASE ({$reviewStatusExpr}) WHEN 'pending' THEN 1 WHEN 'doubt' THEN 2 WHEN 'critical' THEN 3 WHEN 'submitted' THEN 4 ELSE 5 END {$dir}"),
+                default => null,
+            };
+        } else {
+            match ($sortCol) {
+                'consumer_name', 'name' => $filteredQuery->orderByRaw("COALESCE(CASE WHEN consumer_accounts.consumer_name IS NOT NULL AND consumer_accounts.consumer_name != '' AND consumer_accounts.consumer_name NOT LIKE 'Consumer %' THEN consumer_accounts.consumer_name ELSE NULL END, NULLIF(bill_records.consumer_name, ''), bill_records.ca_number) {$dir}"),
+                'meter_no' => $filteredQuery->orderByRaw("COALESCE(NULLIF(consumer_accounts.meter_no, ''), NULLIF(bill_records.meter_no, ''), '') {$dir}"),
+                'billing_basis', 'basis' => $filteredQuery->orderByRaw("({$basisExpr}) {$dir}"),
+                'bill_month' => $filteredQuery->orderByRaw("bill_records.billing_year {$dir}")->orderByRaw("bill_records.billing_month {$dir}"),
+                default => $filteredQuery->orderByRaw("bill_records.ca_number {$dir}"),
+            };
+        }
+
+        $filteredQuery->orderBy('bill_records.ca_number', 'ASC');
+
+        // Fetch ONLY the paginated page records from database
+        $paginatedRecords = $filteredQuery
+            ->select('bill_records.*')
+            ->with(['mru', 'consumerAccount'])
+            ->skip($offset)
+            ->take($perPage)
+            ->get();
+
+        $caNumbers = $paginatedRecords->pluck('ca_number')->unique()->values();
+
+        // Get user statuses & remarks for this period (ONLY for paginated CAs)
         $userStatusModels = BillStatus::where('billing_month', $month)
             ->where('billing_year', $year)
             ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
@@ -337,7 +468,7 @@ class DashboardController extends Controller
             ->get()
             ->keyBy('ca_number');
 
-        // Pre-fetch historical bill records for these CAs to resolve DB Previous Reading and Outlier-Proof Smart Average
+        // Pre-fetch historical bill records ONLY for paginated CAs
         $historicalBills = BillRecord::whereIn('ca_number', $caNumbers)
             ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
             ->orderBy('billing_year', 'desc')
@@ -357,7 +488,7 @@ class DashboardController extends Controller
             ->get()
             ->keyBy('ca_number');
 
-        // Pre-fetch dedicated meter reading histories for all these CAs in 1 single query
+        // Pre-fetch dedicated meter reading histories ONLY for paginated CAs
         $meterHistories = MeterReadingHistory::where('user_id', $userId)
             ->whereIn('ca_number', $caNumbers)
             ->where(function ($q) use ($month, $year) {
@@ -397,12 +528,12 @@ class DashboardController extends Controller
         $unitsSafeCeiling = (int) SystemSetting::get('color_units_safe_ceiling', 50);
         $unitsDangerFloor = (int) SystemSetting::get('color_units_danger_floor', 200);
 
-        // Attach review_status, remark, and 4-Box Reading Metrics
-        $mapped = $allRecords->map(function ($bill) use ($userStatusModels, $historicalBills, $meterHistories, $basisHistories, $consumers, $month, $year, $adjPercent, $tuningSteps, $colorSafeCeiling, $colorDangerFloor, $unitsSafeCeiling, $unitsDangerFloor) {
+        // Attach review_status, remark, and 4-Box Reading Metrics (ONLY for paginated CAs)
+        $items = $paginatedRecords->map(function ($bill) use ($userStatusModels, $historicalBills, $meterHistories, $basisHistories, $consumers, $month, $year, $adjPercent, $tuningSteps, $colorSafeCeiling, $colorDangerFloor, $unitsSafeCeiling, $unitsDangerFloor) {
             $st = $userStatusModels[$bill->ca_number] ?? null;
             $bill->review_status = ! empty($bill->review_status) && $bill->review_status !== 'pending' ? $bill->review_status : ($st ? $st->status : ($bill->review_status ?: 'pending'));
             $bill->remark = ! empty($bill->remark) ? $bill->remark : ($st ? ($st->remark ?? '') : '');
-            $bill->tag = ! empty($bill->tag) ? $bill->tag : ($st ? ($st->tag ?? 'OK') : 'OK');
+            $bill->tag = ! empty($bill->tag) && strtoupper($bill->tag) !== 'OK' ? $bill->tag : ($st ? ($st->tag ?? $bill->tag ?? 'OK') : ($bill->tag ?: 'OK'));
             $bill->display_tag = $this->billTagService->getDisplayLabel($bill->tag);
             $bill->full_tag = $this->billTagService->getFullLabel($bill->tag);
             $bill->has_pdf = ! empty($bill->pdf_path);
@@ -558,167 +689,6 @@ class DashboardController extends Controller
 
             return $bill;
         });
-
-        $consumersQuery = ConsumerAccount::query();
-        if (! $isAdmin && $userId) {
-            $consumersQuery->where('user_id', $userId);
-        }
-        if (! empty($mruId)) {
-            $consumersQuery->where('mru_id', $mruId);
-        }
-        $totalConsumers = $consumersQuery->count();
-
-        // Dynamic counts for active search
-        $counts = [
-            'all' => $mapped->count(),
-            'pending' => $mapped->where('review_status', 'pending')->count(),
-            'submitted' => $mapped->where('review_status', 'submitted')->count(),
-            'critical' => $mapped->where('review_status', 'critical')->count(),
-            'doubt' => $mapped->where('review_status', 'doubt')->count(),
-            'missing_pdf' => $mapped->filter(fn ($item) => empty($item->pdf_path) || $item->download_status !== 'downloaded')->count(),
-            'total_consumers' => $totalConsumers,
-            'basis_ok' => $mapped->filter(fn ($item) => strtoupper(trim((string) ($item->billing_basis ?: 'OK'))) === 'OK')->count(),
-            'basis_lk' => $mapped->filter(fn ($item) => strtoupper(trim((string) ($item->billing_basis ?: ''))) === 'LK')->count(),
-            'basis_md' => $mapped->filter(fn ($item) => strtoupper(trim((string) ($item->billing_basis ?: ''))) === 'MD')->count(),
-            'basis_pl' => $mapped->filter(fn ($item) => strtoupper(trim((string) ($item->billing_basis ?: ''))) === 'PL')->count(),
-            'basis_rn' => $mapped->filter(fn ($item) => strtoupper(trim((string) ($item->billing_basis ?: ''))) === 'RN')->count(),
-        ];
-
-        // Dynamic sum of units and amount for matching search
-        $filteredUnits = $mapped->sum('units_consumed');
-        $filteredAmount = $mapped->sum('total_amount');
-
-        // Apply filter (all, pending, submitted, critical, doubt)
-        if (! empty($filter) && $filter !== 'all') {
-            $mapped = $mapped->filter(fn ($item) => $item->review_status === $filter);
-        }
-
-        // Apply Tag filter (all, OK, BQC, RCQ, 24days, etc.)
-        $tagFilter = $request->get('tag_filter', $request->get('tag', 'all'));
-        if (! empty($tagFilter) && $tagFilter !== 'all') {
-            $mapped = $mapped->filter(fn ($item) => strtoupper($item->tag ?? '') === strtoupper($tagFilter));
-        }
-
-        // Apply Basis filter (all, OK, LK, MD, PL, RN)
-        $basisFilter = strtoupper(trim((string) $request->get('basis_filter', $request->get('basis', 'all'))));
-        if (! empty($basisFilter) && $basisFilter !== 'ALL') {
-            $mapped = $mapped->filter(function ($item) use ($basisFilter) {
-                $b = strtoupper(trim((string) ($item->billing_basis ?: 'OK')));
-
-                return $b === $basisFilter;
-            });
-        }
-
-        // Status Priority Sort Weights
-        $statusWeights = null;
-        if ($statusSort === 'pdcs') {
-            $statusWeights = ['pending' => 1, 'doubt' => 2, 'critical' => 3, 'submitted' => 4];
-        } elseif ($statusSort === 'dcps') {
-            $statusWeights = ['doubt' => 1, 'critical' => 2, 'pending' => 3, 'submitted' => 4];
-        } elseif ($statusSort === 'cdps') {
-            $statusWeights = ['critical' => 1, 'doubt' => 2, 'pending' => 3, 'submitted' => 4];
-        } elseif ($statusSort === 'spdc') {
-            $statusWeights = ['submitted' => 1, 'pending' => 2, 'doubt' => 3, 'critical' => 4];
-        }
-
-        // Sort collection
-        $sorted = $mapped->sort(function ($a, $b) use ($statusWeights, $sortCol, $sortAsc) {
-            if ($statusWeights !== null) {
-                $wa = $statusWeights[$a->review_status] ?? 99;
-                $wb = $statusWeights[$b->review_status] ?? 99;
-                if ($wa !== $wb) {
-                    return $wa - $wb;
-                }
-            }
-
-            $numericCols = ['working_reading', 'current_reading', 'previous_reading', 'units_consumed', 'units', 'total_amount', 'amount', 'basis_priority', 'review_status', 'status'];
-
-            if (in_array($sortCol, $numericCols, true)) {
-                $numA = match ($sortCol) {
-                    'working_reading' => (float) ($a->working_reading ?? 0),
-                    'current_reading' => (float) ($a->current_reading ?? 0),
-                    'previous_reading' => (float) ($a->previous_reading ?? 0),
-                    'units_consumed', 'units' => (float) ($a->units_consumed ?? 0),
-                    'total_amount', 'amount' => (float) ($a->total_amount ?? 0),
-                    'basis_priority' => match (strtoupper(trim((string) ($a->billing_basis ?: 'OK')))) {
-                        'OK' => 1,
-                        'LK' => 2,
-                        'MD' => 3,
-                        'PL' => 4,
-                        'RN' => 5,
-                        default => 6,
-                    },
-                    'review_status', 'status' => match ($a->review_status ?? 'pending') {
-                        'pending' => 1,
-                        'doubt' => 2,
-                        'critical' => 3,
-                        'submitted' => 4,
-                        default => 5,
-                    },
-                    default => 0.0,
-                };
-
-                $numB = match ($sortCol) {
-                    'working_reading' => (float) ($b->working_reading ?? 0),
-                    'current_reading' => (float) ($b->current_reading ?? 0),
-                    'previous_reading' => (float) ($b->previous_reading ?? 0),
-                    'units_consumed', 'units' => (float) ($b->units_consumed ?? 0),
-                    'total_amount', 'amount' => (float) ($b->total_amount ?? 0),
-                    'basis_priority' => match (strtoupper(trim((string) ($b->billing_basis ?: 'OK')))) {
-                        'OK' => 1,
-                        'LK' => 2,
-                        'MD' => 3,
-                        'PL' => 4,
-                        'RN' => 5,
-                        default => 6,
-                    },
-                    'review_status', 'status' => match ($b->review_status ?? 'pending') {
-                        'pending' => 1,
-                        'doubt' => 2,
-                        'critical' => 3,
-                        'submitted' => 4,
-                        default => 5,
-                    },
-                    default => 0.0,
-                };
-
-                if ($numA == $numB) {
-                    return strcmp((string) $a->ca_number, (string) $b->ca_number);
-                }
-
-                return $sortAsc ? ($numA <=> $numB) : ($numB <=> $numA);
-            }
-
-            // String and natural alphanumeric sorting
-            $valA = match ($sortCol) {
-                'consumer_name', 'name' => trim((string) ($a->consumer_name ?? '')),
-                'meter_no' => trim((string) ($a->meter_no ?? '')),
-                'bill_month' => trim((string) ($a->bill_month_label ?? '')),
-                'billing_basis', 'basis' => strtoupper(trim((string) ($a->billing_basis ?: 'OK'))),
-                default => trim((string) ($a->ca_number ?? '')),
-            };
-
-            $valB = match ($sortCol) {
-                'consumer_name', 'name' => trim((string) ($b->consumer_name ?? '')),
-                'meter_no' => trim((string) ($b->meter_no ?? '')),
-                'bill_month' => trim((string) ($b->bill_month_label ?? '')),
-                'billing_basis', 'basis' => strtoupper(trim((string) ($b->billing_basis ?: 'OK'))),
-                default => trim((string) ($b->ca_number ?? '')),
-            };
-
-            $cmp = strnatcasecmp((string) $valA, (string) $valB);
-            if ($cmp === 0) {
-                return strcmp((string) $a->ca_number, (string) $b->ca_number);
-            }
-
-            return $sortAsc ? $cmp : -$cmp;
-        })->values();
-
-        $totalMatching = $sorted->count();
-        $totalPages = max(1, (int) ceil($totalMatching / $perPage));
-        $page = min($page, $totalPages);
-        $offset = ($page - 1) * $perPage;
-        $items = $sorted->slice($offset, $perPage)->values();
 
         // Attach active FieldDesk summary bridge to each paginated bill item
         $itemCas = $items->pluck('ca_number')->filter()->unique()->all();

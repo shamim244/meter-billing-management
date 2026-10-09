@@ -367,11 +367,11 @@ class BillController extends Controller
         $search = trim($request->get('search', ''));
 
         $query = BillRecord::with('mru')
-            ->where('billing_month', $month)
-            ->where('billing_year', $year);
+            ->where('bill_records.billing_month', $month)
+            ->where('bill_records.billing_year', $year);
 
         if (! empty($mruId)) {
-            $query->where('mru_id', $mruId);
+            $query->where('bill_records.mru_id', $mruId);
         }
 
         if (! empty($search)) {
@@ -383,35 +383,34 @@ class BillController extends Controller
             });
         }
 
-        $bills = $query->orderBy('ca_number')->get();
+        $query->leftJoin('bill_statuses', function ($join) use ($month, $year) {
+            $join->on('bill_statuses.ca_number', '=', 'bill_records.ca_number')
+                ->where('bill_statuses.billing_month', '=', $month)
+                ->where('bill_statuses.billing_year', '=', $year);
+        });
 
+        $reviewStatusExpr = "COALESCE(CASE WHEN bill_records.review_status IS NOT NULL AND bill_records.review_status != '' AND bill_records.review_status != 'pending' THEN bill_records.review_status ELSE NULL END, bill_statuses.status, NULLIF(bill_records.review_status, ''), 'pending')";
+        $tagExpr = "UPPER(TRIM(COALESCE(CASE WHEN bill_records.tag IS NOT NULL AND bill_records.tag != '' AND UPPER(bill_records.tag) != 'OK' THEN bill_records.tag ELSE NULL END, bill_statuses.tag, NULLIF(bill_records.tag, ''), 'OK')))";
+
+        if (! empty($filter) && $filter !== 'all') {
+            $query->whereRaw("({$reviewStatusExpr}) = ?", [$filter]);
+        }
+
+        $tagFilter = $request->get('tag_filter', $request->get('tag', 'all'));
+        if (! empty($tagFilter) && $tagFilter !== 'all') {
+            $query->whereRaw("({$tagExpr}) = ?", [strtoupper($tagFilter)]);
+        }
+
+        $bills = $query->select('bill_records.*')->orderBy('bill_records.ca_number')->get();
+
+        $caNumbers = $bills->pluck('ca_number')->unique();
         $userStatuses = BillStatus::where('billing_month', $month)
             ->where('billing_year', $year)
+            ->whereIn('ca_number', $caNumbers)
             ->get()
             ->keyBy('ca_number');
 
-        $caNumbers = $bills->pluck('ca_number')->unique();
         $masterAccounts = ConsumerAccount::whereIn('ca_number', $caNumbers)->get()->keyBy('ca_number');
-
-        $tagFilter = $request->get('tag_filter', $request->get('tag', 'all'));
-
-        if (! empty($filter) && $filter !== 'all') {
-            $bills = $bills->filter(function ($b) use ($userStatuses, $filter) {
-                $st = $userStatuses[$b->ca_number] ?? null;
-                $currentStatus = $st ? $st->status : 'pending';
-
-                return $currentStatus === $filter;
-            });
-        }
-
-        if (! empty($tagFilter) && $tagFilter !== 'all') {
-            $bills = $bills->filter(function ($b) use ($userStatuses, $tagFilter) {
-                $st = $userStatuses[$b->ca_number] ?? null;
-                $currentTag = ! empty($b->tag) ? $b->tag : ($st ? ($st->tag ?? 'OK') : 'OK');
-
-                return strtoupper($currentTag) === strtoupper($tagFilter);
-            });
-        }
 
         $fileName = "nbpdcl_bills_{$year}_{$month}_".date('Ymd_His').'.csv';
 
@@ -495,12 +494,12 @@ class BillController extends Controller
         $search = trim($request->get('search', ''));
 
         $query = BillRecord::with('mru')
-            ->where('billing_month', $month)
-            ->where('billing_year', $year)
-            ->whereNotNull('pdf_path');
+            ->where('bill_records.billing_month', $month)
+            ->where('bill_records.billing_year', $year)
+            ->whereNotNull('bill_records.pdf_path');
 
         if (! empty($mruId)) {
-            $query->where('mru_id', $mruId);
+            $query->where('bill_records.mru_id', $mruId);
         }
 
         if (! empty($search)) {
@@ -512,20 +511,18 @@ class BillController extends Controller
             });
         }
 
-        $bills = $query->get();
-
         if (! empty($filter) && $filter !== 'all') {
-            $userStatuses = BillStatus::where('billing_month', $month)
-                ->where('billing_year', $year)
-                ->pluck('status', 'ca_number')
-                ->toArray();
-
-            $bills = $bills->filter(function ($b) use ($userStatuses, $filter) {
-                $st = $userStatuses[$b->ca_number] ?? 'pending';
-
-                return $st === $filter;
+            $query->leftJoin('bill_statuses', function ($join) use ($month, $year) {
+                $join->on('bill_statuses.ca_number', '=', 'bill_records.ca_number')
+                    ->where('bill_statuses.billing_month', '=', $month)
+                    ->where('bill_statuses.billing_year', '=', $year);
             });
+
+            $reviewStatusExpr = "COALESCE(CASE WHEN bill_records.review_status IS NOT NULL AND bill_records.review_status != '' AND bill_records.review_status != 'pending' THEN bill_records.review_status ELSE NULL END, bill_statuses.status, NULLIF(bill_records.review_status, ''), 'pending')";
+            $query->whereRaw("({$reviewStatusExpr}) = ?", [$filter]);
         }
+
+        $bills = $query->select('bill_records.*')->get();
 
         if ($bills->isEmpty()) {
             if ($request->expectsJson()) {

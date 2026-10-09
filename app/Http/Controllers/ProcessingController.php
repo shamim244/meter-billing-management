@@ -107,25 +107,38 @@ class ProcessingController extends Controller
             $billQuery->where('mru_id', $mruId);
         }
 
-        $records = $billQuery->get();
+        $stats = (clone $billQuery)
+            ->selectRaw("COUNT(CASE WHEN download_status = 'downloaded' AND pdf_path IS NOT NULL AND pdf_path != '' THEN 1 END) as downloaded_count")
+            ->selectRaw("COUNT(CASE WHEN parse_status = 'parsed' THEN 1 END) as parsed_count")
+            ->first();
 
-        $downloadedCount = $records->where('download_status', 'downloaded')->whereNotNull('pdf_path')->count();
+        $downloadedCount = (int) ($stats->downloaded_count ?? 0);
         $missingDownloads = max(0, $totalCas - $downloadedCount);
 
-        $parsedCount = $records->where('parse_status', 'parsed')->count();
+        $parsedCount = (int) ($stats->parsed_count ?? 0);
         $pendingParse = max(0, $downloadedCount - $parsedCount);
 
-        $failedBills = $records->filter(function ($r) {
-            return $r->download_status === 'failed' || (! empty($r->error_message) && $r->download_status !== 'downloaded');
-        })->map(function ($r) {
-            return [
-                'id' => $r->id,
-                'ca_number' => $r->ca_number,
-                'consumer_name' => $r->consumer_name ?: 'Consumer '.$r->ca_number,
-                'error_message' => $r->error_message ?: 'Download failed or connection timeout',
-                'download_status' => $r->download_status,
-            ];
-        })->values();
+        $failedBills = (clone $billQuery)
+            ->where(function ($q) {
+                $q->where('download_status', 'failed')
+                    ->orWhere(function ($q2) {
+                        $q2->whereNotNull('error_message')
+                            ->where('error_message', '!=', '')
+                            ->where('download_status', '!=', 'downloaded');
+                    });
+            })
+            ->select(['id', 'ca_number', 'consumer_name', 'error_message', 'download_status'])
+            ->get()
+            ->map(function ($r) {
+                return [
+                    'id' => $r->id,
+                    'ca_number' => $r->ca_number,
+                    'consumer_name' => $r->consumer_name ?: 'Consumer '.$r->ca_number,
+                    'error_message' => $r->error_message ?: 'Download failed or connection timeout',
+                    'download_status' => $r->download_status,
+                ];
+            })
+            ->values();
 
         $downloadPercent = $totalCas > 0 ? (int) round(($downloadedCount / $totalCas) * 100) : 0;
         $parsePercent = $downloadedCount > 0 ? (int) round(($parsedCount / $downloadedCount) * 100) : 0;

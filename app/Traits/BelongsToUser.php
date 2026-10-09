@@ -28,7 +28,7 @@ trait BelongsToUser
         static::addGlobalScope('belongs_to_user', function (Builder $builder) {
             if (Auth::check() && ! static::isAdminContext()) {
                 $builder->where(
-                    static::resolveUserColumn(),
+                    $builder->getModel()->getTable().'.'.static::resolveUserColumn(),
                     Auth::id()
                 );
             }
