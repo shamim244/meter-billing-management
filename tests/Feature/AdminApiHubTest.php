@@ -266,4 +266,46 @@ class AdminApiHubTest extends TestCase
         $response->assertSessionHas('status');
         $this->assertEquals(0, ApiRequestLog::count());
     }
+
+    public function test_api_hub_master_view_is_compact_under_60_lines(): void
+    {
+        $viewPath = resource_path('views/admin/api-hub/index.blade.php');
+        $this->assertFileExists($viewPath);
+
+        $lines = file($viewPath, FILE_IGNORE_NEW_LINES);
+        $this->assertLessThan(60, count($lines), 'Master admin/api-hub/index.blade.php must be under 60 lines');
+
+        $partials = [
+            'notifications.blade.php',
+            'overview-header.blade.php',
+            'tab-analytics.blade.php',
+            'form-hidden-inputs.blade.php',
+            'tab-features.blade.php',
+            'tab-ratelimits.blade.php',
+            'tab-policies.blade.php',
+            'tab-keys.blade.php',
+            'modals/reset-modal.blade.php',
+            'modals/purge-analytics-modal.blade.php',
+            'modals/revoke-key-modal.blade.php',
+        ];
+
+        foreach ($partials as $partial) {
+            $path = resource_path("views/admin/api-hub/partials/{$partial}");
+            $this->assertFileExists($path, "Partial {$partial} must exist in admin/api-hub/partials/");
+        }
+    }
+
+    public function test_decoupled_api_hub_js_exists_and_contains_no_blade_syntax(): void
+    {
+        $jsPath = public_path('js/admin/api-hub-app.js');
+        $this->assertFileExists($jsPath);
+
+        $jsContent = file_get_contents($jsPath);
+        $this->assertStringContainsString('function apiHubManager()', $jsContent);
+        $this->assertStringContainsString('window.apiHubConfig', $jsContent);
+
+        $this->assertDoesNotMatchRegularExpression('/\{\{/', $jsContent, 'JS file must not contain raw Blade mustache {{ brackets');
+        $this->assertDoesNotMatchRegularExpression('/\{!!/', $jsContent, 'JS file must not contain raw Blade {!! tags');
+        $this->assertDoesNotMatchRegularExpression('/@json/', $jsContent, 'JS file must not contain @json Blade directive');
+    }
 }
