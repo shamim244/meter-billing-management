@@ -204,4 +204,22 @@ class AdminUserManagementTest extends TestCase
 
         $this->assertEquals($this->adminUser->id, auth()->id());
     }
+
+    public function test_admin_user_show_blade_template_obeys_line_count_invariant(): void
+    {
+        $templatePath = resource_path('views/admin/users/show.blade.php');
+        $this->assertFileExists($templatePath);
+
+        $lineCount = count(file($templatePath));
+        $this->assertLessThanOrEqual(
+            120,
+            $lineCount,
+            "Master admin/users/show.blade.php must not exceed 120 lines. Currently: {$lineCount} lines."
+        );
+
+        $this->assertFileExists(public_path('js/admin/user-dossier-app.js'));
+        $jsContent = file_get_contents(public_path('js/admin/user-dossier-app.js'));
+        $this->assertStringContainsString('function userDossierApp', $jsContent);
+        $this->assertStringNotContainsString('{{', $jsContent);
+    }
 }
