@@ -119,4 +119,50 @@ class DashboardModularArchitectureTest extends TestCase
         $lines = file($viewPath, FILE_IGNORE_NEW_LINES);
         $this->assertLessThan(120, count($lines), 'Master dashboard.blade.php must be under 120 lines (currently '.count($lines).' lines)');
     }
+
+    public function test_card_view_and_table_view_partials_are_modularized_under_50_lines(): void
+    {
+        $cardViewPath = resource_path('views/dashboard/partials/card-view.blade.php');
+        $this->assertFileExists($cardViewPath);
+        $cardLines = file($cardViewPath, FILE_IGNORE_NEW_LINES);
+        $this->assertLessThan(50, count($cardLines), 'card-view.blade.php master partial must be under 50 lines');
+
+        $tableViewPath = resource_path('views/dashboard/partials/table-view.blade.php');
+        $this->assertFileExists($tableViewPath);
+        $tableLines = file($tableViewPath, FILE_IGNORE_NEW_LINES);
+        $this->assertLessThan(50, count($tableLines), 'table-view.blade.php master partial must be under 50 lines');
+
+        $cardSubPartials = [
+            'card-header.blade.php',
+            'meta-banner.blade.php',
+            'boxes-grid.blade.php',
+            'action-buttons.blade.php',
+            'remark-section.blade.php',
+            'tag-section.blade.php',
+            'card-footer.blade.php',
+            'carousel-navigation.blade.php',
+            'boxes/box1-working.blade.php',
+            'boxes/box2-prev.blade.php',
+            'boxes/box3-avg.blade.php',
+            'boxes/box4-pdf.blade.php',
+        ];
+
+        foreach ($cardSubPartials as $partial) {
+            $path = resource_path("views/dashboard/partials/card/{$partial}");
+            $this->assertFileExists($path, "Card partial {$partial} should exist");
+        }
+
+        $tableSubPartials = [
+            'table-head.blade.php',
+            'cell-consumer.blade.php',
+            'cell-readings.blade.php',
+            'cell-actions.blade.php',
+            'table-pagination.blade.php',
+        ];
+
+        foreach ($tableSubPartials as $partial) {
+            $path = resource_path("views/dashboard/partials/table/{$partial}");
+            $this->assertFileExists($path, "Table partial {$partial} should exist");
+        }
+    }
 }
