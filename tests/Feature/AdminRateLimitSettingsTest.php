@@ -56,6 +56,8 @@ class AdminRateLimitSettingsTest extends TestCase
 
         $response->assertOk()
             ->assertSeeText('API Rate Limits & Throttling Controls')
+            ->assertSee('rate-limits-app.js')
+            ->assertSee('rateLimitsApp(window.rateLimitsConfig)')
             ->assertSee('general_per_minute')
             ->assertSee('review_per_minute')
             ->assertSee('batch_per_minute')
