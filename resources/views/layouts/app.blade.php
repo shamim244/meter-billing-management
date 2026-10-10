@@ -11,8 +11,10 @@
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800,900&display=swap" rel="stylesheet" />
 
-        <!-- Pre-compiled Production Stylesheet via Vite -->
+        <!-- Pre-compiled Production Stylesheet via Vite & Modular Nav CSS -->
         @vite(['resources/css/app.css'])
+        <link rel="stylesheet" href="{{ asset('css/navigation/navigation.css') }}?v={{ file_exists(public_path('css/navigation/navigation.css')) ? filemtime(public_path('css/navigation/navigation.css')) : time() }}">
+        <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
         <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
         <script src="/js/keyboard-shortcuts.js"></script>
         <style>

@@ -1,6 +1,6 @@
 /**
  * Navigation Bar Alpine.js Component Decoupling
- * Handles theme toggling and live notifications dropdown
+ * Handles theme toggling, live notifications dropdown, accessible menu interactions, and mobile drawer
  */
 function navigationThemeToggle() {
     return {
@@ -44,5 +44,35 @@ function navigationNotifications(endpoint, csrfToken) {
     };
 }
 
+function navigationDropdown(initialOpen = false) {
+    return {
+        open: initialOpen,
+        toggle() {
+            this.open = !this.open;
+        },
+        close() {
+            this.open = false;
+        }
+    };
+}
+
+function navigationMobileDrawer(defaultSection = 'operations') {
+    return {
+        open: false,
+        activeSection: defaultSection,
+        toggle() {
+            this.open = !this.open;
+        },
+        close() {
+            this.open = false;
+        },
+        toggleSection(section) {
+            this.activeSection = this.activeSection === section ? '' : section;
+        }
+    };
+}
+
 window.navigationThemeToggle = navigationThemeToggle;
 window.navigationNotifications = navigationNotifications;
+window.navigationDropdown = navigationDropdown;
+window.navigationMobileDrawer = navigationMobileDrawer;

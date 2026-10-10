@@ -1,7 +1,7 @@
-<!-- Left Side: Brand Logo & Navigation Links -->
-<div class="flex items-center gap-6">
-    <!-- Brand Logo -->
-    <a href="{{ route('dashboard') }}" class="flex items-center gap-2.5 group">
+{{-- Left Side: Brand Logo & Navigation Clusters --}}
+<div class="flex items-center gap-4 lg:gap-6">
+    {{-- Brand Logo --}}
+    <a href="{{ route('dashboard') }}" class="flex items-center gap-2.5 group shrink-0">
         <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-cyan-400 p-0.5 shadow-md shadow-brand-500/20 group-hover:scale-105 transition duration-150">
             <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
                 <span class="text-base">⚡</span>
@@ -15,36 +15,23 @@
         </div>
     </a>
 
-    <!-- Desktop Navigation Links (Working Mode Operational Focus) -->
-    <div class="hidden sm:flex items-center gap-1.5">
-        <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
+    {{-- Desktop & Tablet Navigation Clusters (Direct & Grouped Dropdowns) --}}
+    <div class="hidden lg:flex items-center gap-1 lg:gap-1.5">
+        {{-- 1. Direct Dashboard Link --}}
+        <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" class="text-xs lg:text-sm font-semibold px-2.5 lg:px-3 py-1.5">
             <span>📊</span>
             <span>Dashboard</span>
         </x-nav-link>
 
-        <x-nav-link :href="route('field-desk.index')" :active="request()->routeIs('field-desk.*')">
-            <span>📋</span>
-            <span>FieldDesk</span>
-        </x-nav-link>
+        {{-- 2. Operations Cluster Dropdown --}}
+        @include('layouts.navigation.partials.nav.operations-menu')
 
-        <x-nav-link :href="route('mrus.index')" :active="request()->routeIs('mrus.*')">
-            <span>🗂️</span>
-            <span>MRUs</span>
-        </x-nav-link>
+        {{-- 3. Growth & Reports Cluster Dropdown --}}
+        @include('layouts.navigation.partials.nav.growth-menu')
 
-        <x-nav-link :href="route('processing.index')" :active="request()->routeIs('processing.*')">
-            <span>⚡</span>
-            <span>Processing</span>
-        </x-nav-link>
-
-        <x-nav-link :href="route('pdf-manager.index')" :active="request()->routeIs('pdf-manager.*')">
-            <span>📑</span>
-            <span>PDF Manager</span>
-        </x-nav-link>
-
-        <x-nav-link :href="route('reports.usage')" :active="request()->routeIs('reports.*')">
-            <span>📈</span>
-            <span>Reports</span>
-        </x-nav-link>
+        {{-- 4. Dynamic Admin Suite Cluster Dropdown (Admins Only) --}}
+        @if(Auth::user()->hasRole('admin'))
+            @include('layouts.navigation.partials.nav.admin-suite-menu')
+        @endif
     </div>
 </div>

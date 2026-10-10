@@ -1,0 +1,54 @@
+/**
+ * Enterprise Navigation & Sidebar Styling
+ * Micro-scrollbars, smooth scroll, overscroll containment, and tree connector guides
+ */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.25);
+    border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.45);
+}
+.custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+    scroll-behavior: smooth;
+    overscroll-behavior: contain;
+}
+
+/* Subtle tree branch connector */
+.nav-tree-connector {
+    position: relative;
+}
+.nav-tree-connector::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: 50%;
+    width: 8px;
+    height: 1px;
+    background-color: rgba(51, 65, 85, 0.8);
+}
+
+/* Responsive navigation visibility enforcement */
+@media (min-width: 1024px) {
+    .lg\:hidden {
+        display: none !important;
+    }
+    .lg\:flex {
+        display: flex !important;
+    }
+}
+@media (max-width: 1023.98px) {
+    .hidden.lg\:flex {
+        display: none !important;
+    }
+}
+
