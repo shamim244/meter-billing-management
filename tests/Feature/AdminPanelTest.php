@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Enums\PaymentMode;
+use App\Enums\PaymentPurpose;
 use App\Enums\PaymentStatus;
 use App\Models\Payment;
 use App\Models\User;
@@ -103,6 +105,9 @@ class AdminPanelTest extends TestCase
         $resAnalytics = $this->actingAs($admin)->get(route('admin.payments.analytics'));
         $resAnalytics->assertStatus(200);
         $resAnalytics->assertSeeText('Financial Analytics & Revenue Performance');
+        $resAnalytics->assertSeeText('Payment Channel Distribution');
+        $resAnalytics->assertSeeText('Transaction Status Breakdown');
+        $resAnalytics->assertSeeText('6-Month Revenue Trend');
 
         // 4. Audit Trail
         $resAudit = $this->actingAs($admin)->get(route('admin.payments.audit'));
@@ -123,6 +128,22 @@ class AdminPanelTest extends TestCase
         $resSettings->assertSee('payment-settings-app.js');
         $resSettings->assertSee('window.paymentSettingsConfig');
         $resSettings->assertSeeText('Razorpay PG API Credentials');
+
+        // 7. Payment Details (Show)
+        $testPayment = Payment::create([
+            'user_id' => $admin->id,
+            'amount' => 500.0,
+            'mode' => PaymentMode::MANUAL_UPI,
+            'purpose' => PaymentPurpose::WALLET_TOPUP,
+            'status' => PaymentStatus::PENDING_VERIFICATION,
+            'utr_number' => '123456789012',
+        ]);
+        $resShow = $this->actingAs($admin)->get(route('admin.payments.show', $testPayment->id));
+        $resShow->assertStatus(200);
+        $resShow->assertSeeText('Transaction Details');
+        $resShow->assertSeeText('Billing Agent Profile');
+        $resShow->assertSeeText('Quick Actions');
+        $resShow->assertSeeText('123456789012');
     }
 
     public function test_admin_can_simulate_successful_checkout(): void
