@@ -320,6 +320,9 @@ class WalletSystemTest extends TestCase
         $response->assertStatus(200);
         $response->assertSeeText('Agent Wallet & Financial Ledger');
         $response->assertSeeText('500.00');
+        $response->assertSeeText('Available Balance');
+        $response->assertSeeText('Total Credited');
+        $response->assertSeeText('Transaction Ledger');
 
         $exportRes = $this->actingAs($this->agent)->get(route('wallet.export'));
         $exportRes->assertStatus(200);

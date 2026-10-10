@@ -209,6 +209,10 @@ class BillTagSystemTest extends TestCase
         $indexRes = $this->actingAs($this->admin)->get(route('admin.tags.index'));
         $indexRes->assertStatus(200);
         $indexRes->assertSee('Bill Review Tags Manager');
+        $indexRes->assertSee('tags-app.js');
+        $indexRes->assertSee('adminTagsApp()');
+        $indexRes->assertSee('Configured Tags');
+        $indexRes->assertSee('Add New Review Tag');
 
         // Admin adds new custom tag
         $storeRes = $this->actingAs($this->admin)->post(route('admin.tags.store'), [
