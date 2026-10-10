@@ -58,7 +58,8 @@ class AdminUserManagementTest extends TestCase
             ->assertSeeText('Billing Agents & User Management')
             ->assertSeeText('Total Accounts')
             ->assertSeeText('Ramesh Operator')
-            ->assertSeeText('superadmin@nbpdcl-saas.com');
+            ->assertSeeText('superadmin@nbpdcl-saas.com')
+            ->assertSee('users-index-app.js');
     }
 
     public function test_admin_can_view_user_dossier_show_page(): void
