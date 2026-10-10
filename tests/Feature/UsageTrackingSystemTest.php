@@ -395,4 +395,19 @@ class UsageTrackingSystemTest extends TestCase
             ->assertSeeText('Review Status Distribution')
             ->assertSeeText('Subscription Plan Quota Utilization');
     }
+
+    /**
+     * 9. Monthly Status & Tag Report page renders cleanly with modular partials.
+     */
+    public function test_user_can_view_status_tag_report_with_modular_partials(): void
+    {
+        $response = $this->actingAs($this->agent)->get(route('reports.status_tag', ['month' => 8, 'year' => 2026]));
+
+        $response->assertOk()
+            ->assertSeeText('Monthly Status & Tag Report')
+            ->assertSeeText('Export CSV Report')
+            ->assertSeeText('Status Counts')
+            ->assertSeeText('Tag Breakdown')
+            ->assertSeeText('Matching Consumers');
+    }
 }
