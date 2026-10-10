@@ -588,4 +588,20 @@ class NotificationSystemTest extends TestCase
         $this->assertEquals('sync', $template->dispatch_mode);
         $this->assertEquals('Updated Wallet Credit Subject', $template->subject);
     }
+
+    /**
+     * 12. Test Admin Can View Notification Templates Index View and Partials.
+     */
+    public function test_admin_can_view_notification_templates_index(): void
+    {
+        $response = $this->actingAs($this->adminUser)
+            ->get(route('admin.notifications.templates.index'));
+
+        $response->assertStatus(200);
+        $response->assertSee('Notification Templates');
+        $response->assertSee('templates-app.js');
+        $response->assertSee('notificationTemplatesApp(window.notificationTemplatesConfig)');
+        $response->assertSee('Available Event Templates');
+        $response->assertSee('Reset to Defaults');
+    }
 }
