@@ -94,6 +94,26 @@ class CouponCodeManagementSystemTest extends TestCase
         $response->assertSee('couponsIndexApp()');
     }
 
+    public function test_admin_can_view_coupon_show(): void
+    {
+        $coupon = CouponCode::create([
+            'code' => 'SHOWTEST20',
+            'type' => 'subscription_discount',
+            'discount_kind' => 'percentage',
+            'discount_value' => 20,
+            'usage_limit_per_user' => 1,
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($this->admin)->get(route('admin.coupons.show', $coupon));
+
+        $response->assertStatus(200);
+        $response->assertSee('SHOWTEST20');
+        $response->assertSee('Coupon Analytics');
+        $response->assertSee('Total Redemptions');
+        $response->assertSee('Redemption Audit Logs');
+    }
+
     public function test_admin_can_create_subscription_discount_coupon(): void
     {
         $response = $this->actingAs($this->admin)->post(route('admin.coupons.store'), [
