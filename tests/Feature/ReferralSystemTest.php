@@ -353,4 +353,19 @@ class ReferralSystemTest extends TestCase
         $this->assertNotNull($signup);
         $this->assertEquals($this->referrer->id, $signup->referrer_user_id);
     }
+
+    /**
+     * 10. Referrals view loads cleanly with modular partials and decoupled JS.
+     */
+    public function test_user_can_view_referrals_page_with_modular_partials_and_js(): void
+    {
+        $response = $this->actingAs($this->referrer)->get(route('referrals.index'));
+
+        $response->assertOk()
+            ->assertSeeText('Refer & Earn Program')
+            ->assertSeeText('Earn Real Wallet Rewards for Every Agent You Refer')
+            ->assertSeeText('Referred Agents')
+            ->assertSeeText('Your Referrals & Earnings History')
+            ->assertSee('referrals-app.js');
+    }
 }
