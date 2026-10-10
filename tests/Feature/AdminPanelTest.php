@@ -215,4 +215,26 @@ class AdminPanelTest extends TestCase
 
         $this->assertEquals($initialCount + 4, Payment::withoutUserScope()->count());
     }
+
+    public function test_admin_can_view_reports_index_and_quota(): void
+    {
+        $admin = User::where('email', 'admin@nbpdcl-saas.com')->first();
+
+        $resIndex = $this->actingAs($admin)->get(route('admin.reports.index'));
+        $resIndex->assertStatus(200);
+        $resIndex->assertSeeText('Platform Usage & Account Health');
+
+        $resQuota = $this->actingAs($admin)->get(route('admin.reports.quota'));
+        $resQuota->assertStatus(200);
+        $resQuota->assertSeeText('Quota Usage & Overage Leaderboard');
+    }
+
+    public function test_user_can_view_quota_report(): void
+    {
+        $user = User::where('email', 'test@example.com')->first();
+
+        $res = $this->actingAs($user)->get(route('reports.quota'));
+        $res->assertStatus(200);
+        $res->assertSeeText('Quota Usage & 6-Month Trend Report');
+    }
 }
