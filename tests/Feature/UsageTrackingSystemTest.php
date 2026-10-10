@@ -378,4 +378,21 @@ class UsageTrackingSystemTest extends TestCase
         $this->assertEquals($agent2->id, $aggregate['rows'][0]['user_id']);
         $this->assertEquals(950.00, $aggregate['rows'][0]['overage_spend']);
     }
+
+    /**
+     * 8. Monthly Usage & ROI Overview page renders cleanly with modular partials.
+     */
+    public function test_user_can_view_monthly_usage_report_with_modular_partials(): void
+    {
+        $response = $this->actingAs($this->agent)->get(route('reports.usage', ['month' => 8, 'year' => 2026]));
+
+        $response->assertOk()
+            ->assertSeeText('Monthly Usage & ROI Overview')
+            ->assertSeeText('Status & Tag Report')
+            ->assertSeeText('Quota Usage Report')
+            ->assertSeeText('Bills Processed')
+            ->assertSeeText('Active MRUs')
+            ->assertSeeText('Review Status Distribution')
+            ->assertSeeText('Subscription Plan Quota Utilization');
+    }
 }
