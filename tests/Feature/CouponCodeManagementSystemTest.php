@@ -114,6 +114,37 @@ class CouponCodeManagementSystemTest extends TestCase
         $response->assertSee('Redemption Audit Logs');
     }
 
+    public function test_admin_can_view_coupon_create_form(): void
+    {
+        $response = $this->actingAs($this->admin)->get(route('admin.coupons.create'));
+
+        $response->assertStatus(200);
+        $response->assertSee('Create New Coupon Campaign');
+        $response->assertSee('coupons-form-app.js');
+        $response->assertSee('couponsFormApp(window.couponFormConfig)');
+        $response->assertSee('Launch Coupon Campaign');
+    }
+
+    public function test_admin_can_view_coupon_edit_form(): void
+    {
+        $coupon = CouponCode::create([
+            'code' => 'EDITME10',
+            'type' => 'subscription_discount',
+            'discount_kind' => 'percentage',
+            'discount_value' => 10,
+            'usage_limit_per_user' => 1,
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($this->admin)->get(route('admin.coupons.edit', $coupon));
+
+        $response->assertStatus(200);
+        $response->assertSee('Edit Coupon Campaign');
+        $response->assertSee('EDITME10');
+        $response->assertSee('coupons-form-app.js');
+        $response->assertSee('Save Changes');
+    }
+
     public function test_admin_can_create_subscription_discount_coupon(): void
     {
         $response = $this->actingAs($this->admin)->post(route('admin.coupons.store'), [
