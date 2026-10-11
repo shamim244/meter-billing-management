@@ -512,9 +512,36 @@ function dashboardApp() {
                     this.cycleMonth = this.selectedMonth || new Date().getMonth() + 1;
                     this.cycleYear = this.selectedYear || new Date().getFullYear();
 
+                    this.updatePeriodSelectOptions();
+
                     if (triggerFetch) {
                         this.fetchData(1);
                     }
+                },
+
+                updatePeriodSelectOptions() {
+                    const sel = this.$refs.periodSelect || document.getElementById('dashboard-period-select');
+                    if (!sel) return;
+                    sel.innerHTML = '';
+                    if (!this.availablePeriods || this.availablePeriods.length === 0) {
+                        const opt = document.createElement('option');
+                        opt.value = '';
+                        opt.textContent = 'No Cycles Under This MRU';
+                        opt.disabled = true;
+                        opt.selected = true;
+                        sel.appendChild(opt);
+                    } else {
+                        this.availablePeriods.forEach(p => {
+                            const opt = document.createElement('option');
+                            opt.value = p.key;
+                            opt.textContent = p.label;
+                            if (p.key === this.selectedPeriodKey) {
+                                opt.selected = true;
+                            }
+                            sel.appendChild(opt);
+                        });
+                    }
+                    sel.value = this.selectedPeriodKey;
                 },
 
                 onMruChange() {
@@ -703,6 +730,7 @@ function dashboardApp() {
                                             this.cycleYear = this.selectedYear;
                                         }
                                     }
+                                    this.updatePeriodSelectOptions();
                                 }
                             }
                             this.loading = false;

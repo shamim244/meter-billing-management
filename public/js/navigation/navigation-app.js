@@ -20,7 +20,7 @@ function navigationThemeToggle() {
 
 function navigationNotifications(endpoint, csrfToken) {
     return {
-        open: false,
+        notifDropdownOpen: false,
         unreadCount: 0,
         notifications: [],
         async fetchNotifs() {

@@ -22,11 +22,12 @@
         <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <span class="text-xs font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">📅 Billing Period:</span>
             <div class="flex flex-wrap items-center gap-1.5">
-                <select x-model="selectedPeriodKey" @change="onPeriodChange()" class="text-xs font-bold border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white py-1.5 px-3 focus:ring-blue-500 focus:border-blue-500 shadow-sm max-w-[130px] sm:max-w-none">
-                    <template x-for="p in availablePeriods" :key="p.key">
-                        <option :value="p.key" x-text="p.label" :selected="p.key === selectedPeriodKey"></option>
-                    </template>
-                    <option value="" disabled x-show="!availablePeriods || availablePeriods.length === 0" :selected="!availablePeriods || availablePeriods.length === 0">No Cycles Under This MRU</option>
+                <select x-ref="periodSelect" id="dashboard-period-select" x-model="selectedPeriodKey" @change="onPeriodChange()" class="text-xs font-bold border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white py-1.5 px-3 focus:ring-blue-500 focus:border-blue-500 shadow-sm w-auto min-w-[140px]">
+                    @forelse($periods as $p)
+                        <option value="{{ $p['key'] }}" {{ ($p['key'] === "{$selectedMonth}_{$selectedYear}") ? 'selected' : '' }}>{{ $p['label'] }}</option>
+                    @empty
+                        <option value="" disabled selected>No Cycles Under This MRU</option>
+                    @endforelse
                 </select>
                 <button @click="showNewCycleModal = true" class="px-2.5 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-cyan-300 rounded-xl text-xs font-bold border border-blue-200 dark:border-blue-800/80 transition flex items-center gap-1 shrink-0 cursor-pointer" title="New Billing Cycle">
                     <span>⚡</span> + New Cycle

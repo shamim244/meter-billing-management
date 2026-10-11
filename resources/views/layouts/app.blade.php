@@ -14,6 +14,7 @@
         <!-- Pre-compiled Production Stylesheet via Vite & Modular Nav CSS -->
         @vite(['resources/css/app.css'])
         <link rel="stylesheet" href="{{ asset('css/navigation/navigation.css') }}?v={{ file_exists(public_path('css/navigation/navigation.css')) ? filemtime(public_path('css/navigation/navigation.css')) : time() }}">
+        <script src="{{ asset('js/navigation/navigation-app.js') }}?v={{ file_exists(public_path('js/navigation/navigation-app.js')) ? filemtime(public_path('js/navigation/navigation-app.js')) : time() }}"></script>
         <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
         <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
         <script src="/js/keyboard-shortcuts.js"></script>

@@ -75,9 +75,12 @@ class ProcessingController extends Controller
             $selectedYear = $latestPeriod['year'];
         }
 
+        $initialPeriods = $mruPeriodsMap[(string) $selectedMruId] ?? [];
+
         return view('processing.index', compact(
             'mrus',
             'mruPeriodsMap',
+            'initialPeriods',
             'selectedMruId',
             'selectedMonth',
             'selectedYear'

@@ -61,6 +61,8 @@ function processingHubApp() {
                 this.selectedPeriodKey = 'custom';
             }
 
+            this.updatePeriodSelectOptions();
+
             // Initial fetch
             this.fetchStatus();
             this.fetchLogs();
@@ -118,7 +120,36 @@ function processingHubApp() {
                 this.selectedMonth = new Date().getMonth() + 1;
                 this.selectedYear = new Date().getFullYear();
             }
+            this.updatePeriodSelectOptions();
             this.fetchStatus();
+        },
+
+        updatePeriodSelectOptions() {
+            const sel = this.$refs.periodSelect || document.getElementById('processing-period-select');
+            if (!sel) return;
+            sel.innerHTML = '';
+            const periods = this.availablePeriods;
+            if (periods.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = 'custom';
+                opt.textContent = '⚡ + Custom / Other Month...';
+                opt.selected = true;
+                sel.appendChild(opt);
+            } else {
+                periods.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.key;
+                    opt.textContent = p.label;
+                    if (p.key === this.selectedPeriodKey) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+                const customOpt = document.createElement('option');
+                customOpt.value = 'custom';
+                customOpt.textContent = '⚡ + Custom / Other Month...';
+                if (this.selectedPeriodKey === 'custom') customOpt.selected = true;
+                sel.appendChild(customOpt);
+            }
+            sel.value = this.selectedPeriodKey;
         },
 
         onPeriodKeyChange() {

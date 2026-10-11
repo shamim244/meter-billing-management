@@ -11,7 +11,8 @@
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-        <!-- Alpine.js -->
+        <!-- Landing Page App Logic & Alpine.js -->
+        <script src="{{ asset('js/welcome/welcome-app.js') }}?v={{ file_exists(public_path('js/welcome/welcome-app.js')) ? filemtime(public_path('js/welcome/welcome-app.js')) : time() }}"></script>
         <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
         <!-- Tailwind CSS CDN -->
@@ -71,8 +72,5 @@
         </main>
 
         @include('welcome.partials.footer-section')
-
-        <!-- Decoupled Alpine.js Application Logic -->
-        <script src="{{ asset('js/welcome/welcome-app.js') }}?v={{ file_exists(public_path('js/welcome/welcome-app.js')) ? filemtime(public_path('js/welcome/welcome-app.js')) : time() }}"></script>
     </body>
 </html>

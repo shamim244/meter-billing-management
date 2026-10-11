@@ -1,6 +1,5 @@
-<!-- Notification Bell Dropdown -->
-<div x-data="navigationNotifications('{{ route('notifications.recent') }}', '{{ csrf_token() }}')" x-init="fetchNotifs()" class="relative">
-    <button @click="open = !open; if (open) fetchNotifs();" 
+<div x-data="window.navigationNotifications ? navigationNotifications('{{ route('notifications.recent') }}', '{{ csrf_token() }}') : { notifDropdownOpen: false, unreadCount: 0, notifications: [], fetchNotifs() {} }" x-init="fetchNotifs()" class="relative">
+    <button @click="notifDropdownOpen = !notifDropdownOpen; if (notifDropdownOpen) fetchNotifs();" 
             type="button" 
             class="relative w-9 h-9 rounded-xl flex items-center justify-center bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition shadow-sm border border-slate-200/60 dark:border-slate-700/60"
             title="Notifications">
@@ -11,7 +10,7 @@
     </button>
 
     <!-- Dropdown Content -->
-    <div x-show="open" @click.away="open = false" x-cloak class="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden">
+    <div x-show="notifDropdownOpen" @click.away="notifDropdownOpen = false" x-cloak class="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden">
         <div class="p-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <div class="flex items-center gap-2">
                 <span class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Notifications</span>

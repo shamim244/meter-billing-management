@@ -24,23 +24,21 @@
             </div>
 
             <!-- Dropdown if existing cycles exist -->
-            <template x-if="availablePeriods.length > 0">
-                <select x-model="selectedPeriodKey" @change="onPeriodKeyChange()" class="w-full text-xs font-bold border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white py-2.5 px-3 focus:ring-2 focus:ring-blue-500 shadow-sm">
-                    <template x-for="p in availablePeriods" :key="p.key">
-                        <option :value="p.key" x-text="p.label"></option>
-                    </template>
-                    <option value="custom">⚡ + Custom / Other Month...</option>
+            <div x-show="availablePeriods.length > 0">
+                <select x-ref="periodSelect" id="processing-period-select" x-model="selectedPeriodKey" @change="onPeriodKeyChange()" class="w-full text-xs font-bold border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white py-2.5 px-3 focus:ring-2 focus:ring-blue-500 shadow-sm">
+                    @foreach($initialPeriods as $p)
+                        <option value="{{ $p['key'] }}" {{ $p['key'] === "{$selectedMonth}_{$selectedYear}" ? 'selected' : '' }}>{{ $p['label'] }}</option>
+                    @endforeach
+                    <option value="custom" {{ empty($initialPeriods) ? 'selected' : '' }}>⚡ + Custom / Other Month...</option>
                 </select>
-            </template>
+            </div>
 
             <!-- No cycles alert & quick launch -->
-            <template x-if="availablePeriods.length === 0">
-                <div class="flex items-center gap-1.5">
-                    <button @click="openNewCycleForCurrentMru()" class="w-full py-2.5 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition">
-                        <span>⚡ + Create First Cycle</span>
-                    </button>
-                </div>
-            </template>
+            <div x-show="availablePeriods.length === 0" class="flex items-center gap-1.5">
+                <button @click="openNewCycleForCurrentMru()" class="w-full py-2.5 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition">
+                    <span>⚡ + Create First Cycle</span>
+                </button>
+            </div>
         </div>
 
         <!-- Month & Year Selector (Visible if custom selected or no cycles) -->

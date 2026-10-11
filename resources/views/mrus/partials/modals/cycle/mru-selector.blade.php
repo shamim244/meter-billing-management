@@ -3,9 +3,9 @@
     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Target MRU Workspace</label>
     <select x-model="selectedMruId" class="w-full text-xs font-semibold rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white py-2.5 px-3 focus:ring-2 focus:ring-blue-500">
         <option value="">Select MRU Workspace...</option>
-        <template x-for="m in mruList" :key="m.id">
-            <option :value="m.id" x-text="m.name + ' (' + m.code + ') — ' + m.consumer_accounts_count + ' consumers'"></option>
-        </template>
+        @foreach($mrus as $m)
+            <option value="{{ $m->id }}">{{ $m->name }} ({{ $m->code }}) — {{ $m->consumer_accounts_count ?? $m->consumerAccounts()->count() }} consumers</option>
+        @endforeach
     </select>
 </div>
 
