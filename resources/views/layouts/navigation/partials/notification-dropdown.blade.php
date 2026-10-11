@@ -1,4 +1,4 @@
-<div x-data="window.navigationNotifications ? navigationNotifications('{{ route('notifications.recent') }}', '{{ csrf_token() }}') : { notifDropdownOpen: false, unreadCount: 0, notifications: [], fetchNotifs() {} }" x-init="fetchNotifs()" class="relative">
+<div x-data="window.navigationNotifications ? navigationNotifications('{{ route('notifications.recent', [], false) }}', '{{ csrf_token() }}') : { notifDropdownOpen: false, unreadCount: 0, notifications: [], fetchNotifs() {} }" x-init="fetchNotifs()" class="relative">
     <button @click="notifDropdownOpen = !notifDropdownOpen; if (notifDropdownOpen) fetchNotifs();" 
             type="button" 
             class="relative w-9 h-9 rounded-xl flex items-center justify-center bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition shadow-sm border border-slate-200/60 dark:border-slate-700/60"

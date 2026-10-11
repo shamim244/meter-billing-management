@@ -90,17 +90,30 @@ function pdfManager() {
         triggerBatchReparse() {
             if (this.selectedIds.length === 0) return;
             this.actionRunning = true;
+            const token = csrfToken || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const endpoint = routes.batchReparse || '/pdf-manager/batch-reparse';
 
-            fetch(routes.batchReparse, {
+            fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
+                    'X-CSRF-TOKEN': token,
                     'Accept': 'application/json'
                 },
                 body: JSON.stringify({ bill_ids: this.selectedIds })
             })
-            .then(r => r.json())
+            .then(async r => {
+                let data;
+                try {
+                    data = await r.json();
+                } catch (e) {
+                    data = { message: `Server error (${r.status}): ${r.statusText}` };
+                }
+                if (!r.ok) {
+                    throw new Error(data.message || `Re-parse failed with status ${r.status}`);
+                }
+                return data;
+            })
             .then(data => {
                 this.actionRunning = false;
                 alert(data.message || 'Batch re-parse completed!');
@@ -108,7 +121,7 @@ function pdfManager() {
             })
             .catch(err => {
                 this.actionRunning = false;
-                alert('Failed to re-parse bills: ' + err);
+                alert('Failed to re-parse bills: ' + (err.message || err));
             });
         },
 
@@ -117,16 +130,30 @@ function pdfManager() {
             if (!confirm('Re-download ' + this.selectedIds.length + ' official PDF bills from NBPDCL servers?')) return;
 
             this.actionRunning = true;
-            fetch(routes.batchRedownload, {
+            const token = csrfToken || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const endpoint = routes.batchRedownload || '/pdf-manager/batch-redownload';
+
+            fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
+                    'X-CSRF-TOKEN': token,
                     'Accept': 'application/json'
                 },
                 body: JSON.stringify({ bill_ids: this.selectedIds })
             })
-            .then(r => r.json())
+            .then(async r => {
+                let data;
+                try {
+                    data = await r.json();
+                } catch (e) {
+                    data = { message: `Server error (${r.status}): ${r.statusText}` };
+                }
+                if (!r.ok) {
+                    throw new Error(data.message || `Re-download failed with status ${r.status}`);
+                }
+                return data;
+            })
             .then(data => {
                 this.actionRunning = false;
                 alert(data.message || 'Re-download completed!');
@@ -134,7 +161,7 @@ function pdfManager() {
             })
             .catch(err => {
                 this.actionRunning = false;
-                alert('Failed to re-download bills: ' + err);
+                alert('Failed to re-download bills: ' + (err.message || err));
             });
         },
 
@@ -143,16 +170,30 @@ function pdfManager() {
             if (!confirm('Permanently delete ' + this.selectedIds.length + ' physical PDF files and reset records to Pending?')) return;
 
             this.actionRunning = true;
-            fetch(routes.batchDelete, {
+            const token = csrfToken || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const endpoint = routes.batchDelete || '/pdf-manager/batch-delete';
+
+            fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
+                    'X-CSRF-TOKEN': token,
                     'Accept': 'application/json'
                 },
                 body: JSON.stringify({ bill_ids: this.selectedIds })
             })
-            .then(r => r.json())
+            .then(async r => {
+                let data;
+                try {
+                    data = await r.json();
+                } catch (e) {
+                    data = { message: `Server error (${r.status}): ${r.statusText}` };
+                }
+                if (!r.ok) {
+                    throw new Error(data.message || `Failed to delete PDFs with status ${r.status}`);
+                }
+                return data;
+            })
             .then(data => {
                 this.actionRunning = false;
                 alert(data.message || 'Deleted successfully!');
@@ -160,22 +201,36 @@ function pdfManager() {
             })
             .catch(err => {
                 this.actionRunning = false;
-                alert('Failed to delete PDFs: ' + err);
+                alert('Failed to delete PDFs: ' + (err.message || err));
             });
         },
 
         reparseSingle(id) {
             this.actionRunning = true;
-            fetch(routes.batchReparse, {
+            const token = csrfToken || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const endpoint = routes.batchReparse || '/pdf-manager/batch-reparse';
+
+            fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
+                    'X-CSRF-TOKEN': token,
                     'Accept': 'application/json'
                 },
                 body: JSON.stringify({ bill_ids: [id] })
             })
-            .then(r => r.json())
+            .then(async r => {
+                let data;
+                try {
+                    data = await r.json();
+                } catch (e) {
+                    data = { message: `Server error (${r.status}): ${r.statusText}` };
+                }
+                if (!r.ok) {
+                    throw new Error(data.message || `Re-parse failed with status ${r.status}`);
+                }
+                return data;
+            })
             .then(data => {
                 this.actionRunning = false;
                 alert('PDF data re-extracted successfully!');
@@ -183,47 +238,74 @@ function pdfManager() {
             })
             .catch(err => {
                 this.actionRunning = false;
-                alert('Error re-parsing: ' + err);
+                alert('Error re-parsing: ' + (err.message || err));
             });
         },
 
         deleteSingle(id, ca) {
             if (!confirm(`Delete physical PDF for CA ${ca}?`)) return;
             this.actionRunning = true;
+            const token = csrfToken || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const endpoint = routes.deleteSingle || '/bills/delete-pdf';
 
-            fetch(routes.deleteSingle, {
+            fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
+                    'X-CSRF-TOKEN': token,
                     'Accept': 'application/json'
                 },
                 body: JSON.stringify({ id: id })
             })
-            .then(r => r.json())
+            .then(async r => {
+                let data;
+                try {
+                    data = await r.json();
+                } catch (e) {
+                    data = { message: `Server error (${r.status}): ${r.statusText}` };
+                }
+                if (!r.ok) {
+                    throw new Error(data.message || `Delete failed with status ${r.status}`);
+                }
+                return data;
+            })
             .then(data => {
                 this.actionRunning = false;
                 window.location.reload();
             })
             .catch(err => {
                 this.actionRunning = false;
-                alert('Error deleting PDF: ' + err);
+                alert('Error deleting PDF: ' + (err.message || err));
             });
         },
 
         redownloadSingle(id) {
             this.actionRunning = true;
             this.loadingBillId = id;
-            fetch(routes.batchRedownload, {
+            const token = csrfToken || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const endpoint = routes.batchRedownload || '/pdf-manager/batch-redownload';
+
+            fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
+                    'X-CSRF-TOKEN': token,
                     'Accept': 'application/json'
                 },
                 body: JSON.stringify({ bill_ids: [id] })
             })
-            .then(r => r.json())
+            .then(async r => {
+                let data;
+                try {
+                    data = await r.json();
+                } catch (e) {
+                    data = { message: `Server error (${r.status}): ${r.statusText}` };
+                }
+                if (!r.ok) {
+                    throw new Error(data.message || `Download failed with status ${r.status}`);
+                }
+                return data;
+            })
             .then(data => {
                 this.actionRunning = false;
                 this.loadingBillId = null;
@@ -232,42 +314,69 @@ function pdfManager() {
             .catch(err => {
                 this.actionRunning = false;
                 this.loadingBillId = null;
-                alert('Error downloading: ' + err);
+                alert('Error downloading: ' + (err.message || err));
             });
         },
 
         runHealthScan() {
             this.healthScanning = true;
-            fetch(routes.healthCheck)
-                .then(r => r.json())
+            const endpoint = routes.healthCheck || '/pdf-manager/health-check';
+
+            fetch(endpoint)
+                .then(async r => {
+                    let data;
+                    try {
+                        data = await r.json();
+                    } catch (e) {
+                        data = { message: `Server error (${r.status}): ${r.statusText}` };
+                    }
+                    if (!r.ok) {
+                        throw new Error(data.message || `Health scan failed with status ${r.status}`);
+                    }
+                    return data;
+                })
                 .then(data => {
                     this.healthScanning = false;
                     this.healthData = data;
                 })
                 .catch(err => {
                     this.healthScanning = false;
-                    alert('Health scan failed: ' + err);
+                    alert('Health scan failed: ' + (err.message || err));
                 });
         },
 
         runStorageSync() {
             this.actionRunning = true;
-            fetch(routes.syncStorage, {
+            const token = csrfToken || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const endpoint = routes.syncStorage || '/pdf-manager/sync-storage';
+
+            fetch(endpoint, {
                 method: 'POST',
                 headers: {
-                    'X-CSRF-TOKEN': csrfToken,
+                    'X-CSRF-TOKEN': token,
                     'Accept': 'application/json'
                 }
             })
-            .then(r => r.json())
+            .then(async r => {
+                let data;
+                try {
+                    data = await r.json();
+                } catch (e) {
+                    data = { message: `Server error (${r.status}): ${r.statusText}` };
+                }
+                if (!r.ok) {
+                    throw new Error(data.message || `Sync failed with status ${r.status}`);
+                }
+                return data;
+            })
             .then(data => {
                 this.actionRunning = false;
-                alert(data.message);
+                alert(data.message || 'Storage synced successfully!');
                 window.location.reload();
             })
             .catch(err => {
                 this.actionRunning = false;
-                alert('Storage sync error: ' + err);
+                alert('Storage sync error: ' + (err.message || err));
             });
         },
 
@@ -311,16 +420,30 @@ function pdfManager() {
                 payload.year = this.deleteModalData.year;
             }
 
-            fetch(routes.purgeCycle, {
+            const token = csrfToken || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const endpoint = routes.purgeCycle || '/pdf-manager/purge-cycle';
+
+            fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
+                    'X-CSRF-TOKEN': token,
                     'Accept': 'application/json'
                 },
                 body: JSON.stringify(payload)
             })
-            .then(r => r.json())
+            .then(async r => {
+                let data;
+                try {
+                    data = await r.json();
+                } catch (e) {
+                    data = { message: `Server error (${r.status}): ${r.statusText}` };
+                }
+                if (!r.ok) {
+                    throw new Error(data.message || `Purge failed with status ${r.status}`);
+                }
+                return data;
+            })
             .then(data => {
                 this.deleteRunning = false;
                 this.showDeleteModal = false;
@@ -329,7 +452,7 @@ function pdfManager() {
             })
             .catch(err => {
                 this.deleteRunning = false;
-                alert('Error deleting PDFs: ' + err);
+                alert('Error deleting PDFs: ' + (err.message || err));
             });
         },
 
@@ -352,15 +475,29 @@ function pdfManager() {
                 formData.append('files[]', file);
             });
 
-            fetch(routes.upload, {
+            const token = csrfToken || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const endpoint = routes.upload || '/pdf-manager/upload';
+
+            fetch(endpoint, {
                 method: 'POST',
                 headers: {
-                    'X-CSRF-TOKEN': csrfToken,
+                    'X-CSRF-TOKEN': token,
                     'Accept': 'application/json'
                 },
                 body: formData
             })
-            .then(r => r.json())
+            .then(async r => {
+                let data;
+                try {
+                    data = await r.json();
+                } catch (e) {
+                    data = { message: `Server error (${r.status}): ${r.statusText}` };
+                }
+                if (!r.ok) {
+                    throw new Error(data.message || `Upload failed with status ${r.status}`);
+                }
+                return data;
+            })
             .then(data => {
                 this.uploadRunning = false;
                 alert(data.message || 'Files uploaded!');
@@ -368,7 +505,7 @@ function pdfManager() {
             })
             .catch(err => {
                 this.uploadRunning = false;
-                alert('Upload failed: ' + err);
+                alert('Upload failed: ' + (err.message || err));
             });
         }
     };

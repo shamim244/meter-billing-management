@@ -431,25 +431,50 @@ class PdfManagerController extends Controller
 
         $bills = BillRecord::where('user_id', $userId)
             ->whereIn('id', $billIds)
-            ->get();
+            ->get(['id', 'pdf_path']);
 
         $deletedFiles = 0;
-        foreach ($bills as $bill) {
-            if (! empty($bill->pdf_path) && Storage::disk('local')->exists($bill->pdf_path)) {
-                Storage::disk('local')->delete($bill->pdf_path);
-                $deletedFiles++;
-            }
+        $filesToDelete = [];
+        $validBillIds = [];
+        $disk = Storage::disk('local');
 
-            $bill->update([
-                'pdf_path' => null,
-                'pdf_filename' => null,
-                'download_status' => 'pending',
-                'parse_status' => 'pending',
-                'current_reading' => null,
-                'total_amount' => 0,
-                'units_consumed' => 0,
-                'error_message' => null,
-            ]);
+        foreach ($bills as $bill) {
+            $validBillIds[] = $bill->id;
+            if (! empty($bill->pdf_path)) {
+                try {
+                    if ($disk->exists($bill->pdf_path)) {
+                        $filesToDelete[] = $bill->pdf_path;
+                        $deletedFiles++;
+                    }
+                } catch (\Throwable $e) {
+                    // Suppress disk read errors
+                }
+            }
+        }
+
+        if (! empty($filesToDelete)) {
+            foreach (array_chunk($filesToDelete, 100) as $chunk) {
+                try {
+                    $disk->delete($chunk);
+                } catch (\Throwable $e) {
+                    // Suppress
+                }
+            }
+        }
+
+        if (! empty($validBillIds)) {
+            foreach (array_chunk($validBillIds, 500) as $chunkIds) {
+                BillRecord::whereIn('id', $chunkIds)->update([
+                    'pdf_path' => null,
+                    'pdf_filename' => null,
+                    'download_status' => 'pending',
+                    'parse_status' => 'pending',
+                    'current_reading' => null,
+                    'total_amount' => 0,
+                    'units_consumed' => 0,
+                    'error_message' => null,
+                ]);
+            }
         }
 
         $this->clearUserStorageCache($userId);
@@ -675,7 +700,7 @@ class PdfManagerController extends Controller
             $query->whereIn('id', $request->bill_ids);
         }
 
-        $bills = $query->get();
+        $bills = $query->get(['id', 'pdf_path']);
 
         if ($bills->isEmpty()) {
             return response()->json(['success' => true, 'message' => 'No stored PDF files found matching the selected criteria.', 'deleted_files' => 0, 'freed_bytes' => 0]);
@@ -683,16 +708,39 @@ class PdfManagerController extends Controller
 
         $freedBytes = 0;
         $deletedFiles = 0;
+        $billIds = [];
+        $filesToDelete = [];
+        $disk = Storage::disk('local');
 
         foreach ($bills as $bill) {
-            if (! empty($bill->pdf_path) && Storage::disk('local')->exists($bill->pdf_path)) {
-                $freedBytes += Storage::disk('local')->size($bill->pdf_path);
-                Storage::disk('local')->delete($bill->pdf_path);
-                $deletedFiles++;
-            }
+            $billIds[] = $bill->id;
 
-            // CRITICAL: Set pdf_path = null & download_status = pending, but PRESERVE all readings, amounts, consumer names, remarks, and review statuses!
-            $bill->update([
+            if (! empty($bill->pdf_path)) {
+                try {
+                    if ($disk->exists($bill->pdf_path)) {
+                        $freedBytes += (int) $disk->size($bill->pdf_path);
+                        $filesToDelete[] = $bill->pdf_path;
+                        $deletedFiles++;
+                    }
+                } catch (\Throwable $e) {
+                    // Suppress disk read errors
+                }
+            }
+        }
+
+        if (! empty($filesToDelete)) {
+            foreach (array_chunk($filesToDelete, 100) as $chunk) {
+                try {
+                    $disk->delete($chunk);
+                } catch (\Throwable $e) {
+                    // Suppress
+                }
+            }
+        }
+
+        // CRITICAL: Set pdf_path = null & download_status = pending, but PRESERVE all readings, amounts, consumer names, remarks, and review statuses!
+        foreach (array_chunk($billIds, 500) as $chunkIds) {
+            BillRecord::whereIn('id', $chunkIds)->update([
                 'pdf_path' => null,
                 'pdf_filename' => null,
                 'download_status' => 'pending',
