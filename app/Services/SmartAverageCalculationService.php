@@ -518,4 +518,103 @@ class SmartAverageCalculationService
 
         return ($anchor > 0) ? ($anchor + $effectiveUnits) : $effectiveUnits;
     }
+
+    /**
+     * Resolve previous reading, smart average, projected cumulative reading, and effective working reading.
+     * Guaranteed: Parity with Web Dashboard, PDF arbitrage, protection against delta-units in working reading.
+     *
+     * @return array{
+     *     previous_reading: int,
+     *     smart_average_kwh: int,
+     *     projected_reading: int,
+     *     working_reading: int|null,
+     *     suggested_reading: int
+     * }
+     */
+    public function resolveWorkingAndSuggestedReading(
+        BillRecord $bill,
+        ?ConsumerAccount $consumer = null,
+        ?Collection $history = null,
+        ?Collection $meterHistory = null,
+        float|int $adjPercent = 0,
+        array $tuningSteps = []
+    ): array {
+        $month = (int) ($bill->billing_month ?? now()->month);
+        $year = (int) ($bill->billing_year ?? now()->year);
+
+        // 1. Resolve previous reading using dashboard's exact resolution ladder:
+        // Preceding bill working/pdf/prev reading -> MeterReadingHistory -> current bill previous_reading -> Consumer ledger
+        $resolvedPrev = $this->resolvePreviousReading(
+            $bill->ca_number,
+            $month,
+            $year,
+            $bill,
+            $consumer,
+            $history,
+            $meterHistory
+        );
+
+        $prev = ($resolvedPrev['reading'] !== null && $resolvedPrev['reading'] > 0)
+            ? (int) $resolvedPrev['reading']
+            : (is_numeric($bill->previous_reading) && (int) $bill->previous_reading > 0 ? (int) $bill->previous_reading : 0);
+
+        // 2. Resolve Smart Average (monthly delta units) using dashboard's exact outlier-proof calculation
+        $basis = $bill->billing_basis ?: ($consumer?->billing_basis ?: 'OK');
+        $avgCalc = $this->calculateSmartAverage(
+            $bill->ca_number,
+            $month,
+            $year,
+            $basis,
+            $bill,
+            $consumer,
+            $history,
+            $adjPercent,
+            $tuningSteps,
+            $meterHistory
+        );
+        $avgUnits = max(1, (int) ($avgCalc['avg_units'] ?? 50));
+
+        // 3. Projected cumulative meter dial reading (Arbitrage: max(Prev, PDF) + Tuned Avg)
+        // Pass 0 as adjustmentPercent because calculateSmartAverage() already applied $adjPercent / $tuningSteps!
+        $pdfNum = (! empty($bill->current_reading) && is_numeric($bill->current_reading))
+            ? (int) $bill->current_reading
+            : null;
+
+        $hasAnchor = ($prev > 0) || ($pdfNum !== null && $pdfNum > 0);
+        $projectedReading = $hasAnchor
+            ? $this->calculateProjectedReading($prev, $avgUnits, $pdfNum, 0)
+            : 0;
+
+        // 4. Effective working reading & suggested reading
+        $dbWorking = (is_numeric($bill->working_reading) && $bill->working_reading !== '')
+            ? (int) $bill->working_reading
+            : null;
+
+        $readingSource = $bill->reading_source ?: 'auto';
+        $isManual = ($readingSource === 'manual');
+
+        if ($isManual && $dbWorking !== null && ($prev <= 0 || $dbWorking >= $prev)) {
+            $effectiveWorking = $dbWorking;
+            $suggested = $dbWorking;
+        } else {
+            // Auto-projected or corrupt delta: if empty, 0, less than projected, or <= previous reading (units entered instead of cumulative dial)
+            if ($dbWorking === null || $dbWorking <= 0 || ($projectedReading > 0 && $dbWorking < $projectedReading) || ($prev > 0 && $dbWorking <= $prev)) {
+                $effectiveWorking = ($projectedReading > 0) ? $projectedReading : $dbWorking;
+            } else {
+                $effectiveWorking = $dbWorking;
+            }
+
+            $suggested = ($projectedReading > 0)
+                ? $projectedReading
+                : ($effectiveWorking ?? ($prev > 0 ? $prev + $avgUnits : 0));
+        }
+
+        return [
+            'previous_reading' => $prev,
+            'smart_average_kwh' => $avgUnits,
+            'projected_reading' => $projectedReading,
+            'working_reading' => $effectiveWorking,
+            'suggested_reading' => $suggested,
+        ];
+    }
 }

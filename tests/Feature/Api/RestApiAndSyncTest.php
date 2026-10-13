@@ -435,4 +435,247 @@ class RestApiAndSyncTest extends TestCase
         $reviewRes->assertHeader('X-RateLimit-Limit', 120);
         $this->assertTrue($reviewRes->headers->has('X-RateLimit-Remaining'));
     }
+
+    public function test_automation_queue_projects_cumulative_reading_when_stored_reading_is_delta_or_less_than_previous(): void
+    {
+        $ca = '10230049139';
+        ConsumerAccount::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'consumer_name' => 'DHIRNE CHANDRA DAS BRAJ',
+            'meter_no' => '3810637',
+            'tariff_category' => 'DS1D',
+            'billing_basis' => 'OK',
+            'status' => 'active',
+        ]);
+
+        BillRecord::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'billing_month' => 10,
+            'billing_year' => 2026,
+            'bill_month_label' => 'OCT, 2026',
+            'previous_reading' => '2610',
+            'working_reading' => '50', // Improperly stored delta consumption
+            'units_consumed' => 50,
+            'calculated_avg_units' => 50,
+            'reading_source' => 'auto',
+            'review_status' => 'pending',
+            'billing_basis' => 'OK',
+        ]);
+
+        $res = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson('/api/v1/automation/queue?mru_id='.$this->mru->id.'&cycle=OCT-2026');
+
+        $res->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('total_in_queue', 1);
+
+        $consumer = $res->json('consumers.0');
+        $this->assertEquals($ca, $consumer['ca_number']);
+        $this->assertEquals('DHIRNE CHANDRA DAS BRAJ', $consumer['consumer_name']);
+        $this->assertEquals('3810637', $consumer['meter_number']);
+        $this->assertEquals(2610, $consumer['previous_reading']);
+        $this->assertEquals(50, $consumer['smart_average_kwh']);
+        // Must be cumulative: 2610 + 50 = 2660, NOT 50!
+        $this->assertEquals(2660, $consumer['working_reading']);
+        $this->assertEquals(2660, $consumer['suggested_reading']);
+    }
+
+    public function test_automation_queue_preserves_valid_manual_reading_above_previous(): void
+    {
+        $ca = '10230049140';
+        BillRecord::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'consumer_name' => 'MANUAL TEST CONSUMER',
+            'billing_month' => 10,
+            'billing_year' => 2026,
+            'previous_reading' => '2610',
+            'working_reading' => '2685',
+            'units_consumed' => 75,
+            'calculated_avg_units' => 50,
+            'reading_source' => 'manual',
+            'review_status' => 'pending',
+        ]);
+
+        $res = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson('/api/v1/automation/queue?mru_id='.$this->mru->id.'&cycle=OCT-2026');
+
+        $res->assertStatus(200);
+        $consumer = $res->json('consumers.0');
+        $this->assertEquals(2610, $consumer['previous_reading']);
+        $this->assertEquals(2685, $consumer['working_reading']);
+        $this->assertEquals(2685, $consumer['suggested_reading']);
+    }
+
+    public function test_mobile_sync_and_bills_api_parity_with_dashboard_projection(): void
+    {
+        $ca = '10230049141';
+        ConsumerAccount::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'consumer_name' => 'SYNC PARITY CONSUMER',
+            'meter_no' => '5583128',
+            'status' => 'active',
+        ]);
+
+        BillRecord::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'consumer_name' => 'SYNC PARITY CONSUMER',
+            'meter_no' => '5583128',
+            'billing_month' => 10,
+            'billing_year' => 2026,
+            'previous_reading' => '806',
+            'working_reading' => '50', // Delta instead of cumulative 856
+            'units_consumed' => 50,
+            'calculated_avg_units' => 50,
+            'reading_source' => 'auto',
+            'review_status' => 'pending',
+        ]);
+
+        // 1. Mobile sync download endpoint
+        $syncRes = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson('/api/v1/sync/mrus/'.$this->mru->id.'/download');
+
+        $syncRes->assertStatus(200);
+        $syncConsumer = $syncRes->json('consumers.0');
+        $this->assertEquals(806, $syncConsumer['previous_reading']);
+        $this->assertEquals(856, $syncConsumer['suggested_reading']); // 806 + 50
+        $this->assertEquals('856', $syncConsumer['current_bill']['working_reading']);
+
+        // 2. Bills API index endpoint
+        $billsRes = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson('/api/v1/bills?month=10&year=2026');
+
+        $billsRes->assertStatus(200);
+        $billData = $billsRes->json('data.0');
+        $this->assertEquals('856', $billData['working_reading']);
+    }
+
+    public function test_automation_queue_matches_dashboard_when_historical_smart_average_differs_from_default_units(): void
+    {
+        $ca = '10230049142';
+        ConsumerAccount::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'consumer_name' => 'HISTORICAL AVERAGE CONSUMER',
+            'status' => 'active',
+            'billing_basis' => 'OK',
+        ]);
+
+        // Historical bills: Month 7, 8, 9 with 30 units consumed each
+        foreach ([7, 8, 9] as $m) {
+            BillRecord::create([
+                'user_id' => $this->user->id,
+                'mru_id' => $this->mru->id,
+                'ca_number' => $ca,
+                'billing_month' => $m,
+                'billing_year' => 2026,
+                'units_consumed' => 30,
+                'billing_basis' => 'OK',
+            ]);
+        }
+
+        // October bill has default 50 stored in calculated_avg_units and units_consumed
+        BillRecord::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'billing_month' => 10,
+            'billing_year' => 2026,
+            'previous_reading' => '2610',
+            'working_reading' => '50', // Corrupt delta
+            'units_consumed' => 50,
+            'calculated_avg_units' => 50,
+            'reading_source' => 'auto',
+            'review_status' => 'pending',
+            'billing_basis' => 'OK',
+        ]);
+
+        // 1. Dashboard getData() check
+        $dashRes = $this->actingAs($this->user)
+            ->getJson("/dashboard/data?mru_id={$this->mru->id}&month=10&year=2026&search={$ca}");
+        $dashRes->assertStatus(200);
+        $dashRecord = collect($dashRes->json('data'))->firstWhere('ca_number', $ca);
+        $this->assertEquals(30, $dashRecord['smart_avg_units']);
+        $this->assertEquals('2640', $dashRecord['working_reading']); // 2610 + 30
+
+        // 2. Automation queue check - must match Dashboard!
+        $queueRes = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson('/api/v1/automation/queue?mru_id='.$this->mru->id.'&cycle=OCT-2026');
+        $queueRes->assertStatus(200);
+        $queueRecord = collect($queueRes->json('consumers'))->firstWhere('ca_number', $ca);
+
+        $this->assertEquals(2610, $queueRecord['previous_reading']);
+        $this->assertEquals(30, $queueRecord['smart_average_kwh']);
+        $this->assertEquals(2640, $queueRecord['working_reading']);
+        $this->assertEquals(2640, $queueRecord['suggested_reading']);
+    }
+
+    public function test_automation_queue_matches_dashboard_when_previous_reading_resolved_from_preceding_month_bill(): void
+    {
+        $ca = '10230049143';
+        ConsumerAccount::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'consumer_name' => 'PRECEDING BILL CONSUMER',
+            'status' => 'active',
+            'billing_basis' => 'OK',
+        ]);
+
+        // September bill with working reading 2685
+        BillRecord::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'billing_month' => 9,
+            'billing_year' => 2026,
+            'bill_month_label' => 'SEP, 2026',
+            'working_reading' => '2685',
+            'review_status' => 'submitted',
+            'units_consumed' => 50,
+            'billing_basis' => 'OK',
+        ]);
+
+        // October bill has stale baseline previous reading 2610 and corrupt working reading 50
+        BillRecord::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'billing_month' => 10,
+            'billing_year' => 2026,
+            'previous_reading' => '2610', // Stale baseline
+            'working_reading' => '50', // Corrupt delta
+            'reading_source' => 'auto',
+            'review_status' => 'pending',
+            'billing_basis' => 'OK',
+        ]);
+
+        // 1. Dashboard getData() check
+        $dashRes = $this->actingAs($this->user)
+            ->getJson("/dashboard/data?mru_id={$this->mru->id}&month=10&year=2026&search={$ca}");
+        $dashRes->assertStatus(200);
+        $dashRecord = collect($dashRes->json('data'))->firstWhere('ca_number', $ca);
+        $this->assertEquals('2685', $dashRecord['db_prev_reading']);
+        $this->assertEquals('2735', $dashRecord['working_reading']); // 2685 + 50
+
+        // 2. Automation queue check - must match Dashboard!
+        $queueRes = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson('/api/v1/automation/queue?mru_id='.$this->mru->id.'&cycle=OCT-2026');
+        $queueRes->assertStatus(200);
+        $queueRecord = collect($queueRes->json('consumers'))->firstWhere('ca_number', $ca);
+
+        $this->assertEquals(2685, $queueRecord['previous_reading']);
+        $this->assertEquals(2735, $queueRecord['working_reading']);
+        $this->assertEquals(2735, $queueRecord['suggested_reading']);
+    }
 }

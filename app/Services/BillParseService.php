@@ -198,8 +198,16 @@ class BillParseService
                     : ($extracted['tariff_category'] ?? $record->tariff_category);
 
                 $initialWorking = $record->working_reading;
-                if (empty($initialWorking) && ! empty($extracted['current_reading'])) {
-                    $initialWorking = (string) $extracted['current_reading'];
+                $isManual = ($record->reading_source === 'manual');
+                $pdfReading = ! empty($extracted['current_reading']) && is_numeric($extracted['current_reading']) ? (int) $extracted['current_reading'] : null;
+                $prevReading = ! empty($extracted['previous_reading']) && is_numeric($extracted['previous_reading']) ? (int) $extracted['previous_reading'] : null;
+
+                if (! $isManual) {
+                    if (empty($initialWorking) || $initialWorking === '0' || ($prevReading > 0 && (int) $initialWorking <= $prevReading) || ($pdfReading > 0 && (int) $initialWorking < $pdfReading)) {
+                        if ($pdfReading > 0) {
+                            $initialWorking = (string) $pdfReading;
+                        }
+                    }
                 }
 
                 // Resolve MRU from extracted bill data if missing on record

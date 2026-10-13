@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BillRecord;
 use App\Models\BillStatus;
 use App\Models\ConsumerAccount;
+use App\Models\MeterReadingHistory;
 use App\Models\Mru;
 use App\Models\User;
 use App\Services\MeterReadingHistoryService;
@@ -101,22 +102,70 @@ class AutomationController extends Controller
         $totalInQueue = (clone $query)->count();
         $bills = $query->orderBy('id', 'asc')->limit($limit)->get();
 
-        $formatted = $bills->map(function (BillRecord $bill) {
-            $prev = is_numeric($bill->previous_reading) ? (int) $bill->previous_reading : 0;
-            $working = is_numeric($bill->working_reading) ? (int) $bill->working_reading : null;
-            $avgUnits = (int) ($bill->calculated_avg_units ?? $bill->units_consumed ?? 50);
+        $caNumbers = $bills->pluck('ca_number')->unique()->values();
+        $consumers = ConsumerAccount::where('user_id', $userId)
+            ->whereIn('ca_number', $caNumbers)
+            ->get()
+            ->keyBy('ca_number');
+
+        $historicalBills = BillRecord::where('user_id', $userId)
+            ->whereIn('ca_number', $caNumbers)
+            ->where(function ($q) use ($month, $year) {
+                $q->where('billing_year', '<', $year)
+                    ->orWhere(function ($q2) use ($month, $year) {
+                        $q2->where('billing_year', $year)
+                            ->where('billing_month', '<', $month);
+                    });
+            })
+            ->orderBy('billing_year', 'desc')
+            ->orderBy('billing_month', 'desc')
+            ->get()
+            ->groupBy('ca_number');
+
+        $meterHistories = MeterReadingHistory::where('user_id', $userId)
+            ->whereIn('ca_number', $caNumbers)
+            ->where(function ($q) use ($month, $year) {
+                $q->where('billing_year', '<', $year)
+                    ->orWhere(function ($q2) use ($month, $year) {
+                        $q2->where('billing_year', $year)
+                            ->where('billing_month', '<', $month);
+                    });
+            })
+            ->orderBy('billing_year', 'desc')
+            ->orderBy('billing_month', 'desc')
+            ->get()
+            ->groupBy('ca_number');
+
+        $formatted = $bills->map(function (BillRecord $bill) use ($consumers, $historicalBills, $meterHistories) {
+            $consumer = $consumers->get($bill->ca_number);
+            $history = $historicalBills->get($bill->ca_number, collect());
+            $mrhForCa = $meterHistories->get($bill->ca_number, collect());
+
+            $resolved = $this->smartAverageService->resolveWorkingAndSuggestedReading(
+                $bill,
+                $consumer,
+                $history,
+                $mrhForCa
+            );
+
+            $consumerName = ! empty($bill->consumer_name) && ! str_starts_with($bill->consumer_name, 'Consumer ')
+                ? $bill->consumer_name
+                : ($consumer?->consumer_name ?: $bill->consumer_name ?: "Consumer {$bill->ca_number}");
+
+            $meterNumber = $bill->meter_no ?: ($consumer?->meter_no ?: null);
+            $address = $bill->address ?: ($consumer?->address ?: null);
 
             return [
                 'bill_id' => $bill->id,
                 'ca_number' => $bill->ca_number,
-                'consumer_name' => $bill->consumer_name,
-                'meter_number' => $bill->meter_no,
-                'billing_basis' => $bill->billing_basis ?: 'Normal(OK)',
-                'address' => $bill->address,
-                'previous_reading' => $prev,
-                'working_reading' => $working,
-                'smart_average_kwh' => $avgUnits,
-                'suggested_reading' => $working ?? ($prev > 0 ? $prev + $avgUnits : 0),
+                'consumer_name' => $consumerName,
+                'meter_number' => $meterNumber,
+                'billing_basis' => $bill->billing_basis ?: ($consumer?->billing_basis ?: 'Normal(OK)'),
+                'address' => $address,
+                'previous_reading' => $resolved['previous_reading'],
+                'working_reading' => $resolved['working_reading'],
+                'smart_average_kwh' => $resolved['smart_average_kwh'],
+                'suggested_reading' => $resolved['suggested_reading'],
                 'review_status' => $bill->review_status ?? 'unsubmitted',
                 'remark' => $bill->remark,
             ];

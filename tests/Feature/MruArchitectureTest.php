@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\BillRecord;
 use App\Models\ConsumerAccount;
 use App\Models\Mru;
 use App\Models\Plan;
@@ -264,6 +265,112 @@ class MruArchitectureTest extends TestCase
             'billing_year' => 2026,
             'download_status' => 'pending',
         ]);
+    }
+
+    public function test_create_cycle_only_properly_projects_cumulative_reading_or_null(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $this->subscribeUser($user);
+
+        $mru = Mru::create([
+            'user_id' => $user->id,
+            'code' => '0245',
+            'name' => 'CYCLE_TEST_MRU',
+            'status' => 'active',
+        ]);
+
+        // Consumer 1: Has known previous reading (2610)
+        ConsumerAccount::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '102300999901',
+            'consumer_name' => 'Known Prev Consumer',
+            'last_working_reading' => '2610',
+            'last_working_month' => 9,
+            'last_working_year' => 2026,
+            'status' => 'active',
+        ]);
+
+        // Consumer 2: Has no known previous reading (brand new, unknown dial)
+        ConsumerAccount::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '102300999902',
+            'consumer_name' => 'Unknown Prev Consumer',
+            'status' => 'active',
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/mrus/{$mru->id}/start-billing", [
+            'billing_month' => 10,
+            'billing_year' => 2026,
+            'action_type' => 'create_only',
+        ]);
+
+        $response->assertStatus(200);
+
+        // Consumer 1: cumulative working reading = 2610 + 50 = 2660
+        $bill1 = BillRecord::where('user_id', $user->id)->where('ca_number', '102300999901')->first();
+        $this->assertEquals(2610, (int) $bill1->previous_reading);
+        $this->assertEquals(50, (int) $bill1->units_consumed);
+        $this->assertEquals('2660', $bill1->working_reading);
+
+        // Consumer 2: unknown dial, units = 50, working_reading must be null (not 50!)
+        $bill2 = BillRecord::where('user_id', $user->id)->where('ca_number', '102300999902')->first();
+        $this->assertNull($bill2->previous_reading);
+        $this->assertEquals(50, (int) $bill2->units_consumed);
+        $this->assertNull($bill2->working_reading);
+    }
+
+    public function test_create_cycle_only_preserves_manual_and_submitted_bills(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $this->subscribeUser($user);
+
+        $mru = Mru::create([
+            'user_id' => $user->id,
+            'code' => '0246',
+            'name' => 'PRESERVE_TEST_MRU',
+            'status' => 'active',
+        ]);
+
+        $ca = '102300999903';
+        ConsumerAccount::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => $ca,
+            'consumer_name' => 'Manual Preserved Consumer',
+            'last_working_reading' => '2610',
+            'status' => 'active',
+        ]);
+
+        // Pre-existing manual and submitted bill for October 2026
+        BillRecord::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => $ca,
+            'billing_month' => 10,
+            'billing_year' => 2026,
+            'previous_reading' => '2610',
+            'working_reading' => '2685',
+            'units_consumed' => 75,
+            'calculated_avg_units' => 75,
+            'reading_source' => 'manual',
+            'review_status' => 'submitted',
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/mrus/{$mru->id}/start-billing", [
+            'billing_month' => 10,
+            'billing_year' => 2026,
+            'action_type' => 'create_only',
+        ]);
+
+        $response->assertStatus(200);
+
+        $bill = BillRecord::where('user_id', $user->id)->where('ca_number', $ca)->first();
+        $this->assertEquals('2685', $bill->working_reading, 'Manual working reading must be preserved');
+        $this->assertEquals('manual', $bill->reading_source, 'Manual reading source must be preserved');
+        $this->assertEquals('submitted', $bill->review_status, 'Submitted review status must be preserved');
+        $this->assertEquals(75, $bill->units_consumed, 'Manual units consumed must be preserved');
     }
 
     public function test_multiple_users_can_create_mru_with_same_code(): void

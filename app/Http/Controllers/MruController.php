@@ -887,11 +887,13 @@ class MruController extends Controller
                 $history = $historicalBills->get($consumer->ca_number, collect());
                 $mrhForCa = $meterHistories->get($consumer->ca_number, collect());
 
+                $existingCurrentBill = $history->first(fn ($b) => (int) $b->billing_month === $month && (int) $b->billing_year === $year);
+
                 $resolvedPrev = $this->smartAverageService->resolvePreviousReading(
                     $consumer->ca_number,
                     $month,
                     $year,
-                    null,
+                    $existingCurrentBill,
                     $consumer,
                     $history,
                     $mrhForCa
@@ -902,7 +904,7 @@ class MruController extends Controller
                     $month,
                     $year,
                     $consumer->billing_basis ?: 'OK',
-                    null,
+                    $existingCurrentBill,
                     $consumer,
                     $history,
                     0,
@@ -910,10 +912,23 @@ class MruController extends Controller
                     $mrhForCa
                 );
 
-                $prevReading = $resolvedPrev['reading'];
+                $prevReading = ($resolvedPrev['reading'] !== null && $resolvedPrev['reading'] > 0) ? (int) $resolvedPrev['reading'] : null;
                 $avgUnits = $avgCalc['avg_units'];
                 $effectiveUnits = $this->smartAverageService->adjustAverageUnits($avgUnits, $adjPercent);
-                $projectedReading = $this->smartAverageService->calculateProjectedReading($prevReading, $avgUnits, null, $adjPercent);
+                $projectedReading = ($prevReading !== null && $prevReading > 0)
+                    ? $this->smartAverageService->calculateProjectedReading($prevReading, $avgUnits, null, $adjPercent)
+                    : null;
+
+                $isManual = ($existingCurrentBill && $existingCurrentBill->reading_source === 'manual');
+                $workingReadingToSave = $isManual
+                    ? $existingCurrentBill->working_reading
+                    : ($projectedReading !== null ? (string) $projectedReading : null);
+
+                $readingSourceToSave = $isManual ? 'manual' : ($existingCurrentBill?->reading_source ?: 'auto');
+                $reviewStatusToSave = $existingCurrentBill ? ($existingCurrentBill->review_status ?? 'pending') : 'pending';
+                $unitsToSave = $isManual && $existingCurrentBill->units_consumed !== null
+                    ? $existingCurrentBill->units_consumed
+                    : $effectiveUnits;
 
                 $bill = BillRecord::updateOrCreate(
                     [
@@ -931,23 +946,26 @@ class MruController extends Controller
                         'billing_basis' => $consumer->billing_basis ?: 'OK',
                         'total_amount' => $consumer->baseline_amount !== null ? (float) $consumer->baseline_amount : 0.00,
                         'previous_reading' => $prevReading,
-                        'units_consumed' => $effectiveUnits,
+                        'units_consumed' => $unitsToSave,
                         'calculated_avg_units' => $avgUnits,
-                        'working_reading' => (string) $projectedReading,
-                        'reading_source' => 'auto',
-                        'download_status' => 'pending',
+                        'working_reading' => $workingReadingToSave,
+                        'reading_source' => $readingSourceToSave,
+                        'review_status' => $reviewStatusToSave,
+                        'download_status' => $existingCurrentBill ? $existingCurrentBill->download_status : 'pending',
                     ]
                 );
 
-                try {
-                    app(MeterReadingHistoryService::class)->recordFromWorkingReading(
-                        $bill,
-                        (string) $projectedReading,
-                        $effectiveUnits,
-                        false
-                    );
-                } catch (\Throwable $e) {
-                    // Ignore background history recording errors
+                if (! $isManual && $projectedReading !== null) {
+                    try {
+                        app(MeterReadingHistoryService::class)->recordFromWorkingReading(
+                            $bill,
+                            (string) $projectedReading,
+                            $effectiveUnits,
+                            false
+                        );
+                    } catch (\Throwable $e) {
+                        // Ignore background history recording errors
+                    }
                 }
             }
         });

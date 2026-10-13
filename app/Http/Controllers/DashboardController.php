@@ -670,7 +670,7 @@ class DashboardController extends Controller
 
             $readingSource = $bill->reading_source ?: 'auto';
 
-            if ($readingSource === 'manual') {
+            if ($readingSource === 'manual' && ($prevNum <= 0 || (int) $bill->working_reading >= $prevNum)) {
                 $bill->is_manual = true;
                 $bill->is_projected = false;
                 $bill->reading_source = 'manual';
@@ -679,7 +679,7 @@ class DashboardController extends Controller
                 $bill->is_projected = true;
                 $bill->reading_source = 'auto';
 
-                if (empty($bill->working_reading) || $bill->working_reading == '0' || (int) $bill->working_reading < $projectedReading) {
+                if (empty($bill->working_reading) || $bill->working_reading == '0' || (int) $bill->working_reading < $projectedReading || ($prevNum > 0 && (int) $bill->working_reading <= $prevNum)) {
                     if ($projectedReading > 0) {
                         $bill->working_reading = (string) $projectedReading;
                     }
@@ -1162,26 +1162,31 @@ class DashboardController extends Controller
                 $effectiveUnits = $avgCalc['avg_units'];
 
                 $pdfReading = (! empty($bill->current_reading) && is_numeric($bill->current_reading)) ? (int) $bill->current_reading : null;
-                $projected = $this->smartAverageService->calculateProjectedReading($dbPrevReading, $effectiveUnits, $pdfReading, 0);
+                $hasAnchor = ($dbPrevReading > 0) || ($pdfReading !== null && $pdfReading > 0);
+                $projected = $hasAnchor
+                    ? $this->smartAverageService->calculateProjectedReading($dbPrevReading, $effectiveUnits, $pdfReading, 0)
+                    : null;
 
                 if ($dbPrevReading > 0) {
                     $bill->previous_reading = $dbPrevReading;
                 }
-                $bill->working_reading = (string) $projected;
+                $bill->working_reading = $projected !== null ? (string) $projected : null;
                 $bill->reading_source = 'auto';
                 $bill->units_consumed = $effectiveUnits;
                 $bill->calculated_avg_units = $avgCalc['base_units'];
                 $bill->save();
 
-                try {
-                    $this->meterHistoryService->recordFromWorkingReading(
-                        $bill,
-                        (string) $projected,
-                        $effectiveUnits,
-                        false
-                    );
-                } catch (\Throwable $e) {
-                    // ignore
+                if ($projected !== null) {
+                    try {
+                        $this->meterHistoryService->recordFromWorkingReading(
+                            $bill,
+                            (string) $projected,
+                            $effectiveUnits,
+                            false
+                        );
+                    } catch (\Throwable $e) {
+                        // ignore
+                    }
                 }
 
                 // Sync master ledger

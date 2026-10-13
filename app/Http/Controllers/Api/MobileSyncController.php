@@ -66,20 +66,64 @@ class MobileSyncController extends Controller
             ->get()
             ->keyBy('ca_number');
 
+        $caNumbers = $consumers->pluck('ca_number')->unique()->values();
+
+        $historicalBills = BillRecord::where('user_id', $userId)
+            ->whereIn('ca_number', $caNumbers)
+            ->where(function ($q) use ($activeMonth, $activeYear) {
+                $q->where('billing_year', '<', $activeYear)
+                    ->orWhere(function ($q2) use ($activeMonth, $activeYear) {
+                        $q2->where('billing_year', $activeYear)
+                            ->where('billing_month', '<', $activeMonth);
+                    });
+            })
+            ->orderBy('billing_year', 'desc')
+            ->orderBy('billing_month', 'desc')
+            ->get()
+            ->groupBy('ca_number');
+
+        $meterHistories = MeterReadingHistory::where('user_id', $userId)
+            ->whereIn('ca_number', $caNumbers)
+            ->where(function ($q) use ($activeMonth, $activeYear) {
+                $q->where('billing_year', '<', $activeYear)
+                    ->orWhere(function ($q2) use ($activeMonth, $activeYear) {
+                        $q2->where('billing_year', $activeYear)
+                            ->where('billing_month', '<', $activeMonth);
+                    });
+            })
+            ->orderBy('billing_year', 'desc')
+            ->orderBy('billing_month', 'desc')
+            ->get()
+            ->groupBy('ca_number');
+
         $consumerPayload = [];
         foreach ($consumers as $consumer) {
             $bill = $activeBills->get($consumer->ca_number);
+            $history = $historicalBills->get($consumer->ca_number, collect());
+            $mrhForCa = $meterHistories->get($consumer->ca_number, collect());
 
-            // Previous reading resolution
-            $prevReading = 0;
-            if ($bill && is_numeric($bill->previous_reading)) {
-                $prevReading = (int) $bill->previous_reading;
-            } elseif (is_numeric($consumer->last_working_reading)) {
-                $prevReading = (int) $consumer->last_working_reading;
+            if ($bill) {
+                $resolved = $this->smartAverageService->resolveWorkingAndSuggestedReading(
+                    $bill,
+                    $consumer,
+                    $history,
+                    $mrhForCa
+                );
+                $prevReading = $resolved['previous_reading'];
+                $smartAvg = $resolved['smart_average_kwh'];
+                $suggestedReading = $resolved['suggested_reading'];
+                $workingReading = $resolved['working_reading'] !== null ? (string) $resolved['working_reading'] : null;
+            } else {
+                $prevReading = 0;
+                if (is_numeric($consumer->last_working_reading)) {
+                    $prevReading = (int) $consumer->last_working_reading;
+                } elseif (is_numeric($consumer->baseline_previous_reading)) {
+                    $prevReading = (int) $consumer->baseline_previous_reading;
+                }
+                $smartAvg = 50;
+                $suggestedReading = $prevReading > 0 ? $prevReading + $smartAvg : 0;
+                $workingReading = $suggestedReading > 0 ? (string) $suggestedReading : null;
             }
-
-            // Smart average calculation
-            $smartAvg = $bill?->calculated_avg_units ?? $bill?->units_consumed ?? 50;
 
             $consumerPayload[] = [
                 'ca_number' => $consumer->ca_number,
@@ -91,13 +135,15 @@ class MobileSyncController extends Controller
                 'billing_basis' => $consumer->billing_basis ?: ($bill?->billing_basis ?: 'Normal(OK)'),
                 'previous_reading' => $prevReading,
                 'smart_average_kwh' => (int) $smartAvg,
-                'suggested_reading' => $prevReading > 0 ? $prevReading + (int) $smartAvg : 0,
+                'suggested_reading' => $suggestedReading,
                 'current_bill' => $bill ? [
                     'bill_id' => $bill->id,
-                    'working_reading' => $bill->working_reading,
+                    'working_reading' => $workingReading,
                     'review_status' => $bill->review_status ?? 'unsubmitted',
                     'remark' => $bill->remark,
-                    'units_consumed' => $bill->units_consumed,
+                    'units_consumed' => ($prevReading > 0 && $workingReading !== null && (int) $workingReading >= $prevReading)
+                        ? ((int) $workingReading - $prevReading)
+                        : ($bill->units_consumed ?? $smartAvg),
                 ] : null,
             ];
         }

@@ -158,20 +158,72 @@ class BillApiController extends Controller
 
         $items = $query->skip($offset)->take($perPage)->get();
 
-        $data = $items->map(function (BillRecord $b) {
+        $caNumbers = $items->pluck('ca_number')->unique()->values();
+        $consumers = ConsumerAccount::where('user_id', $userId)
+            ->whereIn('ca_number', $caNumbers)
+            ->get()
+            ->keyBy('ca_number');
+
+        $historicalBills = BillRecord::where('user_id', $userId)
+            ->whereIn('ca_number', $caNumbers)
+            ->where(function ($q) use ($month, $year) {
+                $q->where('billing_year', '<', $year)
+                    ->orWhere(function ($q2) use ($month, $year) {
+                        $q2->where('billing_year', $year)
+                            ->where('billing_month', '<', $month);
+                    });
+            })
+            ->orderBy('billing_year', 'desc')
+            ->orderBy('billing_month', 'desc')
+            ->get()
+            ->groupBy('ca_number');
+
+        $meterHistories = MeterReadingHistory::where('user_id', $userId)
+            ->whereIn('ca_number', $caNumbers)
+            ->where(function ($q) use ($month, $year) {
+                $q->where('billing_year', '<', $year)
+                    ->orWhere(function ($q2) use ($month, $year) {
+                        $q2->where('billing_year', $year)
+                            ->where('billing_month', '<', $month);
+                    });
+            })
+            ->orderBy('billing_year', 'desc')
+            ->orderBy('billing_month', 'desc')
+            ->get()
+            ->groupBy('ca_number');
+
+        $data = $items->map(function (BillRecord $b) use ($consumers, $historicalBills, $meterHistories) {
+            $consumer = $consumers->get($b->ca_number);
+            $history = $historicalBills->get($b->ca_number, collect());
+            $mrhForCa = $meterHistories->get($b->ca_number, collect());
+
+            $resolved = $this->smartAverageService->resolveWorkingAndSuggestedReading(
+                $b,
+                $consumer,
+                $history,
+                $mrhForCa
+            );
+
+            $workingReading = $resolved['working_reading'] !== null ? (string) $resolved['working_reading'] : $b->working_reading;
+            $dbPrevReading = $resolved['previous_reading'] > 0 ? (string) $resolved['previous_reading'] : ($b->previous_reading ?: null);
+            $pdfReading = $b->current_reading;
+            $effectiveUnits = ($resolved['previous_reading'] > 0 && $workingReading !== null && (int) $workingReading >= $resolved['previous_reading'])
+                ? ((int) $workingReading - $resolved['previous_reading'])
+                : ($b->units_consumed !== null ? (int) $b->units_consumed : $resolved['smart_average_kwh']);
+
             return [
                 'id' => $b->id,
                 'ca_number' => $b->ca_number,
-                'consumer_name' => $b->consumer_name,
+                'consumer_name' => ! empty($b->consumer_name) && ! str_starts_with($b->consumer_name, 'Consumer ') ? $b->consumer_name : ($consumer?->consumer_name ?: $b->consumer_name),
                 'tariff_category' => $b->category,
-                'billing_basis' => $b->billing_basis ?: 'OK',
-                'meter_no' => $b->meter_no,
+                'billing_basis' => $b->billing_basis ?: ($consumer?->billing_basis ?: 'OK'),
+                'meter_no' => $b->meter_no ?: ($consumer?->meter_no ?: null),
                 'total_amount' => $b->total_amount !== null ? (float) $b->total_amount : null,
-                'units_consumed' => $b->units_consumed !== null ? (int) $b->units_consumed : null,
-                'db_prev_reading' => $b->previous_reading,
-                'working_reading' => $b->working_reading,
-                'official_pdf_reading' => $b->current_reading,
-                'pdf_sync_status' => ($b->current_reading && $b->working_reading && (string) $b->current_reading === (string) $b->working_reading) ? 'matched' : 'custom',
+                'units_consumed' => $effectiveUnits,
+                'db_prev_reading' => $dbPrevReading,
+                'working_reading' => $workingReading,
+                'official_pdf_reading' => $pdfReading,
+                'pdf_sync_status' => ($pdfReading && $workingReading && (string) $pdfReading === (string) $workingReading) ? 'matched' : 'custom',
                 'review_status' => $b->review_status ?? 'pending',
                 'reason_code' => $b->tag,
                 'remark' => $b->remark,
