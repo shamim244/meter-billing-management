@@ -38,17 +38,17 @@ class AdminIssueController extends Controller
             $query->where('category', $category);
         }
 
-        // Search (code, title, CA, user email)
         $search = trim((string) $request->get('search', ''));
         if (! empty($search)) {
-            $query->where(function ($q) use ($search) {
-                $q->where('issue_code', 'like', "%{$search}%")
-                    ->orWhere('title', 'like', "%{$search}%")
-                    ->orWhere('description', 'like', "%{$search}%")
-                    ->orWhere('ca_number', 'like', "%{$search}%")
-                    ->orWhereHas('user', function ($uq) use ($search) {
-                        $uq->where('name', 'like', "%{$search}%")
-                            ->orWhere('email', 'like', "%{$search}%");
+            $escaped = addcslashes(mb_strtolower($search), '%_');
+            $query->where(function ($q) use ($escaped) {
+                $q->whereRaw('LOWER(issue_code) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(title) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(description) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(ca_number) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereHas('user', function ($uq) use ($escaped) {
+                        $uq->whereRaw('LOWER(name) LIKE ?', ["%{$escaped}%"])
+                            ->orWhereRaw('LOWER(email) LIKE ?', ["%{$escaped}%"]);
                     });
             });
         }

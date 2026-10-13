@@ -61,16 +61,18 @@ class AdminPaymentController extends Controller
         }
 
         if ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('utr_number', 'like', "%{$search}%")
-                    ->orWhere('bank_reference', 'like', "%{$search}%")
-                    ->orWhere('gateway_order_id', 'like', "%{$search}%")
-                    ->orWhere('gateway_payment_id', 'like', "%{$search}%")
-                    ->orWhere('id', 'like', "%{$search}%")
-                    ->orWhereHas('user', function ($t) use ($search) {
-                        $t->where('name', 'like', "%{$search}%")
-                            ->orWhere('email', 'like', "%{$search}%")
-                            ->orWhere('phone', 'like', "%{$search}%");
+            $searchLower = strtolower(trim($search));
+            $escaped = addcslashes($searchLower, '%_\\');
+            $query->where(function ($q) use ($escaped) {
+                $q->whereRaw('LOWER(utr_number) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(bank_reference) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(gateway_order_id) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(gateway_payment_id) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(id) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereHas('user', function ($t) use ($escaped) {
+                        $t->whereRaw('LOWER(name) LIKE ?', ["%{$escaped}%"])
+                            ->orWhereRaw('LOWER(email) LIKE ?', ["%{$escaped}%"])
+                            ->orWhereRaw('LOWER(phone) LIKE ?', ["%{$escaped}%"]);
                     });
             });
         }
@@ -115,14 +117,16 @@ class AdminPaymentController extends Controller
         }
 
         if ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('utr_number', 'like', "%{$search}%")
-                    ->orWhere('bank_reference', 'like', "%{$search}%")
-                    ->orWhere('id', 'like', "%{$search}%")
-                    ->orWhereHas('user', function ($t) use ($search) {
-                        $t->where('name', 'like', "%{$search}%")
-                            ->orWhere('email', 'like', "%{$search}%")
-                            ->orWhere('phone', 'like', "%{$search}%");
+            $searchLower = strtolower(trim($search));
+            $escaped = addcslashes($searchLower, '%_\\');
+            $query->where(function ($q) use ($escaped) {
+                $q->whereRaw('LOWER(utr_number) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(bank_reference) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(id) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereHas('user', function ($t) use ($escaped) {
+                        $t->whereRaw('LOWER(name) LIKE ?', ["%{$escaped}%"])
+                            ->orWhereRaw('LOWER(email) LIKE ?', ["%{$escaped}%"])
+                            ->orWhereRaw('LOWER(phone) LIKE ?', ["%{$escaped}%"]);
                     });
             });
         }
@@ -262,14 +266,16 @@ class AdminPaymentController extends Controller
         }
 
         if ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('notes', 'like', "%{$search}%")
-                    ->orWhere('payment_id', 'like', "%{$search}%")
-                    ->orWhereHas('admin', function ($a) use ($search) {
-                        $a->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%");
+            $searchLower = strtolower(trim($search));
+            $escaped = addcslashes($searchLower, '%_\\');
+            $query->where(function ($q) use ($escaped) {
+                $q->whereRaw('LOWER(notes) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(payment_id) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereHas('admin', function ($a) use ($escaped) {
+                        $a->whereRaw('LOWER(name) LIKE ?', ["%{$escaped}%"])->orWhereRaw('LOWER(email) LIKE ?', ["%{$escaped}%"]);
                     })
-                    ->orWhereHas('payment.user', function ($u) use ($search) {
-                        $u->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%");
+                    ->orWhereHas('payment.user', function ($u) use ($escaped) {
+                        $u->whereRaw('LOWER(name) LIKE ?', ["%{$escaped}%"])->orWhereRaw('LOWER(email) LIKE ?', ["%{$escaped}%"]);
                     });
             });
         }

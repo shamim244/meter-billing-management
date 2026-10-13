@@ -102,12 +102,13 @@ class PdfManagerController extends Controller
 
         // Search
         if (! empty($search)) {
-            $escapedSearch = addcslashes($search, '%_\\');
+            $searchLower = strtolower($search);
+            $escapedSearch = addcslashes($searchLower, '%_\\');
             $query->where(function ($q) use ($escapedSearch) {
-                $q->where('ca_number', 'like', "%{$escapedSearch}%")
-                    ->orWhere('consumer_name', 'like', "%{$escapedSearch}%")
-                    ->orWhere('meter_no', 'like', "%{$escapedSearch}%")
-                    ->orWhere('pdf_filename', 'like', "%{$escapedSearch}%");
+                $q->whereRaw('LOWER(ca_number) LIKE ?', ["%{$escapedSearch}%"])
+                    ->orWhereRaw('LOWER(consumer_name) LIKE ?', ["%{$escapedSearch}%"])
+                    ->orWhereRaw('LOWER(meter_no) LIKE ?', ["%{$escapedSearch}%"])
+                    ->orWhereRaw('LOWER(pdf_filename) LIKE ?', ["%{$escapedSearch}%"]);
             });
         }
 
@@ -286,10 +287,11 @@ class PdfManagerController extends Controller
                 $query->where('billing_year', (int) $request->year);
             }
             if ($request->filled('search')) {
-                $escapedSearch = addcslashes($request->search, '%_\\');
+                $search = trim($request->search);
+                $escapedSearch = addcslashes(mb_strtolower($search), '%_');
                 $query->where(function ($q) use ($escapedSearch) {
-                    $q->where('ca_number', 'like', "%{$escapedSearch}%")
-                        ->orWhere('consumer_name', 'like', "%{$escapedSearch}%");
+                    $q->whereRaw('LOWER(ca_number) LIKE ?', ["%{$escapedSearch}%"])
+                        ->orWhereRaw('LOWER(consumer_name) LIKE ?', ["%{$escapedSearch}%"]);
                 });
             }
         }

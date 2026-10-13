@@ -47,11 +47,12 @@ class AdminUserController extends Controller
             ->withCount(['consumerAccounts', 'billRecords', 'mrus']);
 
         if (! empty($search)) {
-            $escaped = addcslashes($search, '%_\\');
+            $searchLower = strtolower($search);
+            $escaped = addcslashes($searchLower, '%_\\');
             $query->where(function ($q) use ($escaped) {
-                $q->where('name', 'like', "%{$escaped}%")
-                    ->orWhere('email', 'like', "%{$escaped}%")
-                    ->orWhere('phone', 'like', "%{$escaped}%");
+                $q->whereRaw('LOWER(name) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(email) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(phone) LIKE ?', ["%{$escaped}%"]);
             });
         }
 
@@ -91,11 +92,12 @@ class AdminUserController extends Controller
             ->withCount(['consumerAccounts', 'billRecords', 'mrus']);
 
         if (! empty($search)) {
-            $escaped = addcslashes($search, '%_\\');
+            $searchLower = strtolower($search);
+            $escaped = addcslashes($searchLower, '%_\\');
             $query->where(function ($q) use ($escaped) {
-                $q->where('name', 'like', "%{$escaped}%")
-                    ->orWhere('email', 'like', "%{$escaped}%")
-                    ->orWhere('phone', 'like', "%{$escaped}%");
+                $q->whereRaw('LOWER(name) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(email) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(phone) LIKE ?', ["%{$escaped}%"]);
             });
         }
 

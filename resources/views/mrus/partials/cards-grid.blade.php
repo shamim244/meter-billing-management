@@ -67,8 +67,13 @@
         <p class="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1 mb-6">
             Try adjusting your search terms or create a new MRU workspace below.
         </p>
-        <button @click="openCreateModal()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition">
-            + Create MRU Workspace
-        </button>
+        <div class="flex items-center justify-center gap-3 flex-wrap">
+            <button x-show="searchQuery" @click="clearSearch()" class="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer">
+                ✕ Clear Search
+            </button>
+            <button @click="openCreateModal()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition cursor-pointer">
+                + Create MRU Workspace
+            </button>
+        </div>
     </div>
 </div>

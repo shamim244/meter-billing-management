@@ -81,11 +81,12 @@ class AdminReferralController extends Controller
         }
 
         if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->whereHas('referrer', fn ($r) => $r->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%"))
-                    ->orWhereHas('referee', fn ($r) => $r->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%"))
-                    ->orWhereHas('couponCode', fn ($c) => $c->where('code', 'like', "%{$search}%"));
+            $search = trim($request->search);
+            $escaped = addcslashes(mb_strtolower($search), '%_');
+            $query->where(function ($q) use ($escaped) {
+                $q->whereHas('referrer', fn ($r) => $r->whereRaw('LOWER(name) LIKE ?', ["%{$escaped}%"])->orWhereRaw('LOWER(email) LIKE ?', ["%{$escaped}%"]))
+                    ->orWhereHas('referee', fn ($r) => $r->whereRaw('LOWER(name) LIKE ?', ["%{$escaped}%"])->orWhereRaw('LOWER(email) LIKE ?', ["%{$escaped}%"]))
+                    ->orWhereHas('couponCode', fn ($c) => $c->whereRaw('LOWER(code) LIKE ?', ["%{$escaped}%"]));
             });
         }
 

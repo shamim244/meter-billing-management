@@ -30,8 +30,8 @@ class AdminCouponController extends Controller
             ->withCount('redemptions');
 
         if (! empty($search)) {
-            $escaped = addcslashes($search, '%_\\');
-            $query->where('code', 'like', "%{$escaped}%");
+            $escaped = addcslashes(mb_strtolower($search), '%_');
+            $query->whereRaw('LOWER(code) LIKE ?', ["%{$escaped}%"]);
         }
 
         if ($typeFilter !== 'all') {

@@ -51,28 +51,47 @@ class ActivateSubscriptionOnPaymentSuccess
 
         $user = $payment->user;
         if (! $user) {
-            $msg = "[SubscriptionActivationListener] Payment #{$payment->id} has no associated user.";
-            Log::error($msg);
-            throw new \RuntimeException($msg);
+            Log::warning("[SubscriptionActivationListener] Payment #{$payment->id} has no associated user. Skipping activation.");
+
+            return;
         }
 
         $meta = $payment->meta ?? [];
         $planId = $meta['plan_id'] ?? null;
         $durationId = $meta['duration_id'] ?? null;
 
-        if (! $planId || ! $durationId) {
-            $msg = "[SubscriptionActivationListener] Payment #{$payment->id} missing plan_id or duration_id in meta.";
-            Log::error($msg, $meta);
-            throw new \RuntimeException($msg);
+        $plan = null;
+        $duration = null;
+
+        if ($planId && $durationId) {
+            $plan = Plan::find($planId);
+            $duration = PlanDuration::where('id', $durationId)->where('plan_id', $planId)->first();
+        } elseif ($planId) {
+            $plan = Plan::find($planId);
+            $duration = $plan?->durations()->where('is_active', true)->first();
         }
 
-        $plan = Plan::find($planId);
-        $duration = PlanDuration::where('id', $durationId)->where('plan_id', $planId)->first();
+        // Smart fallback: If meta was omitted, attempt resolving plan by matching duration price to payment amount
+        if (! $plan || ! $duration) {
+            $matchingDuration = PlanDuration::where('final_price', (float) $payment->amount)
+                ->where('is_active', true)
+                ->with('plan')
+                ->first();
+
+            if ($matchingDuration && $matchingDuration->plan) {
+                $plan = $matchingDuration->plan;
+                $duration = $matchingDuration;
+                Log::info("[SubscriptionActivationListener] Payment #{$payment->id} resolved plan via amount match: Plan #{$plan->id}, Duration #{$duration->id}");
+            }
+        }
 
         if (! $plan || ! $duration) {
-            $msg = "[SubscriptionActivationListener] Plan #{$planId} or Duration #{$durationId} not found for Payment #{$payment->id}.";
-            Log::error($msg);
-            throw new \RuntimeException($msg);
+            Log::warning("[SubscriptionActivationListener] Payment #{$payment->id} missing or unresolvable plan/duration. Skipping direct subscription activation.", [
+                'meta' => $meta,
+                'amount' => $payment->amount,
+            ]);
+
+            return;
         }
 
         $activeSubscription = $user->activeSubscription;

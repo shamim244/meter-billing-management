@@ -49,11 +49,12 @@ class AdminBillController extends Controller
         }
 
         if (! empty($search)) {
-            $escaped = addcslashes($search, '%_\\');
+            $search = trim($search);
+            $escaped = addcslashes(mb_strtolower($search), '%_');
             $query->where(function ($q) use ($escaped) {
-                $q->where('ca_number', 'like', "%{$escaped}%")
-                    ->orWhere('consumer_name', 'like', "%{$escaped}%")
-                    ->orWhere('meter_no', 'like', "%{$escaped}%");
+                $q->whereRaw('LOWER(ca_number) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(consumer_name) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(meter_no) LIKE ?', ["%{$escaped}%"]);
             });
         }
 

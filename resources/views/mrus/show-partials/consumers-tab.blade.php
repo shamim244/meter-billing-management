@@ -2,12 +2,17 @@
 <div x-show="activeTab === 'consumers'" class="space-y-4">
     <!-- Search and Count Bar -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
-        <form method="GET" action="{{ route('mrus.show', $mru) }}" class="relative flex-1 max-w-md">
-            <input type="text" name="search" value="{{ $search }}" placeholder="Search CA Number, Consumer Name, Meter No..." class="w-full text-xs rounded-xl border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white pl-9 pr-8 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition">
-            <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-            @if(!empty($search))
-                <a href="{{ route('mrus.show', $mru) }}" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs">✕</a>
-            @endif
+        <form method="GET" action="{{ route('mrus.show', $mru) }}" class="relative flex-1 max-w-md flex items-center">
+            <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input type="text" name="search" value="{{ $search }}" placeholder="Search CA, Name, Meter, Mobile, Tariff..." class="w-full text-xs rounded-xl border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white pl-9 pr-24 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition">
+            <div class="absolute right-1.5 flex items-center gap-1">
+                @if(!empty($search))
+                    <a href="{{ route('mrus.show', $mru) }}" class="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold transition" title="Clear Search">✕</a>
+                @endif
+                <button type="submit" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer">
+                    Search
+                </button>
+            </div>
         </form>
 
         <div class="text-xs text-slate-500 dark:text-slate-400 font-medium">

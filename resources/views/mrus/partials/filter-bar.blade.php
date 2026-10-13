@@ -1,9 +1,20 @@
 <!-- Search & Filter Controls -->
 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
     <!-- Search Input -->
-    <div class="relative flex-1 max-w-md">
-        <input type="text" x-model="searchQuery" placeholder="Search by MRU code, village or area name..." class="w-full text-xs rounded-xl border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white pl-9 pr-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition">
-        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+    <div class="relative flex-1 max-w-md flex items-center">
+        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        <input type="text" 
+               x-model="searchQuery" 
+               @keydown.escape="clearSearch()"
+               placeholder="Search by MRU code, village or area name..." 
+               class="w-full text-xs rounded-xl border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white pl-9 pr-8 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition">
+        <button x-show="searchQuery" 
+                @click="clearSearch()" 
+                type="button" 
+                class="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold p-0.5 rounded transition cursor-pointer"
+                title="Clear search">
+            ✕
+        </button>
     </div>
 
     <!-- Status Filter Pills -->

@@ -48,6 +48,8 @@
                         <input type="text"
                                x-model="search"
                                @input.debounce.350ms="fetchData()"
+                               @keydown.enter.prevent="fetchData()"
+                               @keydown.escape.prevent="search = ''; fetchData()"
                                placeholder="Search CA number, consumer name, mobile, notes..."
                                class="w-full pl-9 pr-8 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500">
                         <button x-show="search" @click="search = ''; fetchData()" class="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 text-xs">

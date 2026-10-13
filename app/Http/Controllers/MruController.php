@@ -286,11 +286,15 @@ class MruController extends Controller
         // Permanent Consumer Master List for this MRU
         $consumersQuery = $mru->consumerAccounts()->orderBy('ca_number');
         if (! empty($search)) {
-            $escaped = addcslashes($search, '%_\\');
+            $searchLower = strtolower($search);
+            $escaped = addcslashes($searchLower, '%_\\');
             $consumersQuery->where(function ($q) use ($escaped) {
-                $q->where('ca_number', 'like', "%{$escaped}%")
-                    ->orWhere('consumer_name', 'like', "%{$escaped}%")
-                    ->orWhere('meter_no', 'like', "%{$escaped}%");
+                $q->whereRaw('LOWER(ca_number) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(consumer_name) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(meter_no) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(mobile) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(tariff_category) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(billing_basis) LIKE ?', ["%{$escaped}%"]);
             });
         }
         $consumers = $consumersQuery->paginate(50);

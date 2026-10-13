@@ -31,10 +31,11 @@ class AdminSubscriptionController extends Controller
         }
 
         if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->whereHas('user', function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
+            $searchLower = strtolower(trim($request->input('search')));
+            $escaped = addcslashes($searchLower, '%_\\');
+            $query->whereHas('user', function ($q) use ($escaped) {
+                $q->whereRaw('LOWER(name) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(email) LIKE ?', ["%{$escaped}%"]);
             });
         }
 

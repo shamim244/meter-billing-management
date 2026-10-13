@@ -55,16 +55,23 @@ function mrusIndexApp() {
         },
 
         get filteredMrus() {
+            const q = this.searchQuery ? this.searchQuery.trim().toLowerCase() : '';
+
             return this.mruList.filter(m => {
-                const matchesSearch = !this.searchQuery || 
-                    (m.name && m.name.toLowerCase().includes(this.searchQuery.toLowerCase())) ||
-                    (m.code && m.code.toLowerCase().includes(this.searchQuery.toLowerCase())) ||
-                    (m.full_identifier && m.full_identifier.toLowerCase().includes(this.searchQuery.toLowerCase()));
+                const matchesSearch = !q || 
+                    (m.name && String(m.name).toLowerCase().includes(q)) ||
+                    (m.code && String(m.code).toLowerCase().includes(q)) ||
+                    (m.full_identifier && String(m.full_identifier).toLowerCase().includes(q));
 
                 const matchesStatus = this.statusFilter === 'all' || m.status === this.statusFilter;
 
                 return matchesSearch && matchesStatus;
             });
+        },
+
+        clearSearch() {
+            this.searchQuery = '';
+            this.statusFilter = 'all';
         },
 
         openCreateModal() {

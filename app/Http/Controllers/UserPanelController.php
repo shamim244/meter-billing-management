@@ -224,11 +224,11 @@ class UserPanelController extends Controller
             ->where('user_id', $user->id);
 
         if (! empty($search)) {
-            $escaped = addcslashes($search, '%_\\');
+            $escaped = addcslashes(mb_strtolower($search), '%_');
             $query->where(function ($q) use ($escaped) {
-                $q->where('issue_code', 'like', "%{$escaped}%")
-                    ->orWhere('title', 'like', "%{$escaped}%")
-                    ->orWhere('ca_number', 'like', "%{$escaped}%");
+                $q->whereRaw('LOWER(issue_code) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(title) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(ca_number) LIKE ?', ["%{$escaped}%"]);
             });
         }
 

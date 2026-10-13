@@ -101,10 +101,11 @@ class BillApiController extends Controller
 
         // Search filter
         if ($search !== '') {
-            $query->where(function ($q) use ($search) {
-                $q->where('ca_number', 'like', "%{$search}%")
-                    ->orWhere('consumer_name', 'like', "%{$search}%")
-                    ->orWhere('meter_no', 'like', "%{$search}%");
+            $escaped = addcslashes(mb_strtolower($search), '%_');
+            $query->where(function ($q) use ($escaped) {
+                $q->whereRaw('LOWER(ca_number) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(consumer_name) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(meter_no) LIKE ?', ["%{$escaped}%"]);
             });
         }
 

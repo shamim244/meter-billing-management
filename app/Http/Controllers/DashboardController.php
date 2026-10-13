@@ -259,7 +259,8 @@ class DashboardController extends Controller
         $year = (int) $request->get('year', $request->get('billing_year', now()->year));
         $mruId = $request->get('mru_id');
         $filter = $request->get('filter', $request->get('status', 'all'));
-        $search = strtolower(trim($request->get('search', '')));
+        $search = trim($request->get('search', ''));
+        $searchLower = strtolower($search);
         $page = max(1, (int) $request->get('page', 1));
         $perPageParam = $request->get('per_page');
         if ($perPageParam === 'all' || $perPageParam === '-1') {
@@ -300,18 +301,18 @@ class DashboardController extends Controller
             $baseQuery->where('bill_records.mru_id', $mruId);
         }
 
-        if (! empty($search)) {
-            $escapedSearch = addcslashes($search, '%_\\');
+        if (! empty($searchLower)) {
+            $escapedSearch = addcslashes($searchLower, '%_\\');
             $baseQuery->where(function ($q) use ($escapedSearch) {
-                $q->where('bill_records.ca_number', 'like', "%{$escapedSearch}%")
-                    ->orWhere('bill_records.consumer_name', 'like', "%{$escapedSearch}%")
-                    ->orWhere('bill_records.meter_no', 'like', "%{$escapedSearch}%")
-                    ->orWhere('bill_records.tariff_category', 'like', "%{$escapedSearch}%")
-                    ->orWhere('consumer_accounts.consumer_name', 'like', "%{$escapedSearch}%")
-                    ->orWhere('consumer_accounts.meter_no', 'like', "%{$escapedSearch}%")
-                    ->orWhere('consumer_accounts.tariff_category', 'like', "%{$escapedSearch}%")
-                    ->orWhere('consumer_accounts.billing_basis', 'like', "%{$escapedSearch}%")
-                    ->orWhere('consumer_accounts.mobile', 'like', "%{$escapedSearch}%");
+                $q->whereRaw('LOWER(bill_records.ca_number) LIKE ?', ["%{$escapedSearch}%"])
+                    ->orWhereRaw('LOWER(bill_records.consumer_name) LIKE ?', ["%{$escapedSearch}%"])
+                    ->orWhereRaw('LOWER(bill_records.meter_no) LIKE ?', ["%{$escapedSearch}%"])
+                    ->orWhereRaw('LOWER(bill_records.tariff_category) LIKE ?', ["%{$escapedSearch}%"])
+                    ->orWhereRaw('LOWER(consumer_accounts.consumer_name) LIKE ?', ["%{$escapedSearch}%"])
+                    ->orWhereRaw('LOWER(consumer_accounts.meter_no) LIKE ?', ["%{$escapedSearch}%"])
+                    ->orWhereRaw('LOWER(consumer_accounts.tariff_category) LIKE ?', ["%{$escapedSearch}%"])
+                    ->orWhereRaw('LOWER(consumer_accounts.billing_basis) LIKE ?', ["%{$escapedSearch}%"])
+                    ->orWhereRaw('LOWER(consumer_accounts.mobile) LIKE ?', ["%{$escapedSearch}%"]);
             });
         }
 
@@ -382,6 +383,43 @@ class DashboardController extends Controller
         }
 
         $totalMatching = (clone $filteredQuery)->count('bill_records.id');
+
+        $otherPeriodMatch = null;
+        if (! empty($searchLower) && $totalMatching === 0) {
+            $otherBill = BillRecord::withoutGlobalScope('belongs_to_user')
+                ->when(! $isAdmin && $userId, fn ($q) => $q->where('bill_records.user_id', $userId))
+                ->leftJoin('consumer_accounts', function ($join) use ($userId, $isAdmin) {
+                    $join->on('consumer_accounts.ca_number', '=', 'bill_records.ca_number')
+                        ->on('consumer_accounts.user_id', '=', 'bill_records.user_id');
+                    if (! $isAdmin && $userId) {
+                        $join->where('consumer_accounts.user_id', '=', $userId);
+                    }
+                })
+                ->where(function ($q) use ($escapedSearch) {
+                    $q->whereRaw('LOWER(bill_records.ca_number) LIKE ?', ["%{$escapedSearch}%"])
+                        ->orWhereRaw('LOWER(bill_records.consumer_name) LIKE ?', ["%{$escapedSearch}%"])
+                        ->orWhereRaw('LOWER(bill_records.meter_no) LIKE ?', ["%{$escapedSearch}%"])
+                        ->orWhereRaw('LOWER(consumer_accounts.consumer_name) LIKE ?', ["%{$escapedSearch}%"])
+                        ->orWhereRaw('LOWER(consumer_accounts.meter_no) LIKE ?', ["%{$escapedSearch}%"])
+                        ->orWhereRaw('LOWER(consumer_accounts.mobile) LIKE ?', ["%{$escapedSearch}%"]);
+                })
+                ->select('bill_records.billing_month', 'bill_records.billing_year', 'bill_records.mru_id')
+                ->orderBy('bill_records.billing_year', 'desc')
+                ->orderBy('bill_records.billing_month', 'desc')
+                ->first();
+
+            if ($otherBill) {
+                $otherMru = Mru::find($otherBill->mru_id);
+                $otherPeriodMatch = [
+                    'month' => (int) $otherBill->billing_month,
+                    'year' => (int) $otherBill->billing_year,
+                    'label' => date('M, Y', mktime(0, 0, 0, (int) $otherBill->billing_month, 1, (int) $otherBill->billing_year)),
+                    'mru_id' => $otherBill->mru_id,
+                    'mru_name' => $otherMru?->name ?? $otherMru?->code,
+                ];
+            }
+        }
+
         $totalPages = max(1, (int) ceil($totalMatching / $perPage));
         $page = min($page, $totalPages);
         $offset = ($page - 1) * $perPage;
@@ -786,6 +824,9 @@ class DashboardController extends Controller
             'filtered_units' => $filteredUnits,
             'filtered_amount' => $filteredAmount,
             'available_periods' => $availablePeriods,
+            'other_period_match' => $otherPeriodMatch,
+            'filter_mismatch' => ! empty($searchLower) && ($stats->count_all ?? 0) > 0 && $totalMatching === 0,
+            'total_in_all' => (int) ($stats->count_all ?? 0),
             'active_tuning' => [
                 'percent' => $adjPercent,
                 'steps' => $tuningSteps,

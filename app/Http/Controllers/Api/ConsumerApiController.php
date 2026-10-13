@@ -34,11 +34,12 @@ class ConsumerApiController extends Controller
         $consumers = ConsumerAccount::where('user_id', $user->id)
             ->when($mruId, fn ($q) => $q->where('mru_id', $mruId))
             ->when($query !== '', function ($q) use ($query) {
-                $q->where(function ($sub) use ($query) {
-                    $sub->where('ca_number', 'like', "%{$query}%")
-                        ->orWhere('consumer_name', 'like', "%{$query}%")
-                        ->orWhere('meter_no', 'like', "%{$query}%")
-                        ->orWhere('address', 'like', "%{$query}%");
+                $escaped = addcslashes(mb_strtolower($query), '%_');
+                $q->where(function ($sub) use ($escaped) {
+                    $sub->whereRaw('LOWER(ca_number) LIKE ?', ["%{$escaped}%"])
+                        ->orWhereRaw('LOWER(consumer_name) LIKE ?', ["%{$escaped}%"])
+                        ->orWhereRaw('LOWER(meter_no) LIKE ?', ["%{$escaped}%"])
+                        ->orWhereRaw('LOWER(address) LIKE ?', ["%{$escaped}%"]);
                 });
             })
             ->paginate(30);

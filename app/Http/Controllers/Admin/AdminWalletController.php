@@ -28,11 +28,12 @@ class AdminWalletController extends Controller
         $query = User::role('user')->latest('id');
 
         if ($request->filled('search')) {
-            $search = '%'.$request->query('search').'%';
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', $search)
-                    ->orWhere('email', 'like', $search)
-                    ->orWhere('phone', 'like', $search);
+            $searchLower = strtolower(trim($request->query('search')));
+            $escaped = addcslashes($searchLower, '%_\\');
+            $query->where(function ($q) use ($escaped) {
+                $q->whereRaw('LOWER(name) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(email) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(phone) LIKE ?', ["%{$escaped}%"]);
             });
         }
 

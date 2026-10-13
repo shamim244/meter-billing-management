@@ -71,12 +71,14 @@ class AdminApiHubController extends Controller
         $keysQuery = ApiKey::with('user')->latest('id');
 
         if ($search = $request->query('q')) {
-            $keysQuery->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('key_prefix', 'like', "%{$search}%")
-                    ->orWhereHas('user', function ($uq) use ($search) {
-                        $uq->where('name', 'like', "%{$search}%")
-                            ->orWhere('email', 'like', "%{$search}%");
+            $search = trim($search);
+            $escaped = addcslashes(mb_strtolower($search), '%_');
+            $keysQuery->where(function ($q) use ($escaped) {
+                $q->whereRaw('LOWER(name) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereRaw('LOWER(key_prefix) LIKE ?', ["%{$escaped}%"])
+                    ->orWhereHas('user', function ($uq) use ($escaped) {
+                        $uq->whereRaw('LOWER(name) LIKE ?', ["%{$escaped}%"])
+                            ->orWhereRaw('LOWER(email) LIKE ?', ["%{$escaped}%"]);
                     });
             });
         }

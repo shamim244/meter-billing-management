@@ -51,8 +51,32 @@ function dashboardApp() {
                         }
                     } else {
                         this.searchQuery = String(caNumber);
+                        this.filterStatus = 'all';
                         this.fetchData(1);
                     }
+                },
+
+                clearSearch() {
+                    this.searchQuery = '';
+                    this.otherPeriodMatch = null;
+                    this.filterMismatch = false;
+                    this.totalInAll = 0;
+                    this.fetchData(1);
+                },
+
+                switchToPeriod(month, year, mruId = null) {
+                    if (mruId) {
+                        this.filterMru = String(mruId);
+                        localStorage.setItem('dashboard_mru', this.filterMru);
+                    }
+                    this.selectedMonth = parseInt(month);
+                    this.selectedYear = parseInt(year);
+                    this.selectedPeriodKey = `${this.selectedMonth}_${this.selectedYear}`;
+                    localStorage.setItem('dashboard_period', this.selectedPeriodKey);
+                    this.otherPeriodMatch = null;
+                    this.filterMismatch = false;
+                    this.totalInAll = 0;
+                    this.fetchData(1);
                 },
 
                 // Modals
@@ -140,6 +164,9 @@ function dashboardApp() {
                 availableTags: cfg.availableTags || [],
                 defaultTag: cfg.defaultTag || 'OK',
                 searchQuery: '',
+                otherPeriodMatch: null,
+                filterMismatch: false,
+                totalInAll: 0,
                 statusSort: localStorage.getItem('dashboard_status_sort') || 'default',
                 sortOption: localStorage.getItem('dashboard_sort_option') || 'ca_number_asc',
                 sortCol: 'ca_number',
@@ -630,7 +657,7 @@ function dashboardApp() {
                     if (this.filterStatus && this.filterStatus !== 'all') url.searchParams.append('filter', this.filterStatus);
                     if (this.basisFilter && this.basisFilter !== 'all') url.searchParams.append('basis_filter', this.basisFilter);
                     if (this.tagFilter && this.tagFilter !== 'all') url.searchParams.append('tag_filter', this.tagFilter);
-                    if (this.searchQuery) url.searchParams.append('search', this.searchQuery);
+                    if (this.searchQuery && this.searchQuery.trim()) url.searchParams.append('search', this.searchQuery.trim());
                     url.searchParams.append('status_sort', this.statusSort);
                     url.searchParams.append('sort_col', this.sortCol);
                     url.searchParams.append('sort_asc', this.sortAsc ? 'true' : 'false');
@@ -715,6 +742,9 @@ function dashboardApp() {
                                 if (json.counts) this.counts = json.counts;
                                 if (json.filtered_units !== undefined) this.counts.filtered_units = json.filtered_units;
                                 if (json.filtered_amount !== undefined) this.counts.filtered_amount = json.filtered_amount;
+                                this.otherPeriodMatch = json.other_period_match || null;
+                                this.filterMismatch = !!json.filter_mismatch;
+                                this.totalInAll = json.total_in_all || 0;
                                 if (json.color_settings) this.colorSettings = json.color_settings;
                                 if (json.available_periods) {
                                     this.availablePeriods = json.available_periods;

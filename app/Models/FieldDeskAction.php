@@ -153,16 +153,17 @@ class FieldDeskAction extends Model
      */
     public function scopeSearch(Builder $query, string $search): Builder
     {
-        $escaped = addcslashes($search, '%_\\');
+        $searchLower = strtolower(trim($search));
+        $escaped = addcslashes($searchLower, '%_\\');
 
         return $query->where(function (Builder $q) use ($escaped) {
-            $q->where('ca_number', 'like', "%{$escaped}%")
-                ->orWhere('private_note', 'like', "%{$escaped}%")
-                ->orWhere('resolution_note', 'like', "%{$escaped}%")
+            $q->whereRaw('LOWER(ca_number) LIKE ?', ["%{$escaped}%"])
+                ->orWhereRaw('LOWER(private_note) LIKE ?', ["%{$escaped}%"])
+                ->orWhereRaw('LOWER(resolution_note) LIKE ?', ["%{$escaped}%"])
                 ->orWhereHas('consumerAccount', function (Builder $caQ) use ($escaped) {
-                    $caQ->where('consumer_name', 'like', "%{$escaped}%")
-                        ->orWhere('mobile', 'like', "%{$escaped}%")
-                        ->orWhere('meter_no', 'like', "%{$escaped}%");
+                    $caQ->whereRaw('LOWER(consumer_name) LIKE ?', ["%{$escaped}%"])
+                        ->orWhereRaw('LOWER(mobile) LIKE ?', ["%{$escaped}%"])
+                        ->orWhereRaw('LOWER(meter_no) LIKE ?', ["%{$escaped}%"]);
                 });
         });
     }

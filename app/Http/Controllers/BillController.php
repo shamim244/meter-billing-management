@@ -375,11 +375,12 @@ class BillController extends Controller
         }
 
         if (! empty($search)) {
-            $escapedSearch = addcslashes($search, '%_\\');
+            $search = trim($search);
+            $escapedSearch = addcslashes(mb_strtolower($search), '%_');
             $query->where(function ($q) use ($escapedSearch) {
-                $q->where('ca_number', 'like', "%{$escapedSearch}%")
-                    ->orWhere('consumer_name', 'like', "%{$escapedSearch}%")
-                    ->orWhere('meter_no', 'like', "%{$escapedSearch}%");
+                $q->whereRaw('LOWER(ca_number) LIKE ?', ["%{$escapedSearch}%"])
+                    ->orWhereRaw('LOWER(consumer_name) LIKE ?', ["%{$escapedSearch}%"])
+                    ->orWhereRaw('LOWER(meter_no) LIKE ?', ["%{$escapedSearch}%"]);
             });
         }
 
@@ -503,11 +504,12 @@ class BillController extends Controller
         }
 
         if (! empty($search)) {
-            $escapedSearch = addcslashes($search, '%_\\');
+            $search = trim($search);
+            $escapedSearch = addcslashes(mb_strtolower($search), '%_');
             $query->where(function ($q) use ($escapedSearch) {
-                $q->where('ca_number', 'like', "%{$escapedSearch}%")
-                    ->orWhere('consumer_name', 'like', "%{$escapedSearch}%")
-                    ->orWhere('meter_no', 'like', "%{$escapedSearch}%");
+                $q->whereRaw('LOWER(ca_number) LIKE ?', ["%{$escapedSearch}%"])
+                    ->orWhereRaw('LOWER(consumer_name) LIKE ?', ["%{$escapedSearch}%"])
+                    ->orWhereRaw('LOWER(meter_no) LIKE ?', ["%{$escapedSearch}%"]);
             });
         }
 

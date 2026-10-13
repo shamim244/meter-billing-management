@@ -19,6 +19,11 @@
 
         <!-- Terminal Controls -->
         <div class="flex items-center gap-2 flex-wrap">
+            <div class="relative w-40 sm:w-52">
+                <svg class="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                <input type="text" x-model="searchQuery" placeholder="Filter console logs..." class="w-full text-[11px] font-mono py-1 pl-8 pr-6 rounded-lg bg-slate-800 border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500">
+                <button x-show="searchQuery" @click="searchQuery = ''" type="button" class="absolute right-2 top-1 text-slate-400 hover:text-slate-200 text-xs font-bold">✕</button>
+            </div>
             <button @click="copyLogs()" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-mono transition">
                 📋 Copy Logs
             </button>

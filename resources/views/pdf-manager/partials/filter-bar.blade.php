@@ -82,17 +82,22 @@
         <!-- Search -->
         <div class="sm:col-span-2">
             <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Search CA, Name, Meter, File</label>
-            <div class="flex items-center gap-2">
+            <div class="relative flex-1 flex items-center">
                 <input type="text" 
                        name="search" 
                        value="{{ $search }}" 
-                       placeholder="Type CA or filename to filter..." 
+                       placeholder="Type CA, name, meter, or filename to filter..." 
                        @keydown.enter="$el.form.submit()"
-                       class="w-full text-xs rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-brand-500">
-                <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition shrink-0 shadow-sm">
-                    🔍
-                </button>
+                       class="w-full text-xs rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-brand-500 pr-8">
+                @if(!empty($search))
+                    <a href="{{ route('pdf-manager.index', array_merge(request()->except('search'), ['search' => ''])) }}" 
+                       class="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold"
+                       title="Clear search">✕</a>
+                @endif
             </div>
+            <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition shrink-0 shadow-sm cursor-pointer">
+                🔍
+            </button>
         </div>
     </form>
 </div>
