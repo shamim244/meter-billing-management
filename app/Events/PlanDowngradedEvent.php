@@ -15,7 +15,7 @@ class PlanDowngradedEvent
 
     public function __construct(
         public AgentSubscription $subscription,
-        public Plan $fromPlan,
+        public ?Plan $fromPlan,
         public Plan $toPlan,
         public PlanUpgradeLog $log
     ) {}

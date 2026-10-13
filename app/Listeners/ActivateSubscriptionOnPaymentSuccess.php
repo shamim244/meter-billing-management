@@ -51,9 +51,9 @@ class ActivateSubscriptionOnPaymentSuccess
 
         $user = $payment->user;
         if (! $user) {
-            Log::warning("[SubscriptionActivationListener] Payment #{$payment->id} has no associated user.");
-
-            return;
+            $msg = "[SubscriptionActivationListener] Payment #{$payment->id} has no associated user.";
+            Log::error($msg);
+            throw new \RuntimeException($msg);
         }
 
         $meta = $payment->meta ?? [];
@@ -61,37 +61,49 @@ class ActivateSubscriptionOnPaymentSuccess
         $durationId = $meta['duration_id'] ?? null;
 
         if (! $planId || ! $durationId) {
-            Log::warning("[SubscriptionActivationListener] Payment #{$payment->id} missing plan_id or duration_id in meta.", $meta);
-
-            return;
+            $msg = "[SubscriptionActivationListener] Payment #{$payment->id} missing plan_id or duration_id in meta.";
+            Log::error($msg, $meta);
+            throw new \RuntimeException($msg);
         }
 
         $plan = Plan::find($planId);
         $duration = PlanDuration::where('id', $durationId)->where('plan_id', $planId)->first();
 
         if (! $plan || ! $duration) {
-            Log::error("[SubscriptionActivationListener] Plan #{$planId} or Duration #{$durationId} not found for Payment #{$payment->id}.");
-
-            return;
+            $msg = "[SubscriptionActivationListener] Plan #{$planId} or Duration #{$durationId} not found for Payment #{$payment->id}.";
+            Log::error($msg);
+            throw new \RuntimeException($msg);
         }
 
         $activeSubscription = $user->activeSubscription;
-        $meta = $payment->meta ?? [];
         $actionMode = $meta['action_mode'] ?? null;
         if (! $actionMode) {
             $actionMode = ($activeSubscription && $activeSubscription->plan_id !== $plan->id) ? 'shift' : 'extend';
         }
 
         try {
-            if ($activeSubscription && $actionMode === 'shift') {
+            // If user has an active subscription to a DIFFERENT plan, upgrade/switch plans
+            if ($activeSubscription && $activeSubscription->plan_id !== $plan->id) {
                 $proration = $this->planChangeService->calculateProration($activeSubscription, $plan, $duration);
-                if ($proration['is_upgrade']) {
-                    $res = $this->planChangeService->upgradePlan($activeSubscription, $plan, $duration);
-                    $subId = $res['subscription']->id ?? $activeSubscription->id;
+                if ($proration['amount_due'] >= 0 || $proration['is_upgrade']) {
+                    $res = $this->planChangeService->upgradePlan(
+                        $activeSubscription,
+                        $plan,
+                        $duration,
+                        debitWallet: false,
+                        payment: $payment
+                    );
+                    if (! ($res['success'] ?? false)) {
+                        throw new \RuntimeException($res['message'] ?? 'Failed to upgrade plan.');
+                    }
+                    $subId = $res['subscription']->id;
                     $actionText = "Switched / Upgraded to plan {$plan->name} ({$duration->formatted_duration})";
                 } else {
                     $res = $this->planChangeService->downgradePlan($activeSubscription, $plan, $duration);
-                    $subId = $res['subscription']->id ?? $activeSubscription->id;
+                    if (! ($res['success'] ?? false)) {
+                        throw new \RuntimeException($res['message'] ?? 'Failed to downgrade plan.');
+                    }
+                    $subId = $res['subscription']->id;
                     $actionText = "Switched / Downgraded to plan {$plan->name} ({$duration->formatted_duration})";
                 }
             } else {
@@ -145,6 +157,7 @@ class ActivateSubscriptionOnPaymentSuccess
             Log::error("[SubscriptionActivationListener] Failed to activate subscription for Payment #{$payment->id}: ".$e->getMessage(), [
                 'exception' => $e,
             ]);
+            throw $e;
         }
     }
 }

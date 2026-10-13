@@ -527,7 +527,16 @@ class AdminPaymentController extends Controller
             'utr_number' => '423'.rand(100000000, 999999999),
         ]);
 
-        // 2. Pending Bank Transfer
+        // 2. Pending Bank Transfer (Direct Subscription with valid plan & duration meta)
+        $demoPlan = Plan::where('is_active', true)->with('durations')->first();
+        $demoDuration = $demoPlan?->durations->first();
+        $demoSubMeta = ($demoPlan && $demoDuration) ? [
+            'plan_id' => $demoPlan->id,
+            'duration_id' => $demoDuration->id,
+            'action_type' => 'new',
+            'action_mode' => 'new',
+        ] : [];
+
         Payment::create([
             'user_id' => $users->random()->id,
             'mode' => PaymentMode::BANK_TRANSFER,
@@ -536,6 +545,7 @@ class AdminPaymentController extends Controller
             'currency' => 'INR',
             'status' => PaymentStatus::PENDING_VERIFICATION,
             'bank_reference' => 'NEFT-SBIN-'.rand(100000, 999999),
+            'meta' => $demoSubMeta,
         ]);
 
         // 3. Successful Razorpay PG

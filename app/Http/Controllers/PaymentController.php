@@ -113,6 +113,9 @@ class PaymentController extends Controller
             'mode' => 'required|string|in:'.implode(',', PaymentMode::values()),
             'purpose' => 'required|string|in:'.implode(',', PaymentPurpose::values()),
             'amount' => "required|numeric|min:{$minAmount}",
+            'plan_id' => 'required_if:purpose,direct_subscription|nullable|integer|exists:plans,id',
+            'duration_id' => 'required_if:purpose,direct_subscription|nullable|integer|exists:plan_durations,id',
+            'action_mode' => 'nullable|string|in:auto,shift,extend,new',
             'utr_number' => 'required_if:mode,manual_upi|nullable|string|max:100',
             'bank_reference' => 'required_if:mode,bank_transfer|nullable|string|max:100',
             'screenshot' => 'nullable|image|max:5120', // Max 5MB image
@@ -124,6 +127,12 @@ class PaymentController extends Controller
         $amount = (float) $request->input('amount');
 
         $meta = [];
+        if ($purpose === PaymentPurpose::DIRECT_SUBSCRIPTION) {
+            $meta['plan_id'] = (int) $request->input('plan_id');
+            $meta['duration_id'] = (int) $request->input('duration_id');
+            $meta['action_mode'] = $request->input('action_mode', 'auto');
+            $meta['action_type'] = $request->input('action_type', 'new');
+        }
         $couponCode = trim($request->input('coupon_code', ''));
         if (! empty($couponCode)) {
             $couponValidation = app(CouponRedemptionService::class)->validateCode(

@@ -8,6 +8,7 @@ use App\Events\PlanDowngradedEvent;
 use App\Events\PlanUpgradedEvent;
 use App\Models\AgentSubscription;
 use App\Models\Mru;
+use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\PlanDuration;
 use App\Models\PlanUpgradeLog;
@@ -85,8 +86,13 @@ class PlanChangeService
      * Mid-cycle Plan Upgrade flow.
      * PRD Section 5.1 - 5.3: Debits wallet, creates new subscription snapshot, and auto-unlocks eligible MRUs.
      */
-    public function upgradePlan(AgentSubscription|int $subscription, Plan|int $newPlan, mixed $duration = null): array
-    {
+    public function upgradePlan(
+        AgentSubscription|int $subscription,
+        Plan|int $newPlan,
+        mixed $duration = null,
+        bool $debitWallet = true,
+        ?Payment $payment = null
+    ): array {
         $sub = $subscription instanceof AgentSubscription ? $subscription : AgentSubscription::findOrFail($subscription);
         $targetPlan = $newPlan instanceof Plan ? $newPlan : Plan::findOrFail($newPlan);
         $oldPlan = $sub->plan ?? Plan::withTrashed()->find($sub->plan_id);
@@ -95,9 +101,9 @@ class PlanChangeService
         $amountDue = max(0.00, $proration['amount_due']);
         $user = $sub->user;
 
-        return DB::transaction(function () use ($sub, $targetPlan, $oldPlan, $proration, $amountDue, $user) {
+        return DB::transaction(function () use ($sub, $targetPlan, $oldPlan, $proration, $amountDue, $user, $debitWallet, $payment) {
             $txId = null;
-            if ($amountDue > 0) {
+            if ($debitWallet && $amountDue > 0) {
                 $debitResult = $this->walletService->debit(
                     user: $user,
                     amount: $amountDue,
@@ -160,6 +166,9 @@ class PlanChangeService
                 'lifecycle_status' => 'active',
             ]);
 
+            // Update user plan tier to new plan
+            $user->update(['plan_tier' => strtolower($targetPlan->name)]);
+
             // 3. Auto-unlock evaluation (PRD Section 5.3)
             $activeMrusCount = Mru::where('user_id', $user->id)->where('status', 'active')->count();
             $availableNewSlots = max(0, $targetPlan->included_mrus - $activeMrusCount);
@@ -186,6 +195,12 @@ class PlanChangeService
             }
 
             // 4. Log upgrade
+            $chargedAmount = $debitWallet ? $amountDue : (float) ($payment ? $payment->amount : $amountDue);
+            $modeLabel = $payment ? ($payment->mode instanceof \BackedEnum ? $payment->mode->value : (string) $payment->mode) : '';
+            $upgradeNotes = $payment
+                ? "Mid-cycle upgrade via Direct Payment #{$payment->id}".($modeLabel ? " ({$modeLabel})" : '')
+                : 'Mid-cycle upgrade with day-based proration.';
+
             $log = PlanUpgradeLog::create([
                 'agent_subscription_id' => $newSubscription->id,
                 'user_id' => $newSubscription->user_id,
@@ -194,18 +209,18 @@ class PlanChangeService
                 'action_type' => 'upgrade',
                 'old_plan_credit' => $proration['old_plan_credit'],
                 'new_plan_cost' => $proration['new_plan_cost'],
-                'amount_charged' => $amountDue,
+                'amount_charged' => $chargedAmount,
                 'wallet_transaction_id' => $txId ? (string) $txId : null,
                 'days_remaining_at_upgrade' => $proration['days_remaining'],
                 'total_days_in_cycle' => $proration['total_days_in_cycle'],
-                'notes' => 'Mid-cycle upgrade with day-based proration.',
+                'notes' => $upgradeNotes,
             ]);
 
-            event(new PlanUpgradedEvent($newSubscription, $oldPlan, $targetPlan, $log));
+            event(new PlanUpgradedEvent($newSubscription, $oldPlan ?? $targetPlan, $targetPlan, $log));
 
             return [
                 'success' => true,
-                'amount_charged' => $amountDue,
+                'amount_charged' => $chargedAmount,
                 'subscription' => $newSubscription,
                 'auto_unlocked_mrus' => $unlockedMrus->pluck('id')->toArray(),
                 'log' => $log,
@@ -316,6 +331,9 @@ class PlanChangeService
                 'status' => 'active',
                 'lifecycle_status' => 'active',
             ]);
+
+            // Update user plan tier to new plan
+            $user->update(['plan_tier' => strtolower($targetPlan->name)]);
 
             // 3. Log downgrade
             $log = PlanUpgradeLog::create([
