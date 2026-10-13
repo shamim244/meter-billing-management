@@ -124,4 +124,141 @@ class DashboardDatabaseFilteringTest extends TestCase
         $this->assertEmpty(array_intersect($p1Cas, $p2Cas), 'Pages must not have duplicate overlapping records');
         $this->assertEquals(80, count(array_unique(array_merge($p1Cas, $p2Cas))), 'Pages 1 and 2 together must cover 100% of all 80 records');
     }
+
+    public function test_sorting_by_amount_asc_and_desc_across_dataset_with_baseline_and_negative_amounts(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $mru = Mru::create([
+            'user_id' => $user->id,
+            'code' => 'MRU_SORT_AMT',
+            'name' => 'Sort Test Village',
+            'full_identifier' => 'MRU_SORT_AMT',
+            'status' => 'active',
+        ]);
+
+        // Create consumers with various amounts including advance/negative, zero, and baseline fallback
+        $amounts = [-250.00, 0.00, 50.00, 120.00, 450.00, 1500.00];
+        foreach ($amounts as $idx => $amt) {
+            $ca = '1023007000'.$idx;
+            ConsumerAccount::create([
+                'user_id' => $user->id,
+                'mru_id' => $mru->id,
+                'ca_number' => $ca,
+                'consumer_name' => "Consumer Sort {$idx}",
+                'billing_basis' => 'OK',
+                'meter_no' => "MTR-S-{$idx}",
+                'tariff_category' => 'DS-II',
+                'baseline_amount' => ($amt === 0.00) ? 35.00 : 0.00, // tests baseline fallback for 0 amount
+            ]);
+
+            BillRecord::create([
+                'user_id' => $user->id,
+                'mru_id' => $mru->id,
+                'ca_number' => $ca,
+                'billing_month' => 4,
+                'billing_year' => 2026,
+                'consumer_name' => "Consumer Sort {$idx}",
+                'total_amount' => $amt,
+                'units_consumed' => 50,
+                'billing_basis' => 'OK',
+                'download_status' => 'downloaded',
+                'parse_status' => 'parsed',
+            ]);
+        }
+
+        // Test Amount ASC
+        $resAsc = $this->actingAs($user)->getJson('/dashboard/data?month=4&year=2026&mru_id='.$mru->id.'&sort_col=amount&sort_asc=true&per_page=50');
+        $resAsc->assertStatus(200);
+        $ascAmounts = collect($resAsc->json('data'))->pluck('total_amount')->map(fn ($v) => (float) $v)->values()->all();
+
+        $this->assertEquals(-250.00, $ascAmounts[0], 'Negative/credit amount must sort first in ASC');
+        $this->assertEquals(1500.00, end($ascAmounts), 'Highest amount must sort last in ASC');
+        for ($i = 0; $i < count($ascAmounts) - 1; $i++) {
+            $this->assertLessThanOrEqual($ascAmounts[$i + 1], $ascAmounts[$i], 'Each amount in ASC must be <= next amount');
+        }
+
+        // Test Amount DESC
+        $resDesc = $this->actingAs($user)->getJson('/dashboard/data?month=4&year=2026&mru_id='.$mru->id.'&sort_col=amount&sort_asc=false&per_page=50');
+        $resDesc->assertStatus(200);
+        $descAmounts = collect($resDesc->json('data'))->pluck('total_amount')->map(fn ($v) => (float) $v)->values()->all();
+
+        $this->assertEquals(1500.00, $descAmounts[0], 'Highest amount must sort first in DESC');
+        $this->assertEquals(-250.00, end($descAmounts), 'Lowest amount must sort last in DESC');
+        for ($i = 0; $i < count($descAmounts) - 1; $i++) {
+            $this->assertGreaterThanOrEqual($descAmounts[$i + 1], $descAmounts[$i], 'Each amount in DESC must be >= next amount');
+        }
+    }
+
+    public function test_sorting_by_amount_is_not_corrupted_by_status_priority(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $mru = Mru::create([
+            'user_id' => $user->id,
+            'code' => 'MRU_STATUS_PRIO',
+            'name' => 'Status Priority Test',
+            'full_identifier' => 'MRU_STATUS_PRIO',
+            'status' => 'active',
+        ]);
+
+        // Create bills where high amounts are pending and low amounts are submitted
+        // If status_priority inappropriately took precedence, amounts would be fragmented!
+        $testData = [
+            ['ca' => '10230080001', 'amount' => 5000.00, 'status' => 'pending'],
+            ['ca' => '10230080002', 'amount' => 10.00, 'status' => 'submitted'],
+            ['ca' => '10230080003', 'amount' => 200.00, 'status' => 'critical'],
+            ['ca' => '10230080004', 'amount' => 50.00, 'status' => 'doubt'],
+        ];
+
+        foreach ($testData as $td) {
+            ConsumerAccount::create([
+                'user_id' => $user->id,
+                'mru_id' => $mru->id,
+                'ca_number' => $td['ca'],
+                'consumer_name' => "Consumer {$td['ca']}",
+                'billing_basis' => 'OK',
+                'meter_no' => "MTR-{$td['ca']}",
+                'tariff_category' => 'DS-II',
+            ]);
+
+            BillRecord::create([
+                'user_id' => $user->id,
+                'mru_id' => $mru->id,
+                'ca_number' => $td['ca'],
+                'billing_month' => 4,
+                'billing_year' => 2026,
+                'consumer_name' => "Consumer {$td['ca']}",
+                'total_amount' => $td['amount'],
+                'units_consumed' => 50,
+                'billing_basis' => 'OK',
+                'download_status' => 'downloaded',
+                'parse_status' => 'parsed',
+            ]);
+
+            BillStatus::create([
+                'user_id' => $user->id,
+                'ca_number' => $td['ca'],
+                'billing_month' => 4,
+                'billing_year' => 2026,
+                'status' => $td['status'],
+                'tag' => 'OK',
+            ]);
+        }
+
+        // Request Sort by Amount ASC with status_sort = pdcs
+        $res = $this->actingAs($user)->getJson('/dashboard/data?month=4&year=2026&mru_id='.$mru->id.'&sort_col=amount&sort_asc=true&status_sort=pdcs&per_page=50');
+        $res->assertStatus(200);
+
+        $retrievedAmounts = collect($res->json('data'))->pluck('total_amount')->map(fn ($v) => (float) $v)->values()->all();
+
+        // Must strictly sort 10, 50, 200, 5000 regardless of pdcs priority!
+        $this->assertEquals([10.00, 50.00, 200.00, 5000.00], $retrievedAmounts, 'Global column sort must not be fragmented by status sort');
+
+        // Now test when sort_col is ca_number with status_sort = pdcs -> Must group by status (pending first, submitted last)
+        $resStatusSort = $this->actingAs($user)->getJson('/dashboard/data?month=4&year=2026&mru_id='.$mru->id.'&sort_col=ca_number&sort_asc=true&status_sort=pdcs&per_page=50');
+        $resStatusSort->assertStatus(200);
+
+        $statuses = collect($resStatusSort->json('data'))->pluck('review_status')->values()->all();
+        $this->assertEquals('pending', $statuses[0], 'First item under PDCS must be pending');
+        $this->assertEquals('submitted', end($statuses), 'Last item under PDCS must be submitted');
+    }
 }

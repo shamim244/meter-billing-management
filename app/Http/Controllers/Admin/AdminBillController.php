@@ -95,6 +95,7 @@ class AdminBillController extends Controller
             'legacy_url' => SystemSetting::get('nbpdcl_legacy_url', config('nbpdcl.api_url')),
             'timeout' => (int) SystemSetting::get('nbpdcl_timeout', config('nbpdcl.timeout', 45)),
             'concurrency' => (int) SystemSetting::get('nbpdcl_concurrency', config('nbpdcl.concurrency', 10)),
+            'lookback_months' => (int) SystemSetting::get('nbpdcl_lookback_months', config('nbpdcl.lookback_months', 6)),
             'extraction_filter_enabled' => (bool) SystemSetting::get('extraction_filter_enabled', true),
             'calculation_filter_enabled' => (bool) SystemSetting::get('calculation_filter_enabled', true),
             'filter_non_ok_bases' => (bool) SystemSetting::get('filter_non_ok_bases', true),
@@ -130,6 +131,7 @@ class AdminBillController extends Controller
             'legacy_url' => 'sometimes|required|url',
             'timeout' => 'sometimes|required|integer|min:5|max:180',
             'concurrency' => 'sometimes|required|integer|min:1|max:50',
+            'lookback_months' => 'sometimes|required|integer|min:1|max:24',
             'extraction_filter_enabled' => 'nullable',
             'calculation_filter_enabled' => 'nullable',
             'filter_non_ok_bases' => 'nullable',
@@ -207,6 +209,9 @@ class AdminBillController extends Controller
         }
         if (isset($validated['concurrency'])) {
             SystemSetting::set('nbpdcl_concurrency', (int) $validated['concurrency']);
+        }
+        if (isset($validated['lookback_months'])) {
+            SystemSetting::set('nbpdcl_lookback_months', (int) $validated['lookback_months']);
         }
 
         if ($request->has('has_spike_settings')) {
@@ -333,6 +338,7 @@ class AdminBillController extends Controller
         SystemSetting::set('nbpdcl_legacy_url', config('nbpdcl.api_url'));
         SystemSetting::set('nbpdcl_timeout', (int) config('nbpdcl.timeout', 45));
         SystemSetting::set('nbpdcl_concurrency', (int) config('nbpdcl.concurrency', 10));
+        SystemSetting::set('nbpdcl_lookback_months', (int) config('nbpdcl.lookback_months', 6));
 
         SystemSetting::set('extraction_filter_enabled', true);
         SystemSetting::set('calculation_filter_enabled', true);

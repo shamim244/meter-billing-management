@@ -10,7 +10,7 @@
         </p>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
         <div>
             <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
                 Simultaneous Connections (Multi-cURL Concurrency)
@@ -25,6 +25,14 @@
             </label>
             <input type="number" name="timeout" min="5" max="180" value="{{ old('timeout', $settings['timeout']) }}" required class="w-full bg-slate-900 border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:ring-indigo-500 focus:border-indigo-500">
             <span class="text-[10px] text-slate-500 mt-1 block">Default: 45s. Maximum time permitted for each single handle before timing out.</span>
+        </div>
+
+        <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                Lookback Depth (Months)
+            </label>
+            <input type="number" name="lookback_months" min="1" max="24" value="{{ old('lookback_months', $settings['lookback_months'] ?? 6) }}" required class="w-full bg-slate-900 border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:ring-indigo-500 focus:border-indigo-500">
+            <span class="text-[10px] text-slate-500 mt-1 block">Default: 6 months. How many preceding months to probe backwards if current cycle is unbilled.</span>
         </div>
     </div>
 

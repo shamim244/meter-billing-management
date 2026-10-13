@@ -275,6 +275,7 @@ class DashboardController extends Controller
         $baseQuery = BillRecord::withoutGlobalScope('belongs_to_user')
             ->leftJoin('bill_statuses', function ($join) use ($userId, $isAdmin, $month, $year) {
                 $join->on('bill_statuses.ca_number', '=', 'bill_records.ca_number')
+                    ->on('bill_statuses.user_id', '=', 'bill_records.user_id')
                     ->where('bill_statuses.billing_month', '=', $month)
                     ->where('bill_statuses.billing_year', '=', $year);
                 if (! $isAdmin && $userId) {
@@ -282,7 +283,8 @@ class DashboardController extends Controller
                 }
             })
             ->leftJoin('consumer_accounts', function ($join) use ($userId, $isAdmin) {
-                $join->on('consumer_accounts.ca_number', '=', 'bill_records.ca_number');
+                $join->on('consumer_accounts.ca_number', '=', 'bill_records.ca_number')
+                    ->on('consumer_accounts.user_id', '=', 'bill_records.user_id');
                 if (! $isAdmin && $userId) {
                     $join->where('consumer_accounts.user_id', '=', $userId);
                 }
@@ -396,34 +398,64 @@ class DashboardController extends Controller
             $statusWeightSql = "CASE ({$reviewStatusExpr}) WHEN 'submitted' THEN 1 WHEN 'pending' THEN 2 WHEN 'doubt' THEN 3 WHEN 'critical' THEN 4 ELSE 99 END";
         }
 
-        if ($statusWeightSql) {
-            $filteredQuery->orderByRaw("{$statusWeightSql} ASC");
-        }
+        $effectiveAmountExpr = 'COALESCE(CASE WHEN bill_records.total_amount IS NOT NULL AND bill_records.total_amount != 0 THEN bill_records.total_amount ELSE NULL END, consumer_accounts.baseline_amount, bill_records.total_amount, 0)';
+        $effectiveNameExpr = "COALESCE(CASE WHEN consumer_accounts.consumer_name IS NOT NULL AND consumer_accounts.consumer_name != '' AND consumer_accounts.consumer_name NOT LIKE 'Consumer %' THEN consumer_accounts.consumer_name ELSE NULL END, NULLIF(bill_records.consumer_name, ''), bill_records.ca_number)";
+        $effectiveMeterExpr = "COALESCE(NULLIF(consumer_accounts.meter_no, ''), NULLIF(bill_records.meter_no, ''), '')";
 
         $dir = $sortAsc ? 'ASC' : 'DESC';
         $numericCols = ['working_reading', 'current_reading', 'previous_reading', 'units_consumed', 'units', 'total_amount', 'amount', 'basis_priority', 'review_status', 'status'];
 
+        $isExplicitColumnSort = ($sortCol !== 'ca_number');
+
+        // If the user did NOT choose a specific column sort, apply Status Priority grouping first
+        if (! $isExplicitColumnSort && $statusWeightSql) {
+            $filteredQuery->orderByRaw("{$statusWeightSql} ASC");
+        }
+
+        // Apply primary column sort with NULL-safe handling and baseline amount coalescence
         if (in_array($sortCol, $numericCols, true)) {
             match ($sortCol) {
-                'working_reading' => $filteredQuery->orderByRaw("(bill_records.working_reading + 0) {$dir}"),
-                'current_reading' => $filteredQuery->orderByRaw("(bill_records.current_reading + 0) {$dir}"),
-                'previous_reading' => $filteredQuery->orderByRaw("(bill_records.previous_reading + 0) {$dir}"),
-                'units_consumed', 'units' => $filteredQuery->orderByRaw("bill_records.units_consumed {$dir}"),
-                'total_amount', 'amount' => $filteredQuery->orderByRaw("bill_records.total_amount {$dir}"),
-                'basis_priority' => $filteredQuery->orderByRaw("CASE ({$basisExpr}) WHEN 'OK' THEN 1 WHEN 'LK' THEN 2 WHEN 'MD' THEN 3 WHEN 'PL' THEN 4 WHEN 'RN' THEN 5 ELSE 6 END {$dir}"),
-                'review_status', 'status' => $filteredQuery->orderByRaw("CASE ({$reviewStatusExpr}) WHEN 'pending' THEN 1 WHEN 'doubt' THEN 2 WHEN 'critical' THEN 3 WHEN 'submitted' THEN 4 ELSE 5 END {$dir}"),
+                'working_reading' => $filteredQuery
+                    ->orderByRaw("CASE WHEN bill_records.working_reading IS NULL OR bill_records.working_reading = '' THEN 1 ELSE 0 END ASC")
+                    ->orderByRaw("(bill_records.working_reading + 0) {$dir}"),
+                'current_reading' => $filteredQuery
+                    ->orderByRaw("CASE WHEN bill_records.current_reading IS NULL OR bill_records.current_reading = '' THEN 1 ELSE 0 END ASC")
+                    ->orderByRaw("(bill_records.current_reading + 0) {$dir}"),
+                'previous_reading' => $filteredQuery
+                    ->orderByRaw("CASE WHEN bill_records.previous_reading IS NULL OR bill_records.previous_reading = '' THEN 1 ELSE 0 END ASC")
+                    ->orderByRaw("(bill_records.previous_reading + 0) {$dir}"),
+                'units_consumed', 'units' => $filteredQuery
+                    ->orderByRaw('CASE WHEN bill_records.units_consumed IS NULL THEN 1 ELSE 0 END ASC')
+                    ->orderByRaw("bill_records.units_consumed {$dir}"),
+                'total_amount', 'amount' => $filteredQuery
+                    ->orderByRaw('CASE WHEN (bill_records.total_amount IS NULL AND consumer_accounts.baseline_amount IS NULL) THEN 1 ELSE 0 END ASC')
+                    ->orderByRaw("({$effectiveAmountExpr}) {$dir}"),
+                'basis_priority' => $filteredQuery
+                    ->orderByRaw("CASE ({$basisExpr}) WHEN 'OK' THEN 1 WHEN 'LK' THEN 2 WHEN 'MD' THEN 3 WHEN 'PL' THEN 4 WHEN 'RN' THEN 5 ELSE 6 END {$dir}"),
+                'review_status', 'status' => $filteredQuery
+                    ->orderByRaw("CASE ({$reviewStatusExpr}) WHEN 'pending' THEN 1 WHEN 'doubt' THEN 2 WHEN 'critical' THEN 3 WHEN 'submitted' THEN 4 ELSE 5 END {$dir}"),
                 default => null,
             };
         } else {
             match ($sortCol) {
-                'consumer_name', 'name' => $filteredQuery->orderByRaw("COALESCE(CASE WHEN consumer_accounts.consumer_name IS NOT NULL AND consumer_accounts.consumer_name != '' AND consumer_accounts.consumer_name NOT LIKE 'Consumer %' THEN consumer_accounts.consumer_name ELSE NULL END, NULLIF(bill_records.consumer_name, ''), bill_records.ca_number) {$dir}"),
-                'meter_no' => $filteredQuery->orderByRaw("COALESCE(NULLIF(consumer_accounts.meter_no, ''), NULLIF(bill_records.meter_no, ''), '') {$dir}"),
+                'consumer_name', 'name' => $filteredQuery
+                    ->orderByRaw("CASE WHEN ({$effectiveNameExpr}) IS NULL OR ({$effectiveNameExpr}) = '' THEN 1 ELSE 0 END ASC")
+                    ->orderByRaw("({$effectiveNameExpr}) {$dir}"),
+                'meter_no' => $filteredQuery
+                    ->orderByRaw("CASE WHEN ({$effectiveMeterExpr}) IS NULL OR ({$effectiveMeterExpr}) = '' THEN 1 ELSE 0 END ASC")
+                    ->orderByRaw("({$effectiveMeterExpr}) {$dir}"),
                 'billing_basis', 'basis' => $filteredQuery->orderByRaw("({$basisExpr}) {$dir}"),
                 'bill_month' => $filteredQuery->orderByRaw("bill_records.billing_year {$dir}")->orderByRaw("bill_records.billing_month {$dir}"),
                 default => $filteredQuery->orderByRaw("bill_records.ca_number {$dir}"),
             };
         }
 
+        // Secondary sort: if user sorted by column, apply Status Priority grouping as tie-breaker (if active)
+        if ($isExplicitColumnSort && $statusWeightSql) {
+            $filteredQuery->orderByRaw("{$statusWeightSql} ASC");
+        }
+
+        // Tertiary / Deterministic final sort
         $filteredQuery->orderBy('bill_records.ca_number', 'ASC');
 
         // Fetch ONLY the paginated page records from database

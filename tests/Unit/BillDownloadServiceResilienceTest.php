@@ -2,14 +2,19 @@
 
 namespace Tests\Unit;
 
+use App\Models\BillRecord;
+use App\Models\User;
 use App\Services\BillDownloadService;
 use App\Services\Extraction\JasperUnicodeExtractor;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Smalot\PdfParser\Parser;
 use Tests\TestCase;
 
 class BillDownloadServiceResilienceTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected BillDownloadService $downloadService;
 
     protected function setUp(): void
@@ -205,5 +210,27 @@ class BillDownloadServiceResilienceTest extends TestCase
 
         $this->assertFalse($result['success']);
         $this->assertStringContainsString('preceding 2 months', $result['error']);
+    }
+
+    public function test_batch_download_probes_previous_months_when_target_cycle_unbilled(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+
+        // Target month 10/2026 has no bill, but 09/2026 fixture exists in apk/bill-pdf
+        $results = $this->downloadService->download(['10230041576'], $user->id, 10, 2026);
+
+        $this->assertEquals(1, $results['total']);
+        $this->assertEquals(1, $results['success']);
+        $this->assertEquals(0, $results['failed']);
+
+        $bill = BillRecord::where('user_id', $user->id)
+            ->where('ca_number', '10230041576')
+            ->where('billing_month', 10)
+            ->where('billing_year', 2026)
+            ->first();
+
+        $this->assertNotNull($bill);
+        $this->assertEquals('downloaded', $bill->download_status);
+        $this->assertEquals('09/2026', $bill->bill_month_label);
     }
 }
