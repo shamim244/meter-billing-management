@@ -801,6 +801,39 @@ class FieldDeskSystemTest extends TestCase
                     'longitude' => 85.44444444,
                     'location_accuracy' => 8.0,
                 ],
+            ])
+            ->assertJsonStructure([
+                'categories',
             ]);
+    }
+
+    public function test_categories_self_heal_when_table_is_empty(): void
+    {
+        FieldDeskCategory::query()->delete();
+        $this->assertEquals(0, FieldDeskCategory::count());
+
+        $categories = FieldDeskCategory::getActiveCategories();
+
+        $this->assertCount(4, $categories);
+        $this->assertEquals(4, FieldDeskCategory::count());
+    }
+
+    public function test_action_store_succeeds_even_when_stale_or_invalid_category_id_is_passed(): void
+    {
+        $response = $this->actingAs($this->agent)->postJson(route('api.field-desk.store'), [
+            'ca_number' => 'CA_RESILIENT_999',
+            'category_id' => 999999, // Non-existent category ID
+            'target_date' => Carbon::now()->addDays(3)->toDateString(),
+            'priority' => 'normal',
+            'target_amount' => 1250.00,
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJson(['success' => true]);
+
+        $action = FieldDeskAction::where('ca_number', 'CA_RESILIENT_999')->first();
+        $this->assertNotNull($action);
+        $this->assertNotNull($action->category_id);
+        $this->assertDatabaseHas('field_desk_categories', ['id' => $action->category_id]);
     }
 }

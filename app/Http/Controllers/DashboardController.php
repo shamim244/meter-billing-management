@@ -222,7 +222,7 @@ class DashboardController extends Controller
             'units_danger_floor' => (int) SystemSetting::get('color_units_danger_floor', 200),
         ];
 
-        $fieldDeskCategories = FieldDeskCategory::active()->ordered()->get();
+        $fieldDeskCategories = FieldDeskCategory::getActiveCategories();
 
         return view('dashboard', compact(
             'periods',

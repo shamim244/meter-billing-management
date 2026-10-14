@@ -50,7 +50,8 @@
             mruPeriodsMap: @json($mruPeriodsMap ?? []),
             availableTags: @json($activeTags ?? []),
             defaultTag: '{{ $defaultTag ?? "OK" }}',
-            fieldDeskDefaultCategoryId: '{{ isset($fieldDeskCategories) && count($fieldDeskCategories) > 0 ? $fieldDeskCategories->first()->id : 1 }}',
+            fieldDeskCategories: @json($fieldDeskCategories ?? []),
+            fieldDeskDefaultCategoryId: '{{ isset($fieldDeskCategories) && count($fieldDeskCategories) > 0 ? $fieldDeskCategories->first()->id : '' }}',
             counts: {
                 all: {{ $totalPeriodBills ?? 0 }},
                 pending: {{ $statusCounts['pending'] ?? 0 }},

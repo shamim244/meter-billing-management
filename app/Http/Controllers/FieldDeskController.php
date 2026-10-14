@@ -42,7 +42,7 @@ class FieldDeskController extends Controller
         }
         $mrus = $mrusQuery->orderBy('code')->get();
 
-        $categories = FieldDeskCategory::active()->ordered()->get();
+        $categories = FieldDeskCategory::getActiveCategories();
         $counts = $this->fieldDeskService->getSummaryCounts($userId);
         $initialCa = $request->query('ca', '');
 
@@ -151,6 +151,17 @@ class FieldDeskController extends Controller
     public function store(Request $request): JsonResponse
     {
         $userId = (int) Auth::id();
+
+        FieldDeskCategory::ensureDefaultsExist();
+
+        // If category_id is missing, non-numeric or doesn't exist, resolve to valid default category
+        $submittedCategoryId = $request->input('category_id');
+        if (! $submittedCategoryId || ! FieldDeskCategory::where('id', $submittedCategoryId)->exists()) {
+            $defaultCategory = FieldDeskCategory::active()->ordered()->first();
+            if ($defaultCategory) {
+                $request->merge(['category_id' => $defaultCategory->id]);
+            }
+        }
 
         $validated = $request->validate([
             'ca_number' => ['required', 'string', 'max:50'],
@@ -324,6 +335,18 @@ class FieldDeskController extends Controller
             ->where('field_desk_actions.user_id', $userId)
             ->where('id', $id)
             ->firstOrFail();
+
+        FieldDeskCategory::ensureDefaultsExist();
+
+        if ($request->has('category_id')) {
+            $submittedCategoryId = $request->input('category_id');
+            if (! $submittedCategoryId || ! FieldDeskCategory::where('id', $submittedCategoryId)->exists()) {
+                $defaultCategory = FieldDeskCategory::active()->ordered()->first();
+                if ($defaultCategory) {
+                    $request->merge(['category_id' => $defaultCategory->id]);
+                }
+            }
+        }
 
         $validated = $request->validate([
             'category_id' => ['sometimes', 'integer', 'exists:field_desk_categories,id'],
@@ -583,6 +606,7 @@ class FieldDeskController extends Controller
         return response()->json([
             'success' => true,
             'ca_number' => $ca,
+            'categories' => FieldDeskCategory::getActiveCategories(),
             'consumer' => $consumer ? [
                 'id' => $consumer->id ?? null,
                 'name' => $consumer->consumer_name,
@@ -723,7 +747,7 @@ class FieldDeskController extends Controller
      */
     public function getCategories(): JsonResponse
     {
-        $categories = FieldDeskCategory::active()->ordered()->get();
+        $categories = FieldDeskCategory::getActiveCategories();
 
         return response()->json([
             'success' => true,

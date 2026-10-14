@@ -8,15 +8,13 @@
         <div>
             <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Category</label>
             <select x-model="quickDeskForm.category_id" class="w-full py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white">
+                <template x-for="cat in (fieldDeskCategories.length ? fieldDeskCategories : (window.dashboardConfig?.fieldDeskCategories || []))" :key="cat.id">
+                    <option :value="String(cat.id)" x-text="`${cat.icon || '📋'} ${cat.name}`"></option>
+                </template>
                 @if(isset($fieldDeskCategories) && count($fieldDeskCategories) > 0)
                     @foreach($fieldDeskCategories as $cat)
                         <option value="{{ $cat->id }}">{{ $cat->icon }} {{ $cat->name }}</option>
                     @endforeach
-                @else
-                    <option value="1">💳 Payment Commitment</option>
-                    <option value="2">🔧 Technical / Grievance</option>
-                    <option value="3">🚶 Scheduled Visit</option>
-                    <option value="4">📝 Field Dossier Note</option>
                 @endif
             </select>
         </div>

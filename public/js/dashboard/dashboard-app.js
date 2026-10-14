@@ -206,8 +206,9 @@ function dashboardApp() {
                 fieldDeskAction: null,
                 fieldDeskLoading: false,
                 fieldDeskGpsLoading: false,
+                fieldDeskCategories: Array.isArray(cfg.fieldDeskCategories) ? cfg.fieldDeskCategories : [],
                 quickDeskForm: {
-                    category_id: '1',
+                    category_id: String(cfg.fieldDeskDefaultCategoryId || (cfg.fieldDeskCategories && cfg.fieldDeskCategories[0] ? cfg.fieldDeskCategories[0].id : '')),
                     target_date: new Date().toISOString().split('T')[0],
                     target_amount: '',
                     priority: 'normal',
@@ -1496,8 +1497,12 @@ function dashboardApp() {
                 async openFieldDeskModal(bill) {
                     this.fieldDeskBill = bill;
                     this.fieldDeskAction = bill.field_desk_action || null;
+                    const initialCatId = String(
+                        cfg.fieldDeskDefaultCategoryId ||
+                        (this.fieldDeskCategories && this.fieldDeskCategories[0] ? this.fieldDeskCategories[0].id : '')
+                    );
                     this.quickDeskForm = {
-                        category_id: String(cfg.fieldDeskDefaultCategoryId || '1'),
+                        category_id: initialCatId,
                         target_date: new Date().toISOString().split('T')[0],
                         target_amount: bill.total_amount ? Number(bill.total_amount).toFixed(2) : '',
                         priority: 'normal',
@@ -1515,6 +1520,12 @@ function dashboardApp() {
                         const res = await fetch(`/api/field-desk/consumer/${bill.ca_number}`);
                         const data = await res.json();
                         if (res.ok && data.success) {
+                            if (Array.isArray(data.categories) && data.categories.length > 0) {
+                                this.fieldDeskCategories = data.categories;
+                                if (!this.quickDeskForm.category_id || !data.categories.some(c => String(c.id) === String(this.quickDeskForm.category_id))) {
+                                    this.quickDeskForm.category_id = String(data.categories[0].id);
+                                }
+                            }
                             if (data.action) {
                                 this.fieldDeskAction = data.action;
                                 bill.field_desk_action = data.action;
