@@ -11,9 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('bill_records', function (Blueprint $table) {
-            $table->index(['user_id', 'mru_id', 'billing_year', 'billing_month'], 'idx_bill_records_user_mru_year_month');
-        });
+        try {
+            Schema::table('bill_records', function (Blueprint $table) {
+                $table->index(['user_id', 'mru_id', 'billing_year', 'billing_month'], 'idx_bill_records_user_mru_year_month');
+            });
+        } catch (Throwable $e) {
+            // Index already exists or database does not support duplicate index
+        }
     }
 
     /**
@@ -21,8 +25,12 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('bill_records', function (Blueprint $table) {
-            $table->dropIndex('idx_bill_records_user_mru_year_month');
-        });
+        try {
+            Schema::table('bill_records', function (Blueprint $table) {
+                $table->dropIndex('idx_bill_records_user_mru_year_month');
+            });
+        } catch (Throwable $e) {
+            // Index does not exist
+        }
     }
 };

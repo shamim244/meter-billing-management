@@ -11,21 +11,23 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('field_desk_activities', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('action_id')->constrained('field_desk_actions')->cascadeOnDelete();
-            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
-            $table->string('action_type', 50);
-            $table->text('note')->nullable();
-            $table->date('old_date')->nullable();
-            $table->date('new_date')->nullable();
-            $table->decimal('amount_recorded', 12, 2)->nullable();
-            $table->json('metadata')->nullable();
-            $table->timestamp('created_at')->useCurrent();
+        if (! Schema::hasTable('field_desk_activities')) {
+            Schema::create('field_desk_activities', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('action_id')->constrained('field_desk_actions')->cascadeOnDelete();
+                $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+                $table->string('action_type', 50);
+                $table->text('note')->nullable();
+                $table->date('old_date')->nullable();
+                $table->date('new_date')->nullable();
+                $table->decimal('amount_recorded', 12, 2)->nullable();
+                $table->json('metadata')->nullable();
+                $table->timestamp('created_at')->useCurrent();
 
-            $table->index(['action_id', 'created_at'], 'idx_action_timeline');
-            $table->index('action_type');
-        });
+                $table->index(['action_id', 'created_at'], 'idx_action_timeline');
+                $table->index('action_type');
+            });
+        }
     }
 
     /**
