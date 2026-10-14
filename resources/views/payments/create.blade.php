@@ -12,6 +12,15 @@
             <form action="{{ route('payments.store') }}" method="POST" enctype="multipart/form-data" @submit="handleCheckout($event)" class="space-y-6">
                 @csrf
                 <input type="hidden" name="purpose" value="wallet_topup">
+                @if(request('plan_id'))
+                    <input type="hidden" name="plan_id" value="{{ request('plan_id') }}">
+                @endif
+                @if(request('duration_id'))
+                    <input type="hidden" name="duration_id" value="{{ request('duration_id') }}">
+                @endif
+                @if(request('auto_activate'))
+                    <input type="hidden" name="auto_activate" value="1">
+                @endif
 
                 @include('payments.partials.amount-card')
                 @include('payments.partials.mode-selector')
@@ -30,6 +39,9 @@
             purpose: 'wallet_topup',
             amount: {{ $presetAmount }},
             minAmount: {{ $settings['min_amount'] }},
+            planId: '{{ request('plan_id') }}',
+            durationId: '{{ request('duration_id') }}',
+            autoActivate: '{{ request('auto_activate') }}',
             activePgDriver: '{{ $settings['active_pg_driver'] }}',
             businessUpiId: '{{ $settings['business_upi_id'] }}',
             businessUpiName: '{{ $settings['business_upi_name'] }}',

@@ -288,4 +288,53 @@ class ManualSubscriptionPaymentApprovalTest extends TestCase
         $this->assertEquals($this->freePlan->id, $agent->activeSubscription->plan_id);
         $this->assertEquals('active', $agent->activeSubscription->status);
     }
+
+    /**
+     * Scenario 5: User tops up wallet with auto_activate flag and plan details.
+     * Admin approves payment -> Wallet is credited, then plan amount is debited and plan is activated!
+     */
+    public function test_wallet_topup_with_auto_activate_flag_activates_subscription_on_admin_approval(): void
+    {
+        $admin = User::factory()->create(['status' => 'active', 'email_verified_at' => now()]);
+        $admin->assignRole('admin');
+
+        $agent = User::factory()->create(['status' => 'active', 'email_verified_at' => now()]);
+        $agent->assignRole('user');
+
+        $freeSub = $this->planService->subscribeAgent($agent, $this->freePlan, $this->freeDuration);
+
+        // Submit wallet topup with auto_activate
+        $response = $this->actingAs($agent)->post(route('payments.store'), [
+            'mode' => PaymentMode::MANUAL_UPI->value,
+            'purpose' => PaymentPurpose::WALLET_TOPUP->value,
+            'amount' => 499.00,
+            'plan_id' => $this->proPlan->id,
+            'duration_id' => $this->proDuration->id,
+            'auto_activate' => '1',
+            'utr_number' => '425000000005',
+        ]);
+
+        $response->assertRedirect(route('payments.index'));
+
+        $payment = Payment::where('utr_number', '425000000005')->firstOrFail();
+        $this->assertEquals(PaymentStatus::PENDING_VERIFICATION, $payment->status);
+        $this->assertEquals(1, $payment->meta['auto_activate'] ?? null);
+        $this->assertEquals($this->proPlan->id, $payment->meta['plan_id'] ?? null);
+
+        // Admin approves payment
+        $approveResponse = $this->actingAs($admin)->post("/admin/payments/{$payment->id}/approve", [
+            'notes' => 'Topup verified and approved',
+        ]);
+
+        $approveResponse->assertRedirect();
+        $payment->refresh();
+        $this->assertEquals(PaymentStatus::SUCCESS, $payment->status);
+
+        // Verify agent's subscription is now upgraded to Pro Plan
+        $agent->refresh();
+        $activeSub = $agent->activeSubscription;
+        $this->assertNotNull($activeSub);
+        $this->assertEquals($this->proPlan->id, $activeSub->plan_id);
+        $this->assertEquals('active', $activeSub->status);
+    }
 }

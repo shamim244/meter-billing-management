@@ -385,38 +385,70 @@ class DashboardController extends Controller
         $totalMatching = (clone $filteredQuery)->count('bill_records.id');
 
         $otherPeriodMatch = null;
+        $consumerAccountMatch = null;
         if (! empty($searchLower) && $totalMatching === 0) {
-            $otherBill = BillRecord::withoutGlobalScope('belongs_to_user')
-                ->when(! $isAdmin && $userId, fn ($q) => $q->where('bill_records.user_id', $userId))
-                ->leftJoin('consumer_accounts', function ($join) use ($userId, $isAdmin) {
-                    $join->on('consumer_accounts.ca_number', '=', 'bill_records.ca_number')
-                        ->on('consumer_accounts.user_id', '=', 'bill_records.user_id');
-                    if (! $isAdmin && $userId) {
-                        $join->where('consumer_accounts.user_id', '=', $userId);
-                    }
-                })
-                ->where(function ($q) use ($escapedSearch) {
-                    $q->whereRaw('LOWER(bill_records.ca_number) LIKE ?', ["%{$escapedSearch}%"])
-                        ->orWhereRaw('LOWER(bill_records.consumer_name) LIKE ?', ["%{$escapedSearch}%"])
-                        ->orWhereRaw('LOWER(bill_records.meter_no) LIKE ?', ["%{$escapedSearch}%"])
-                        ->orWhereRaw('LOWER(consumer_accounts.consumer_name) LIKE ?', ["%{$escapedSearch}%"])
-                        ->orWhereRaw('LOWER(consumer_accounts.meter_no) LIKE ?', ["%{$escapedSearch}%"])
-                        ->orWhereRaw('LOWER(consumer_accounts.mobile) LIKE ?', ["%{$escapedSearch}%"]);
-                })
-                ->select('bill_records.billing_month', 'bill_records.billing_year', 'bill_records.mru_id')
-                ->orderBy('bill_records.billing_year', 'desc')
-                ->orderBy('bill_records.billing_month', 'desc')
-                ->first();
+            // Only search other periods/MRUs if there are zero matching bills in the current period and MRU
+            if (($stats->count_all ?? 0) === 0) {
+                $otherBill = BillRecord::withoutGlobalScope('belongs_to_user')
+                    ->when(! $isAdmin && $userId, fn ($q) => $q->where('bill_records.user_id', $userId))
+                    ->leftJoin('consumer_accounts', function ($join) use ($userId, $isAdmin) {
+                        $join->on('consumer_accounts.ca_number', '=', 'bill_records.ca_number')
+                            ->on('consumer_accounts.user_id', '=', 'bill_records.user_id');
+                        if (! $isAdmin && $userId) {
+                            $join->where('consumer_accounts.user_id', '=', $userId);
+                        }
+                    })
+                    ->where(function ($q) use ($escapedSearch) {
+                        $q->whereRaw('LOWER(bill_records.ca_number) LIKE ?', ["%{$escapedSearch}%"])
+                            ->orWhereRaw('LOWER(bill_records.consumer_name) LIKE ?', ["%{$escapedSearch}%"])
+                            ->orWhereRaw('LOWER(bill_records.meter_no) LIKE ?', ["%{$escapedSearch}%"])
+                            ->orWhereRaw('LOWER(consumer_accounts.consumer_name) LIKE ?', ["%{$escapedSearch}%"])
+                            ->orWhereRaw('LOWER(consumer_accounts.meter_no) LIKE ?', ["%{$escapedSearch}%"])
+                            ->orWhereRaw('LOWER(consumer_accounts.mobile) LIKE ?', ["%{$escapedSearch}%"]);
+                    })
+                    ->where(function ($q) use ($month, $year, $mruId) {
+                        $q->where('bill_records.billing_year', '!=', $year)
+                            ->orWhere('bill_records.billing_month', '!=', $month);
+                        if (! empty($mruId)) {
+                            $q->orWhere('bill_records.mru_id', '!=', $mruId);
+                        }
+                    })
+                    ->select('bill_records.billing_month', 'bill_records.billing_year', 'bill_records.mru_id')
+                    ->orderBy('bill_records.billing_year', 'desc')
+                    ->orderBy('bill_records.billing_month', 'desc')
+                    ->first();
 
-            if ($otherBill) {
-                $otherMru = Mru::find($otherBill->mru_id);
-                $otherPeriodMatch = [
-                    'month' => (int) $otherBill->billing_month,
-                    'year' => (int) $otherBill->billing_year,
-                    'label' => date('M, Y', mktime(0, 0, 0, (int) $otherBill->billing_month, 1, (int) $otherBill->billing_year)),
-                    'mru_id' => $otherBill->mru_id,
-                    'mru_name' => $otherMru?->name ?? $otherMru?->code,
-                ];
+                if ($otherBill) {
+                    $otherMru = Mru::find($otherBill->mru_id);
+                    $otherPeriodMatch = [
+                        'month' => (int) $otherBill->billing_month,
+                        'year' => (int) $otherBill->billing_year,
+                        'label' => date('M, Y', mktime(0, 0, 0, (int) $otherBill->billing_month, 1, (int) $otherBill->billing_year)),
+                        'mru_id' => $otherBill->mru_id,
+                        'mru_name' => $otherMru?->name ?? $otherMru?->code,
+                    ];
+                } else {
+                    $consumerAccount = ConsumerAccount::query()
+                        ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
+                        ->where(function ($q) use ($escapedSearch) {
+                            $q->whereRaw('LOWER(ca_number) LIKE ?', ["%{$escapedSearch}%"])
+                                ->orWhereRaw('LOWER(consumer_name) LIKE ?', ["%{$escapedSearch}%"])
+                                ->orWhereRaw('LOWER(meter_no) LIKE ?', ["%{$escapedSearch}%"])
+                                ->orWhereRaw('LOWER(mobile) LIKE ?', ["%{$escapedSearch}%"]);
+                        })
+                        ->with('mru')
+                        ->first();
+
+                    if ($consumerAccount) {
+                        $consumerAccountMatch = [
+                            'ca_number' => $consumerAccount->ca_number,
+                            'consumer_name' => $consumerAccount->consumer_name,
+                            'meter_no' => $consumerAccount->meter_no,
+                            'mru_id' => $consumerAccount->mru_id,
+                            'mru_name' => $consumerAccount->mru?->name ?? $consumerAccount->mru?->code ?? 'Registered MRU',
+                        ];
+                    }
+                }
             }
         }
 
@@ -443,7 +475,7 @@ class DashboardController extends Controller
         $dir = $sortAsc ? 'ASC' : 'DESC';
         $numericCols = ['working_reading', 'current_reading', 'previous_reading', 'units_consumed', 'units', 'total_amount', 'amount', 'basis_priority', 'review_status', 'status'];
 
-        $isExplicitColumnSort = ($sortCol !== 'ca_number');
+        $isExplicitColumnSort = ($sortCol !== 'ca_number' || ! $sortAsc);
 
         // If the user did NOT choose a specific column sort, apply Status Priority grouping first
         if (! $isExplicitColumnSort && $statusWeightSql) {
@@ -825,6 +857,7 @@ class DashboardController extends Controller
             'filtered_amount' => $filteredAmount,
             'available_periods' => $availablePeriods,
             'other_period_match' => $otherPeriodMatch,
+            'consumer_account_match' => $consumerAccountMatch,
             'filter_mismatch' => ! empty($searchLower) && ($stats->count_all ?? 0) > 0 && $totalMatching === 0,
             'total_in_all' => (int) ($stats->count_all ?? 0),
             'active_tuning' => [

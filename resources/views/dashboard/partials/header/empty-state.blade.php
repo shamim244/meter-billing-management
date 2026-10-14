@@ -31,6 +31,16 @@
             </button>
         </div>
 
+        <!-- Smart Consumer Account Match Card (Found in MRU, but no bill for this cycle yet) -->
+        <div x-show="consumerAccountMatch" class="mb-6 p-4 bg-purple-50 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800 rounded-2xl max-w-md mx-auto text-center space-y-2">
+            <div class="text-xs font-bold text-purple-800 dark:text-purple-300">
+                👤 Consumer <span class="font-mono font-black" x-text="consumerAccountMatch?.ca_number"></span> (<span x-text="consumerAccountMatch?.consumer_name"></span>) is registered in <span x-text="consumerAccountMatch?.mru_name"></span>, but has no bill in this cycle.
+            </div>
+            <a :href="'/consumer-accounts?search=' + encodeURIComponent(consumerAccountMatch?.ca_number || '')" class="inline-block px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer">
+                View Consumer Record →
+            </a>
+        </div>
+
         <!-- Smart Filter Mismatch Card -->
         <div x-show="filterMismatch" class="mb-6 p-4 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-2xl max-w-md mx-auto text-center space-y-2">
             <div class="text-xs font-bold text-amber-800 dark:text-amber-300">

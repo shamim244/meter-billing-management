@@ -120,6 +120,9 @@ function paymentCheckoutApp(config) {
                         mode: 'pg',
                         purpose: 'wallet_topup',
                         amount: this.amount,
+                        plan_id: config.planId ? parseInt(config.planId) : null,
+                        duration_id: config.durationId ? parseInt(config.durationId) : null,
+                        auto_activate: config.autoActivate ? 1 : null,
                         coupon_code: this.appliedCoupon ? this.appliedCoupon.code : null
                     })
                 });

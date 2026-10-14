@@ -43,8 +43,8 @@
                         <p class="text-[11px] text-rose-500 font-semibold">
                             Insufficient balance (Deficit: ₹<span x-text="(quote.final_amount - walletBalance).toLocaleString('en-IN')"></span>).
                         </p>
-                        <a href="{{ route('payments.create') }}" class="w-full py-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 font-bold text-xs flex items-center justify-center gap-1 hover:bg-indigo-100 transition">
-                            <span>👛 Top-Up Wallet First →</span>
+                        <a :href="'{{ route('payments.create') }}?plan_id=' + (selectedPlan?.id || '') + '&duration_id=' + (selectedDuration?.id || '') + '&amount=' + Math.max(1, (quote?.final_amount || 0) - walletBalance) + '&auto_activate=1'" class="w-full py-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 font-bold text-xs flex items-center justify-center gap-1 hover:bg-indigo-100 transition">
+                            <span>👛 Top-Up Wallet & Auto-Activate →</span>
                         </a>
                     </div>
                 </template>

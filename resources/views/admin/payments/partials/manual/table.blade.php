@@ -49,9 +49,12 @@
                         </td>
 
                         <td class="py-3.5 px-4">
-                            @if($p->screenshot_path)
-                                <button type="button" @click="openPreview('{{ Storage::url($p->screenshot_path) }}')" class="flex items-center gap-1.5 p-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 transition group">
-                                    <img src="{{ Storage::url($p->screenshot_path) }}" alt="Receipt" class="w-10 h-10 object-cover rounded-lg">
+                            @if($p->screenshot_url)
+                                @php
+                                    $slipUrl = (str_starts_with($p->screenshot_url, 'http') || str_starts_with($p->screenshot_url, '/')) ? $p->screenshot_url : Storage::url($p->screenshot_url);
+                                @endphp
+                                <button type="button" @click="openPreview('{{ $slipUrl }}')" class="flex items-center gap-1.5 p-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 transition group">
+                                    <img src="{{ $slipUrl }}" alt="Receipt" class="w-10 h-10 object-cover rounded-lg">
                                     <span class="text-[11px] text-indigo-400 group-hover:text-indigo-300 font-bold pr-1">View Slip</span>
                                 </button>
                             @else

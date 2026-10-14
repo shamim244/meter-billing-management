@@ -190,6 +190,85 @@ class DashboardSearchTest extends TestCase
         $this->assertCount(0, $filterResponse->json('data'));
         $this->assertTrue($filterResponse->json('filter_mismatch'));
         $this->assertEquals(1, $filterResponse->json('total_in_all'));
+        // Strict invariant: other_period_match must NOT match the current period!
+        $this->assertNull($filterResponse->json('other_period_match'));
+    }
+
+    public function test_dashboard_search_returns_consumer_account_match_when_no_bill_in_cycle(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $mru = Mru::create([
+            'user_id' => $user->id,
+            'code' => 'MRU_ACCOUNT_ONLY',
+            'name' => 'South Ridge',
+            'status' => 'active',
+        ]);
+
+        ConsumerAccount::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '10230099999',
+            'consumer_name' => 'Registered No Bill',
+            'meter_no' => 'MTR-NOBILL-01',
+            'mobile' => '9988776655',
+            'tariff_category' => 'DS1D',
+            'billing_basis' => 'OK',
+        ]);
+
+        $response = $this->actingAs($user)->getJson('/dashboard/data?month=4&year=2026&search=10230099999');
+        $response->assertOk();
+        $this->assertCount(0, $response->json('data'));
+        $this->assertNull($response->json('other_period_match'));
+
+        $match = $response->json('consumer_account_match');
+        $this->assertNotNull($match);
+        $this->assertEquals('10230099999', $match['ca_number']);
+        $this->assertEquals('Registered No Bill', $match['consumer_name']);
+        $this->assertEquals('South Ridge', $match['mru_name']);
+    }
+
+    public function test_dashboard_explicit_ca_number_desc_sorting(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $mru = Mru::create([
+            'user_id' => $user->id,
+            'code' => 'MRU_SORT_TEST',
+            'name' => 'East Ward',
+            'status' => 'active',
+        ]);
+
+        BillRecord::create([
+            'user_id' => $user->id,
+            'ca_number' => '10230010000',
+            'mru_id' => $mru->id,
+            'billing_month' => 4,
+            'billing_year' => 2026,
+            'consumer_name' => 'Alpha',
+            'review_status' => 'pending',
+            'total_amount' => 100.00,
+            'units_consumed' => 10,
+        ]);
+
+        BillRecord::create([
+            'user_id' => $user->id,
+            'ca_number' => '10230090000',
+            'mru_id' => $mru->id,
+            'billing_month' => 4,
+            'billing_year' => 2026,
+            'consumer_name' => 'Omega',
+            'review_status' => 'submitted',
+            'total_amount' => 900.00,
+            'units_consumed' => 90,
+        ]);
+
+        // When sorting ca_number desc, even with status_sort=pdcs (where pending would normally come before submitted),
+        // the explicit CA descending sort must place 10230090000 before 10230010000!
+        $response = $this->actingAs($user)->getJson('/dashboard/data?month=4&year=2026&sort_col=ca_number&sort_asc=false&status_sort=pdcs');
+        $response->assertOk();
+        $data = $response->json('data');
+        $this->assertCount(2, $data);
+        $this->assertEquals('10230090000', $data[0]['ca_number']);
+        $this->assertEquals('10230010000', $data[1]['ca_number']);
     }
 
     public function test_mru_show_search_by_various_fields(): void

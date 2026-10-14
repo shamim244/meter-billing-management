@@ -132,6 +132,14 @@ class PaymentController extends Controller
             $meta['duration_id'] = (int) $request->input('duration_id');
             $meta['action_mode'] = $request->input('action_mode', 'auto');
             $meta['action_type'] = $request->input('action_type', 'new');
+        } elseif ($request->filled('plan_id')) {
+            $meta['plan_id'] = (int) $request->input('plan_id');
+            if ($request->filled('duration_id')) {
+                $meta['duration_id'] = (int) $request->input('duration_id');
+            }
+            if ($request->filled('auto_activate')) {
+                $meta['auto_activate'] = 1;
+            }
         }
         $couponCode = trim($request->input('coupon_code', ''));
         if (! empty($couponCode)) {

@@ -73,7 +73,12 @@ function dashboardApp() {
                     this.selectedYear = parseInt(year);
                     this.selectedPeriodKey = `${this.selectedMonth}_${this.selectedYear}`;
                     localStorage.setItem('dashboard_period', this.selectedPeriodKey);
+                    this.filterStatus = 'all';
+                    this.basisFilter = 'all';
+                    this.tagFilter = 'all';
+                    localStorage.setItem('dashboard_basis_filter', 'all');
                     this.otherPeriodMatch = null;
+                    this.consumerAccountMatch = null;
                     this.filterMismatch = false;
                     this.totalInAll = 0;
                     this.fetchData(1);
@@ -165,6 +170,7 @@ function dashboardApp() {
                 defaultTag: cfg.defaultTag || 'OK',
                 searchQuery: '',
                 otherPeriodMatch: null,
+                consumerAccountMatch: null,
                 filterMismatch: false,
                 totalInAll: 0,
                 statusSort: localStorage.getItem('dashboard_status_sort') || 'default',
@@ -744,6 +750,7 @@ function dashboardApp() {
                                 if (json.filtered_units !== undefined) this.counts.filtered_units = json.filtered_units;
                                 if (json.filtered_amount !== undefined) this.counts.filtered_amount = json.filtered_amount;
                                 this.otherPeriodMatch = json.other_period_match || null;
+                                this.consumerAccountMatch = json.consumer_account_match || null;
                                 this.filterMismatch = !!json.filter_mismatch;
                                 this.totalInAll = json.total_in_all || 0;
                                 if (json.color_settings) this.colorSettings = json.color_settings;

@@ -14,14 +14,18 @@ use App\Services\Billing\PlanChangeService;
 use App\Services\Coupon\CouponRedemptionService;
 use App\Services\Plan\PlanService;
 use App\Services\Referral\ReferralService;
+use App\Services\Wallet\WalletService;
 use Illuminate\Support\Facades\Log;
 
 class ActivateSubscriptionOnPaymentSuccess
 {
     public function __construct(
         protected PlanService $planService,
-        protected PlanChangeService $planChangeService
-    ) {}
+        protected PlanChangeService $planChangeService,
+        protected ?WalletService $walletService = null
+    ) {
+        $this->walletService = $walletService ?? app(WalletService::class);
+    }
 
     /**
      * Handle incoming PaymentSuccessEvent for direct subscription activations.
@@ -29,12 +33,16 @@ class ActivateSubscriptionOnPaymentSuccess
     public function handle(PaymentSuccessEvent $event): void
     {
         $payment = $event->payment;
+        $meta = $payment->meta ?? [];
 
         $purposeValue = $payment->purpose instanceof PaymentPurpose
             ? $payment->purpose->value
             : (string) $payment->purpose;
 
-        if ($purposeValue !== PaymentPurpose::DIRECT_SUBSCRIPTION->value && $purposeValue !== 'direct_subscription') {
+        $isDirect = ($purposeValue === PaymentPurpose::DIRECT_SUBSCRIPTION->value || $purposeValue === 'direct_subscription');
+        $isAutoActivateTopup = ($purposeValue === PaymentPurpose::WALLET_TOPUP->value || $purposeValue === 'wallet_topup') && ! empty($meta['auto_activate']) && ! empty($meta['plan_id']);
+
+        if (! $isDirect && ! $isAutoActivateTopup) {
             return;
         }
 
@@ -101,6 +109,21 @@ class ActivateSubscriptionOnPaymentSuccess
         }
 
         try {
+            if ($isAutoActivateTopup) {
+                $requiredPrice = (float) $duration->final_price;
+                $currentBal = (float) $this->walletService->getBalance($user);
+                if ($currentBal >= $requiredPrice) {
+                    $this->walletService->debit(
+                        user: $user,
+                        amount: $requiredPrice,
+                        source: 'subscription_auto_activation',
+                        referenceType: Payment::class,
+                        referenceId: (string) $payment->id,
+                        description: "Subscription Auto-Activation for Plan: {$plan->name} ({$duration->formatted_duration})"
+                    );
+                }
+            }
+
             // If user has an active subscription to a DIFFERENT plan, upgrade/switch plans
             if ($activeSubscription && $activeSubscription->plan_id !== $plan->id) {
                 $proration = $this->planChangeService->calculateProration($activeSubscription, $plan, $duration);
@@ -130,7 +153,9 @@ class ActivateSubscriptionOnPaymentSuccess
                 $subId = $subscription->id;
                 $actionText = ($activeSubscription && $activeSubscription->plan_id === $plan->id)
                     ? "Extended plan {$plan->name} (+{$duration->formatted_duration})"
-                    : "Directly subscribed to plan {$plan->name} ({$duration->formatted_duration})";
+                    : ($isAutoActivateTopup
+                        ? "Auto-activated plan {$plan->name} ({$duration->formatted_duration})"
+                        : "Directly subscribed to plan {$plan->name} ({$duration->formatted_duration})");
             }
 
             $meta = $payment->meta ?? [];
