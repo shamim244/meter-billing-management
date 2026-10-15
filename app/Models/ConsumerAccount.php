@@ -129,6 +129,14 @@ class ConsumerAccount extends Model
     }
 
     /**
+     * Alias for billRecords() to allow $consumer->bills.
+     */
+    public function bills(): HasMany
+    {
+        return $this->billRecords();
+    }
+
+    /**
      * Get all bill statuses for this consumer account.
      */
     public function billStatuses(): HasMany

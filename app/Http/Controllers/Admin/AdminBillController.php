@@ -114,6 +114,11 @@ class AdminBillController extends Controller
             'color_units_safe_ceiling' => (int) SystemSetting::get('color_units_safe_ceiling', 50),
             'color_units_warning_ceiling' => (int) SystemSetting::get('color_units_warning_ceiling', 120),
             'color_units_danger_floor' => (int) SystemSetting::get('color_units_danger_floor', 200),
+            'gap_safe_ceiling_domestic' => (int) SystemSetting::get('gap_safe_ceiling_domestic', 220),
+            'gap_safe_ceiling_commercial' => (int) SystemSetting::get('gap_safe_ceiling_commercial', 400),
+            'gap_safe_ceiling_agriculture' => (int) SystemSetting::get('gap_safe_ceiling_agriculture', 800),
+            'gap_hold_default_mode' => SystemSetting::get('gap_hold_default_mode', 'zero'),
+            'inspection_stale_warning_days' => (int) SystemSetting::get('inspection_stale_warning_days', 90),
         ];
 
         return view('admin.bills.engine-settings', compact('settings'));
