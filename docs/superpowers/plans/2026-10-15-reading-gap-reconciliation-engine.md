@@ -1,6 +1,6 @@
 # Dynamic Reading Gap & Event-Driven Reconciliation Engine Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Build a robust, event-driven Reading Gap and Reconciliation Engine that manages divergences between physical meter readings and official posted bills, providing 1-click hold modes (+0/+1 unit) for over-posted bills and smooth monthly amortization (capped at safe tariff thresholds: 200–250 kWh) for unbilled accumulated gaps across variable inspection intervals.
 
@@ -43,7 +43,7 @@
 - Produces: `ConsumerAccount` attributes `last_physical_reading`, `last_inspected_at`, `gap_recovery_mode`, `custom_safe_ceiling`.
 - Produces: `BillRecord` attributes `physical_reading`, `reading_gap`, `gap_slice_applied`, `gap_action_applied`.
 
-- [ ] **Step 1: Write the failing test for schema and models**
+- [x] **Step 1: Write the failing test for schema and models**
 
 ```php
 // tests/Feature/MeterInspectionDatabaseTest.php
@@ -90,12 +90,12 @@ class MeterInspectionDatabaseTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/MeterInspectionDatabaseTest.php`  
 Expected: FAIL with missing table/column errors.
 
-- [ ] **Step 3: Implement migrations and model updates**
+- [x] **Step 3: Implement migrations and model updates**
 
 1. Create migration `2026_10_15_000002_add_reading_gap_columns_to_consumer_accounts_and_bills.php`:
    - In `consumer_accounts`: add `last_physical_reading` (string nullable), `last_inspected_at` (timestamp nullable), `inspected_by_user_id` (foreign key nullable), `gap_recovery_mode` (string default 'auto'), `custom_safe_ceiling` (integer nullable).
@@ -105,12 +105,12 @@ Expected: FAIL with missing table/column errors.
 3. Create `app/Models/MeterInspection.php` with fillable and casts.
 4. Update fillable and casts in `ConsumerAccount.php` and `BillRecord.php`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/MeterInspectionDatabaseTest.php`  
 Expected: PASS.
 
-- [ ] **Step 5: Run Pint and Commit**
+- [x] **Step 5: Run Pint and Commit**
 
 ```bash
 vendor/bin/pint --dirty --format agent
@@ -132,7 +132,7 @@ git commit -m "feat(database): add reading gap columns and meter inspections tab
 - Produces: `calculateRecommendation(BillRecord $bill, ConsumerAccount $consumer, ?int $smartAvg = null): array`.
 - Produces: `getGapSummary(ConsumerAccount $consumer, ?BillRecord $latestBill = null): array`.
 
-- [ ] **Step 1: Write the failing unit tests for reconciliation logic**
+- [x] **Step 1: Write the failing unit tests for reconciliation logic**
 
 ```php
 // tests/Unit/ReadingGapReconciliationServiceTest.php
@@ -216,12 +216,12 @@ class ReadingGapReconciliationServiceTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `vendor/bin/phpunit.bat tests/Unit/ReadingGapReconciliationServiceTest.php`  
 Expected: FAIL with Class `ReadingGapReconciliationService` not found.
 
-- [ ] **Step 3: Implement `ReadingGapReconciliationService`**
+- [x] **Step 3: Implement `ReadingGapReconciliationService`**
 
 Implement `app/Services/Reading/ReadingGapReconciliationService.php`:
 - Resolve safe ceiling by tariff category:
@@ -233,12 +233,12 @@ Implement `app/Services/Reading/ReadingGapReconciliationService.php`:
 - For $\Delta > 0$: $\text{Gap Slice} = \max(0, C_{\text{safe}} - A_{\text{avg}})$, $\text{Billed Units} = \min(A_{\text{avg}} + \text{Gap Slice}, P + \Delta - P)$, Recommended working reading $= P + \text{Billed Units}$.
 - For $\Delta = 0$: In-Sync normal billing ($P + A_{\text{avg}}$).
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `vendor/bin/phpunit.bat tests/Unit/ReadingGapReconciliationServiceTest.php`  
 Expected: PASS.
 
-- [ ] **Step 5: Run Pint and Commit**
+- [x] **Step 5: Run Pint and Commit**
 
 ```bash
 vendor/bin/pint --dirty --format agent
@@ -259,7 +259,7 @@ git commit -m "feat(service): implement ReadingGapReconciliationService"
 **Interfaces:**
 - Produces: System settings `gap_safe_ceiling_domestic`, `gap_safe_ceiling_commercial`, `gap_safe_ceiling_agriculture`, `gap_hold_default_mode`, `inspection_stale_warning_days`.
 
-- [ ] **Step 1: Write the failing feature test for admin settings**
+- [x] **Step 1: Write the failing feature test for admin settings**
 
 ```php
 // tests/Feature/ReadingGapSettingsTest.php
@@ -296,23 +296,23 @@ class ReadingGapSettingsTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/ReadingGapSettingsTest.php`  
 Expected: FAIL.
 
-- [ ] **Step 3: Implement AdminBillController settings validation and Blade partial**
+- [x] **Step 3: Implement AdminBillController settings validation and Blade partial**
 
 1. Update `AdminBillController@updateEngineSettings` to validate and persist the new gap settings.
 2. Create `resources/views/admin/bills/partials/engine-settings/reading-gap-card.blade.php` (< 100 lines) with numeric steppers for domestic, commercial, and agriculture ceilings, plus stale warning days.
 3. `@include('admin.bills.partials.engine-settings.reading-gap-card')` in `engine-settings.blade.php`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/ReadingGapSettingsTest.php`  
 Expected: PASS.
 
-- [ ] **Step 5: Run Pint and Commit**
+- [x] **Step 5: Run Pint and Commit**
 
 ```bash
 vendor/bin/pint --dirty --format agent
@@ -333,7 +333,7 @@ git commit -m "feat(admin): add reading gap safe ceiling engine settings"
 - Produces: Enhanced `/dashboard/data` JSON payload containing `gap_status`, `net_gap`, `last_physical_reading`, `last_inspected_days_ago`, `gap_slice_applied`, `catchup_cycles`.
 - Produces: `POST /api/reading-gap/record-inspection` endpoint returning updated gap calculation.
 
-- [ ] **Step 1: Write the failing API test**
+- [x] **Step 1: Write the failing API test**
 
 ```php
 // tests/Feature/DashboardReadingGapApiTest.php
@@ -407,23 +407,23 @@ class DashboardReadingGapApiTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/DashboardReadingGapApiTest.php`  
 Expected: FAIL.
 
-- [ ] **Step 3: Implement DashboardController payload enrichment and inspection route**
+- [x] **Step 3: Implement DashboardController payload enrichment and inspection route**
 
 1. In `DashboardController@getData`: loop through items and attach `reading_gap_info` via `ReadingGapReconciliationService`.
 2. Add route and controller method `DashboardController@recordInspection` to accept `ca_number`, `physical_reading`, and optional `notes`.
 3. Add route `DashboardController@updateGapMode` to update `gap_recovery_mode` or `custom_safe_ceiling`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/DashboardReadingGapApiTest.php`  
 Expected: PASS.
 
-- [ ] **Step 5: Run Pint and Commit**
+- [x] **Step 5: Run Pint and Commit**
 
 ```bash
 vendor/bin/pint --dirty --format agent
@@ -449,7 +449,7 @@ git commit -m "feat(api): enrich dashboard payload with reading gap and add insp
 - Produces: Inspection staleness pill (🟢 Fresh, 🟡 60d+, 🔴 Overdue).
 - Produces: Decoupled JS functions in `dashboard-app.js`: `openInspectionModal(bill)`, `savePhysicalInspection()`, `setGapHoldMode(bill, mode)`.
 
-- [ ] **Step 1: Write the failing view integration test**
+- [x] **Step 1: Write the failing view integration test**
 
 ```php
 // tests/Feature/DashboardReadingGapViewTest.php
@@ -473,23 +473,23 @@ class DashboardReadingGapViewTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/DashboardReadingGapViewTest.php`  
 Expected: FAIL.
 
-- [ ] **Step 3: Implement Blade partials (< 120 lines each) and decoupled JavaScript methods**
+- [x] **Step 3: Implement Blade partials (< 120 lines each) and decoupled JavaScript methods**
 
 1. Create `resources/views/dashboard/partials/card/reading-gap-badge.blade.php`: renders 🟢 In-Sync, 🟡 Hold Mode, 🔴 Recovery progress.
 2. Create `resources/views/dashboard/partials/modals/reading-gap/inspection-modal.blade.php`: quick input for physical meter reading + notes with 1-click submit.
 3. In `public/js/dashboard/dashboard-app.js`: add methods `savePhysicalInspection()`, `applyGapHold(bill, mode)`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/DashboardReadingGapViewTest.php`  
 Expected: PASS.
 
-- [ ] **Step 5: Run Pint and Commit**
+- [x] **Step 5: Run Pint and Commit**
 
 ```bash
 vendor/bin/pint --dirty --format agent
@@ -507,7 +507,7 @@ git commit -m "feat(ui): add reading gap badges, 1-click hold controls, and insp
 **Interfaces:**
 - Exercises: Inspection recording -> Gap detection -> Over-posted hold mode -> Under-posted amortization -> New cycle bill sync -> Full recovery.
 
-- [ ] **Step 1: Write the full lifecycle integration test**
+- [x] **Step 1: Write the full lifecycle integration test**
 
 ```php
 // tests/Feature/FullReadingGapReconciliationFlowTest.php
@@ -571,17 +571,17 @@ class FullReadingGapReconciliationFlowTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run the full test suite**
+- [x] **Step 2: Run the full test suite**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/FullReadingGapReconciliationFlowTest.php`  
 Expected: PASS.
 
-- [ ] **Step 3: Run full project test suite**
+- [x] **Step 3: Run full project test suite**
 
 Run: `vendor/bin/phpunit.bat`  
 Expected: All tests pass with 0 regressions.
 
-- [ ] **Step 4: Final Pint Code Format & Commit**
+- [x] **Step 4: Final Pint Code Format & Commit**
 
 ```bash
 vendor/bin/pint --format agent
