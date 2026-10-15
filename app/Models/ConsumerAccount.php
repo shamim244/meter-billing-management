@@ -29,6 +29,11 @@ class ConsumerAccount extends Model
         'last_working_month',
         'last_working_year',
         'baseline_previous_reading',
+        'last_physical_reading',
+        'last_inspected_at',
+        'inspected_by_user_id',
+        'gap_recovery_mode',
+        'custom_safe_ceiling',
         'latitude',
         'longitude',
         'location_accuracy',
@@ -40,6 +45,8 @@ class ConsumerAccount extends Model
         'last_working_month' => 'integer',
         'last_working_year' => 'integer',
         'baseline_previous_reading' => 'integer',
+        'last_inspected_at' => 'datetime',
+        'custom_safe_ceiling' => 'integer',
         'latitude' => 'float',
         'longitude' => 'float',
         'location_accuracy' => 'float',
@@ -145,6 +152,14 @@ class ConsumerAccount extends Model
     public function fieldDeskActions(): HasMany
     {
         return $this->hasMany(FieldDeskAction::class, 'consumer_account_id');
+    }
+
+    /**
+     * Get all physical meter inspections for this consumer account.
+     */
+    public function inspections(): HasMany
+    {
+        return $this->hasMany(MeterInspection::class, 'consumer_account_id');
     }
 
     /**
