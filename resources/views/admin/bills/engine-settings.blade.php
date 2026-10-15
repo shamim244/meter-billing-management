@@ -14,6 +14,7 @@
             @include('admin.bills.partials.extraction-section')
             @include('admin.bills.partials.spike-filter-section')
             @include('admin.bills.partials.colorization-section')
+            @include('admin.bills.partials.engine-settings.reading-gap-card')
             @include('admin.bills.partials.connection-section')
             @include('admin.bills.partials.performance-section')
         </form>
@@ -36,6 +37,11 @@
             unitsSafeCeiling: {{ old('color_units_safe_ceiling', $settings['color_units_safe_ceiling'] ?? 50) }},
             unitsWarningCeiling: {{ old('color_units_warning_ceiling', $settings['color_units_warning_ceiling'] ?? 120) }},
             unitsDangerFloor: {{ old('color_units_danger_floor', $settings['color_units_danger_floor'] ?? 200) }},
+            gapDomesticCeiling: {{ old('gap_safe_ceiling_domestic', $settings['gap_safe_ceiling_domestic'] ?? 220) }},
+            gapCommercialCeiling: {{ old('gap_safe_ceiling_commercial', $settings['gap_safe_ceiling_commercial'] ?? 400) }},
+            gapAgriCeiling: {{ old('gap_safe_ceiling_agriculture', $settings['gap_safe_ceiling_agriculture'] ?? 800) }},
+            gapHoldMode: '{{ old('gap_hold_default_mode', $settings['gap_hold_default_mode'] ?? 'zero') }}',
+            staleWarningDays: {{ old('inspection_stale_warning_days', $settings['inspection_stale_warning_days'] ?? 90) }},
             currentMonth: {{ (int)date("n") }},
             currentYear: {{ (int)date("Y") }},
             diagnosticUrl: '{{ route("admin.bills.engine-settings.diagnostic") }}',

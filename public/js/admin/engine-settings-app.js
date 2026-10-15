@@ -19,6 +19,12 @@ function engineSettingsManager() {
         unitsWarningCeiling: config.unitsWarningCeiling ?? 120,
         unitsDangerFloor: config.unitsDangerFloor ?? 200,
 
+        gapDomesticCeiling: config.gapDomesticCeiling ?? 220,
+        gapCommercialCeiling: config.gapCommercialCeiling ?? 400,
+        gapAgriCeiling: config.gapAgriCeiling ?? 800,
+        gapHoldMode: config.gapHoldMode ?? 'zero',
+        staleWarningDays: config.staleWarningDays ?? 90,
+
         applyPreset(preset) {
             if (preset === 'rural') {
                 this.amountSafeCeiling = 300;

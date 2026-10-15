@@ -155,6 +155,11 @@ class AdminBillController extends Controller
             'color_units_safe_ceiling' => 'nullable|integer|min:0',
             'color_units_warning_ceiling' => 'nullable|integer|min:0',
             'color_units_danger_floor' => 'nullable|integer|min:0',
+            'gap_safe_ceiling_domestic' => 'nullable|integer|min:50|max:1000',
+            'gap_safe_ceiling_commercial' => 'nullable|integer|min:50|max:2000',
+            'gap_safe_ceiling_agriculture' => 'nullable|integer|min:100|max:5000',
+            'gap_hold_default_mode' => 'nullable|in:zero,one',
+            'inspection_stale_warning_days' => 'nullable|integer|min:15|max:365',
         ]);
 
         $validator->after(function ($validator) use ($request) {
@@ -320,6 +325,24 @@ class AdminBillController extends Controller
             }
         }
 
+        if ($request->has('has_gap_settings') || $request->filled('gap_safe_ceiling_domestic') || $request->filled('gap_hold_default_mode')) {
+            if ($request->filled('gap_safe_ceiling_domestic')) {
+                SystemSetting::set('gap_safe_ceiling_domestic', (int) $request->input('gap_safe_ceiling_domestic'));
+            }
+            if ($request->filled('gap_safe_ceiling_commercial')) {
+                SystemSetting::set('gap_safe_ceiling_commercial', (int) $request->input('gap_safe_ceiling_commercial'));
+            }
+            if ($request->filled('gap_safe_ceiling_agriculture')) {
+                SystemSetting::set('gap_safe_ceiling_agriculture', (int) $request->input('gap_safe_ceiling_agriculture'));
+            }
+            if ($request->filled('gap_hold_default_mode')) {
+                SystemSetting::set('gap_hold_default_mode', $request->input('gap_hold_default_mode'));
+            }
+            if ($request->filled('inspection_stale_warning_days')) {
+                SystemSetting::set('inspection_stale_warning_days', (int) $request->input('inspection_stale_warning_days'));
+            }
+        }
+
         if ($request->wantsJson()) {
             return response()->json([
                 'success' => true,
@@ -364,6 +387,12 @@ class AdminBillController extends Controller
         SystemSetting::set('color_units_safe_ceiling', 50);
         SystemSetting::set('color_units_warning_ceiling', 120);
         SystemSetting::set('color_units_danger_floor', 200);
+
+        SystemSetting::set('gap_safe_ceiling_domestic', 220);
+        SystemSetting::set('gap_safe_ceiling_commercial', 400);
+        SystemSetting::set('gap_safe_ceiling_agriculture', 800);
+        SystemSetting::set('gap_hold_default_mode', 'zero');
+        SystemSetting::set('inspection_stale_warning_days', 90);
 
         return redirect()
             ->route('admin.bills.engine-settings')
