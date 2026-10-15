@@ -28,6 +28,7 @@
             @include('dashboard.partials.modals.mobile-modal')
             @include('dashboard.partials.modals.bulk-mobile-modal')
             @include('dashboard.partials.modals.field-desk-modal')
+            @include('dashboard.partials.modals.inspection-modal')
 
         </div>
     </div>
@@ -36,6 +37,8 @@
     <script>
         window.dashboardConfig = {
             csrfToken: '{{ csrf_token() }}',
+            recordInspectionUrl: '{{ route('api.reading-gap.record-inspection') }}',
+            updateGapModeUrl: '{{ route('api.reading-gap.update-mode') }}',
             mruTopupUrl: '{{ route('wallet.index') }}',
             mruUpgradeUrl: '{{ route('user-panel.subscription') }}',
             shortcuts: @json(Auth::user()->getShortcutMap()),

@@ -106,8 +106,8 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
     Route::get('/bills/history/{ca_number}', [BillController::class, 'history'])->name('bills.history');
 
     // Reading Gap & Physical Meter Inspection (Module 13)
-    Route::post('/api/reading-gap/record-inspection', [DashboardController::class, 'recordInspection'])->name('reading-gap.record-inspection');
-    Route::post('/api/reading-gap/update-mode', [DashboardController::class, 'updateGapMode'])->name('reading-gap.update-mode');
+    Route::post('/api/reading-gap/record-inspection', [DashboardController::class, 'recordInspection'])->name('api.reading-gap.record-inspection');
+    Route::post('/api/reading-gap/update-mode', [DashboardController::class, 'updateGapMode'])->name('api.reading-gap.update-mode');
 
     // FieldDesk (Module 11) Dedicated Hub & Asynchronous API
     Route::get('/field-desk', [FieldDeskController::class, 'index'])->name('field-desk.index');
