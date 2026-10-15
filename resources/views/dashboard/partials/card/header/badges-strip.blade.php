@@ -60,6 +60,9 @@
     </template>
 </div>
 
+<!-- Reading Gap Status Badge (PRD-13) -->
+@include('dashboard.partials.card.reading-gap-badge')
+
 <!-- GPS Map Badge - Zero Card Size Expansion -->
 <template x-if="bill.latitude && bill.longitude">
     <a :href="bill.map_link || ('https://www.google.com/maps?q=' + bill.latitude + ',' + bill.longitude)"

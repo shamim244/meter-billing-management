@@ -122,6 +122,15 @@ function dashboardApp() {
                 showRemarkPresets: !!cfg.showRemarkPresets,
                 colorSettings: cfg.colorSettings || { enabled: true, amount_safe_ceiling: 500, amount_warning_ceiling: 1500, amount_danger_floor: 2500, units_safe_ceiling: 50, units_warning_ceiling: 120, units_danger_floor: 200 },
 
+                // Module 13: Reading Gap & Physical Meter Inspection State
+                showInspectionModal: false,
+                selectedGapItem: null,
+                inspectionReading: '',
+                inspectionDate: new Date().toISOString().split('T')[0],
+                inspectionGapMode: 'auto',
+                inspectionNotes: '',
+                isSavingInspection: false,
+
                 cycleMonth: cfg.selectedMonth || (new Date().getMonth() + 1),
                 cycleYear: cfg.selectedYear || new Date().getFullYear(),
                 executingAction: 'download_all',
@@ -205,6 +214,17 @@ function dashboardApp() {
                 submittingBulkMobile: false,
                 bulkMobileResult: null,
                 bulkMobileError: null,
+
+                // Reading Gap & Inspection (Module 13)
+                showInspectionModal: false,
+                selectedInspectionBill: null,
+                isInspectionSubmitting: false,
+                inspectionForm: {
+                    physical_reading: '',
+                    inspection_date: new Date().toISOString().split('T')[0],
+                    gap_recovery_mode: 'hold_exact',
+                    notes: ''
+                },
 
                 // FieldDesk Bridge (Module 11)
                 showFieldDeskModal: false,
@@ -1741,6 +1761,80 @@ function dashboardApp() {
                     } catch (err) {}
                 },
 
+                // Reading Gap & Inspection Methods (Module 13)
+                openInspectionModal(bill) {
+                    if (!bill) return;
+                    this.selectedInspectionBill = bill;
+                    const cachedPhysical = bill.reading_gap_info?.last_physical_reading || '';
+                    this.inspectionForm = {
+                        physical_reading: cachedPhysical,
+                        inspection_date: new Date().toISOString().split('T')[0],
+                        gap_recovery_mode: bill.reading_gap_info?.gap_recovery_mode || 'hold_exact',
+                        notes: ''
+                    };
+                    this.showInspectionModal = true;
+                },
+
+                async savePhysicalInspection() {
+                    if (!this.selectedInspectionBill || !this.inspectionForm.physical_reading) return;
+                    this.isInspectionSubmitting = true;
+                    try {
+                        const url = cfg.recordInspectionUrl || '/api/reading-gap/record-inspection';
+                        const res = await fetch(url, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': this.getCsrfToken(),
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                ca_number: this.selectedInspectionBill.ca_number,
+                                physical_reading: this.inspectionForm.physical_reading,
+                                inspection_date: this.inspectionForm.inspection_date,
+                                notes: this.inspectionForm.notes
+                            })
+                        });
+                        const data = await res.json();
+                        if (res.ok && data.success) {
+                            if (this.selectedInspectionBill && data.data?.gap_summary) {
+                                this.selectedInspectionBill.reading_gap_info = data.data.gap_summary;
+                            }
+                            this.showToastNotification('🔍', 'Physical meter inspection recorded!', null);
+                            this.showInspectionModal = false;
+                        } else {
+                            this.showToastNotification('⚠️', data.message || 'Error recording inspection', null);
+                        }
+                    } catch (err) {
+                        this.showToastNotification('❌', 'Network error recording inspection', null);
+                    } finally {
+                        this.isInspectionSubmitting = false;
+                    }
+                },
+
+                applyGapHold(bill, mode = 'zero') {
+                    if (!bill || this.isBillLocked(bill)) return;
+                    const prev = Number(bill.previous_reading) || 0;
+                    const reading = (mode === 'one') ? (prev + 1) : prev;
+                    bill.working_reading = String(reading);
+                    bill.is_manual = true;
+                    bill.reading_source = 'manual';
+                    bill.is_projected = false;
+                    this.saveWorkingReading(bill);
+                    this.showToastNotification('⏸️', `Hold Mode applied: ${reading} (${mode === 'one' ? '+1' : '+0'})`, null);
+                },
+
+                applySafeRecovery(bill) {
+                    if (!bill || this.isBillLocked(bill)) return;
+                    if (bill.reading_gap_info?.recommended_working_reading) {
+                        bill.working_reading = String(bill.reading_gap_info.recommended_working_reading);
+                        bill.is_manual = true;
+                        bill.reading_source = 'manual';
+                        bill.is_projected = false;
+                        this.saveWorkingReading(bill);
+                        this.showToastNotification('⚖️', `Safe recovery reading applied: ${bill.working_reading}`, null);
+                    }
+                },
+
                 launchBillingCycle(actionType = 'download_all') {
                     if (!this.filterMru) return;
 
@@ -2622,8 +2716,14 @@ function dashboardApp() {
                         return;
                     }
 
+                    if (this.showInspectionModal && (e.key === 'Escape' || e.key === 'Esc')) {
+                        e.preventDefault();
+                        this.showInspectionModal = false;
+                        return;
+                    }
+
                     // Do nothing if any modal is open or rebinding
-                    if (this.showShortcutsModal || this.showCreateMruModal || this.showExistingMruPopup || this.showNewCycleModal || this.showPdfViewerModal || this.showQuickPullModal || this.showTuningModal || this.showMeterHistoryModal || this.showMobileModal || this.showBulkMobileModal || this.showFieldDeskModal || this.rebindingAction) return;
+                    if (this.showShortcutsModal || this.showCreateMruModal || this.showExistingMruPopup || this.showNewCycleModal || this.showPdfViewerModal || this.showQuickPullModal || this.showTuningModal || this.showMeterHistoryModal || this.showMobileModal || this.showBulkMobileModal || this.showFieldDeskModal || this.showInspectionModal || this.rebindingAction) return;
 
                     // Alt+F: Global shortcut to open FieldDesk quick bridge for current bill
                     if (e.altKey && (e.key === 'f' || e.key === 'F')) {

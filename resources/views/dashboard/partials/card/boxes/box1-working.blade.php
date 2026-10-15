@@ -40,9 +40,28 @@
     <!-- Bottom / Downline: Left (Diff) | Center (🚨 < PDF!) | Right (Auto-fill) -->
     <div class="mt-1 flex items-center justify-between text-[10px] border-t border-slate-100 dark:border-slate-700/60 pt-1 gap-1">
         <span class="text-slate-700 dark:text-slate-300 font-mono font-bold shrink-0 truncate" x-text="'Diff: ' + (bill.working_diff_units ?? 0)"></span>
-        <div class="text-center truncate">
+        <div class="text-center truncate flex items-center justify-center gap-1">
             <template x-if="bill.pdf_sync_status === 'invalid_behind'">
                 <span class="text-[8px] sm:text-[9px] font-black text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-950/80 px-1 py-0.2 rounded animate-pulse">🚨 &lt; PDF!</span>
+            </template>
+            <template x-if="bill.reading_gap_info && bill.reading_gap_info.gap_status === 'over_posted'">
+                <div class="inline-flex items-center gap-0.5">
+                    <button type="button" @click.stop="applyGapHold(bill, 'zero')" 
+                            :disabled="isBillLocked(bill)"
+                            class="text-[8px] sm:text-[9px] font-bold px-1 py-0.2 rounded bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 hover:bg-amber-200 transition" 
+                            title="Hold Exact (+0 Units)">+0</button>
+                    <button type="button" @click.stop="applyGapHold(bill, 'one')" 
+                            :disabled="isBillLocked(bill)"
+                            class="text-[8px] sm:text-[9px] font-bold px-1 py-0.2 rounded bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 hover:bg-amber-200 transition" 
+                            title="Advance +1 Unit (+1 Advance)">+1</button>
+                </div>
+            </template>
+            <template x-if="bill.reading_gap_info && bill.reading_gap_info.gap_status === 'under_posted' && bill.reading_gap_info.gap_slice_applied > 0">
+                <button type="button" @click.stop="applySafeRecovery(bill)" 
+                        :disabled="isBillLocked(bill)"
+                        class="text-[8px] sm:text-[9px] font-bold px-1 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200 transition" 
+                        :title="'Apply safe recovery slice (+' + bill.reading_gap_info.gap_slice_applied + ' units)'"
+                        x-text="'⚖️+' + bill.reading_gap_info.billed_units"></button>
             </template>
         </div>
         <div class="text-right shrink-0 flex items-center gap-1">
