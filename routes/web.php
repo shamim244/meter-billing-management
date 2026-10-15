@@ -103,8 +103,11 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
     Route::post('/bills/delete-pdf', [BillController::class, 'deletePdf'])->name('bills.delete-pdf');
     Route::get('/bills/pdf/{bill}', [BillController::class, 'viewPdf'])->name('bills.pdf');
     Route::get('/bills/export-zip', [BillController::class, 'exportZip'])->middleware('throttle:30,1')->name('bills.export-zip');
-    Route::get('/bills/export-csv', [BillController::class, 'exportCsv'])->name('bills.export-csv');
     Route::get('/bills/history/{ca_number}', [BillController::class, 'history'])->name('bills.history');
+
+    // Reading Gap & Physical Meter Inspection (Module 13)
+    Route::post('/api/reading-gap/record-inspection', [DashboardController::class, 'recordInspection'])->name('reading-gap.record-inspection');
+    Route::post('/api/reading-gap/update-mode', [DashboardController::class, 'updateGapMode'])->name('reading-gap.update-mode');
 
     // FieldDesk (Module 11) Dedicated Hub & Asynchronous API
     Route::get('/field-desk', [FieldDeskController::class, 'index'])->name('field-desk.index');
@@ -120,6 +123,12 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
         Route::get('/consumer/{ca}', [FieldDeskController::class, 'forConsumer'])->name('consumer');
         Route::post('/consumer/{ca}/contact', [FieldDeskController::class, 'updateConsumerContact'])->name('consumer.contact');
         Route::get('/categories', [FieldDeskController::class, 'getCategories'])->name('categories');
+    });
+
+    // Reading Gap & Physical Meter Inspection API (PRD-13)
+    Route::prefix('api/reading-gap')->name('api.reading-gap.')->group(function () {
+        Route::post('/record-inspection', [DashboardController::class, 'recordInspection'])->name('record-inspection');
+        Route::post('/update-mode', [DashboardController::class, 'updateGapMode'])->name('update-mode');
     });
 
     // Usage Tracking & ROI Reports

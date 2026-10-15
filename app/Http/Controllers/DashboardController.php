@@ -14,9 +14,11 @@ use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\BillTagService;
 use App\Services\MeterReadingHistoryService;
+use App\Services\Reading\ReadingGapReconciliationService;
 use App\Services\SmartAverageCalculationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -30,14 +32,18 @@ class DashboardController extends Controller
 
     protected MeterReadingHistoryService $meterHistoryService;
 
+    protected ReadingGapReconciliationService $gapService;
+
     public function __construct(
         BillTagService $billTagService,
         SmartAverageCalculationService $smartAverageService,
-        MeterReadingHistoryService $meterHistoryService
+        MeterReadingHistoryService $meterHistoryService,
+        ReadingGapReconciliationService $gapService
     ) {
         $this->billTagService = $billTagService;
         $this->smartAverageService = $smartAverageService;
         $this->meterHistoryService = $meterHistoryService;
+        $this->gapService = $gapService;
     }
 
     /**
@@ -765,6 +771,25 @@ class DashboardController extends Controller
                 $bill->avg_units_zone = 'moderate';
             }
 
+            // 5. Dynamic Reading Gap & Safe Reconciliation Info
+            if ($consumerAcc) {
+                $smartAvgUnits = (int) ($bill->smart_avg_units ?? $avgCalc['avg_units'] ?? $bill->units_consumed ?? 50);
+                $bill->reading_gap_info = $this->gapService->calculateRecommendation($bill, $consumerAcc, $smartAvgUnits);
+            } else {
+                $bill->reading_gap_info = [
+                    'gap_status' => 'uninspected',
+                    'net_gap' => 0,
+                    'safe_ceiling' => 220,
+                    'recommended_working_reading' => (string) ($bill->working_reading ?: '0'),
+                    'billed_units' => (int) ($bill->units_consumed ?: 0),
+                    'gap_slice_applied' => 0,
+                    'estimated_catchup_cycles' => 0,
+                    'estimated_recovery_cycles' => 0,
+                    'is_stale' => false,
+                    'days_since_inspection' => null,
+                ];
+            }
+
             return $bill;
         });
 
@@ -823,6 +848,18 @@ class DashboardController extends Controller
                 }
             } else {
                 $item->field_desk_action = null;
+            }
+
+            // Attach Reading Gap & Physical Meter Reconciliation bridge (Module 13)
+            $consumerAcc = $item->consumerAccount ?? ($consumers[$item->ca_number] ?? null);
+            if ($consumerAcc) {
+                $item->reading_gap_info = $this->gapService->getGapSummary(
+                    $consumerAcc,
+                    $item,
+                    (int) ($item->smart_avg_units ?? $item->units_consumed ?? 50)
+                );
+            } else {
+                $item->reading_gap_info = null;
             }
         }
 
@@ -1780,6 +1817,116 @@ class DashboardController extends Controller
             'invalid_count' => $invalidCount,
             'updated_map' => $updatedMap,
             'message' => "Successfully updated {$updatedCount} consumer mobile numbers.",
+        ]);
+    }
+
+    /**
+     * Record a physical meter inspection from the field.
+     */
+    public function recordInspection(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ca_number' => 'required|string',
+            'physical_reading' => 'required|numeric|min:0',
+            'notes' => 'nullable|string|max:255',
+            'inspection_date' => 'nullable|date',
+        ]);
+
+        $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
+
+        $consumer = ConsumerAccount::withoutGlobalScopes()
+            ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
+            ->where('ca_number', $validated['ca_number'])
+            ->first();
+
+        if (! $consumer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Consumer account not found.',
+            ], 404);
+        }
+
+        $date = ! empty($validated['inspection_date']) ? Carbon::parse($validated['inspection_date']) : now();
+
+        $inspection = $this->gapService->recordPhysicalInspection(
+            $consumer,
+            $validated['physical_reading'],
+            $date,
+            $validated['notes'] ?? null,
+            $currentUser
+        );
+
+        $latestBill = BillRecord::withoutGlobalScopes()
+            ->where('ca_number', $consumer->ca_number)
+            ->orderBy('billing_year', 'desc')
+            ->orderBy('billing_month', 'desc')
+            ->first();
+
+        $summary = $this->gapService->getGapSummary($consumer, $latestBill);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Physical meter inspection recorded successfully.',
+            'data' => [
+                'inspection' => $inspection,
+                'gap_summary' => $summary,
+            ],
+        ]);
+    }
+
+    /**
+     * Update reading gap recovery mode or custom safe ceiling for a consumer.
+     */
+    public function updateGapMode(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ca_number' => 'required|string',
+            'gap_recovery_mode' => 'nullable|in:auto,hold_exact,hold_advance,amortize,amortize_safe,manual',
+            'custom_safe_ceiling' => 'nullable|integer|min:0|max:5000',
+        ]);
+
+        $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
+
+        $consumer = ConsumerAccount::withoutGlobalScopes()
+            ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
+            ->where('ca_number', $validated['ca_number'])
+            ->first();
+
+        if (! $consumer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Consumer account not found.',
+            ], 404);
+        }
+
+        if (array_key_exists('gap_recovery_mode', $validated)) {
+            $consumer->gap_recovery_mode = $validated['gap_recovery_mode'];
+        }
+        if (array_key_exists('custom_safe_ceiling', $validated)) {
+            $consumer->custom_safe_ceiling = $validated['custom_safe_ceiling'];
+        }
+        $consumer->save();
+
+        $latestBill = BillRecord::withoutGlobalScopes()
+            ->where('ca_number', $consumer->ca_number)
+            ->orderBy('billing_year', 'desc')
+            ->orderBy('billing_month', 'desc')
+            ->first();
+
+        $summary = $this->gapService->getGapSummary($consumer, $latestBill);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Gap recovery preferences updated successfully.',
+            'data' => [
+                'gap_summary' => $summary,
+            ],
         ]);
     }
 }
