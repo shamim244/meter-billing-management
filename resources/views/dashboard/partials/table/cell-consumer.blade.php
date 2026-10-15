@@ -73,6 +73,10 @@
                         <span>Map</span>
                     </a>
                 </template>
+                <!-- Reading Gap Status Badge (Module 13) -->
+                <div class="ml-1 inline-flex items-center">
+                    @include('dashboard.partials.card.reading-gap-badge')
+                </div>
             </div>
         </div>
     </div>

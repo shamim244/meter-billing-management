@@ -40,6 +40,12 @@
     </div>
     <div class="flex items-center justify-center gap-1 text-[10px] text-slate-400 font-mono mt-0.5">
         <span x-text="'Diff: ' + (bill.working_diff_units ?? 0) + 'k'"></span>
+        <template x-if="bill.reading_gap_info && bill.reading_gap_info.gap_status === 'over_posted'">
+            <button type="button" @click.stop="applyGapHold(bill, 'zero')" :disabled="isBillLocked(bill)" class="text-[8px] px-1 py-0.2 rounded font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 hover:bg-amber-200 transition" title="Hold Exact (+0)">+0</button>
+        </template>
+        <template x-if="bill.reading_gap_info && bill.reading_gap_info.gap_status === 'under_posted' && bill.reading_gap_info.gap_slice_applied > 0">
+            <button type="button" @click.stop="applySafeRecovery(bill)" :disabled="isBillLocked(bill)" class="text-[8px] px-1 py-0.2 rounded font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200 transition" :title="'Apply safe slice (+' + bill.reading_gap_info.gap_slice_applied + ')'">⚖️</button>
+        </template>
         <span x-show="bill.working_reading" class="text-[9px] px-1 py-0.2 rounded font-bold inline-flex items-center"
               :class="(bill.reading_source === 'manual' || bill.is_manual) ? 'bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800' : 'bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-cyan-300 border border-blue-200 dark:border-blue-800'"
               :title="(bill.reading_source === 'manual' || bill.is_manual) ? 'Manual Custom Override' : 'Auto / Projected Reading'"
