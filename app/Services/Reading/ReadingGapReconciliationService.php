@@ -191,7 +191,7 @@ class ReadingGapReconciliationService
     /**
      * Get a comprehensive gap summary for consumer account.
      */
-    public function getGapSummary(ConsumerAccount $consumer, ?BillRecord $latestBill = null): array
+    public function getGapSummary(ConsumerAccount $consumer, ?BillRecord $latestBill = null, ?int $smartAvg = null): array
     {
         $safeCeiling = $this->getSafeCeiling($consumer);
         $staleWarningDays = (int) SystemSetting::get('inspection_stale_warning_days', 90);
@@ -203,16 +203,40 @@ class ReadingGapReconciliationService
             'ca_number' => $consumer->ca_number,
             'last_physical_reading' => $consumer->last_physical_reading,
             'last_inspected_at' => $consumer->last_inspected_at?->toIso8601String(),
+            'last_inspected_human' => $consumer->last_inspected_at ? Carbon::parse($consumer->last_inspected_at)->diffForHumans() : null,
             'days_since_inspection' => $daysSince,
             'is_stale' => $daysSince !== null && $daysSince > $staleWarningDays,
             'safe_ceiling' => $safeCeiling,
-            'gap_recovery_mode' => $consumer->gap_recovery_mode,
+            'gap_recovery_mode' => $consumer->gap_recovery_mode ?: 'auto',
             'custom_safe_ceiling' => $consumer->custom_safe_ceiling,
+            'gap_status' => 'uninspected',
+            'net_gap' => 0,
+            'has_gap' => false,
+            'badge_color' => 'slate',
+            'badge_label' => 'No Inspection',
         ];
 
         if ($latestBill) {
-            $recommendation = $this->calculateRecommendation($latestBill, $consumer);
+            $recommendation = $this->calculateRecommendation($latestBill, $consumer, $smartAvg);
             $summary = array_merge($summary, $recommendation);
+
+            $status = $summary['gap_status'];
+            $gap = (int) ($summary['net_gap'] ?? 0);
+            $summary['has_gap'] = ($status === 'over_posted' || $status === 'under_posted');
+
+            $summary['badge_color'] = match ($status) {
+                'over_posted' => 'amber',
+                'under_posted' => 'rose',
+                'in_sync' => 'emerald',
+                default => 'slate',
+            };
+
+            $summary['badge_label'] = match ($status) {
+                'over_posted' => 'Over-Posted ('.abs($gap).' kWh)',
+                'under_posted' => 'Gap +'.$gap.' kWh',
+                'in_sync' => 'In-Sync',
+                default => 'No Inspection',
+            };
         }
 
         return $summary;
