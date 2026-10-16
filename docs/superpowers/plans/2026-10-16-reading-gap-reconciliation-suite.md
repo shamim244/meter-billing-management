@@ -49,7 +49,7 @@
 - Consumes: `ConsumerAccount`, `Auth::user()`.
 - Produces: Authorized and sanitized input payloads with tenant isolation validation.
 
-- [ ] **Step 1: Write the failing security feature test**
+- [x] **Step 1: Write the failing security feature test**
 
 ```php
 // tests/Feature/ReadingGapSecurityTest.php
@@ -102,12 +102,12 @@ class ReadingGapSecurityTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/ReadingGapSecurityTest.php`  
 Expected: FAIL (returns 404 or succeeds instead of 403 authorization denial).
 
-- [ ] **Step 3: Implement `RecordInspectionRequest` and `UpdateGapModeRequest`**
+- [x] **Step 3: Implement `RecordInspectionRequest` and `UpdateGapModeRequest`**
 
 1. Create `app/Http/Requests/RecordInspectionRequest.php`:
    - Checks `$consumer = ConsumerAccount::where('ca_number', $this->input('ca_number'))->first()`
@@ -119,12 +119,12 @@ Expected: FAIL (returns 404 or succeeds instead of 403 authorization denial).
 3. Inject both Form Requests into `DashboardController@recordInspection` and `DashboardController@updateGapMode`.
 4. Add `throttle:60,1` middleware to `routes/web.php` for `api/reading-gap/*`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/ReadingGapSecurityTest.php`  
 Expected: PASS.
 
-- [ ] **Step 5: Run Pint and Commit**
+- [x] **Step 5: Run Pint and Commit**
 
 ```bash
 vendor/bin/pint --dirty --format agent
@@ -148,7 +148,7 @@ git commit -m "security(reading-gap): add tenant authorization form requests and
   - `recordMeterReplacement(ConsumerAccount $consumer, string|float $initialReading, ?Carbon $date, ?string $oldMeterFinalReading, ?string $newMeterNo, ?string $notes, ?User $user): MeterInspection`
   - `getMruGapAnalytics(?int $userId = null, ?int $mruId = null): array` (returns `total_unbilled_kwh`, `estimated_financial_gap_rs`, `over_posted_count`, `under_posted_count`, `stale_inspections_count`, `in_sync_count`).
 
-- [ ] **Step 1: Write failing unit test for rollover and MRU gap analytics**
+- [x] **Step 1: Write failing unit test for rollover and MRU gap analytics**
 
 ```php
 // tests/Unit/ReadingGapAnalyticsServiceTest.php
@@ -215,12 +215,12 @@ class ReadingGapAnalyticsServiceTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `vendor/bin/phpunit.bat tests/Unit/ReadingGapAnalyticsServiceTest.php`  
 Expected: FAIL.
 
-- [ ] **Step 3: Implement rollover detection, meter replacement, and MRU analytics in `ReadingGapReconciliationService`**
+- [x] **Step 3: Implement rollover detection, meter replacement, and MRU analytics in `ReadingGapReconciliationService`**
 
 1. Implement `detectMeterRollover($physical, $posted, $dialCapacity = 100000)`:
    - If `$posted > ($dialCapacity * 0.9)` and `$physical < ($dialCapacity * 0.1)`, calculate `adjustedGap = ($dialCapacity - $posted) + $physical`.
@@ -230,12 +230,12 @@ Expected: FAIL.
    - Queries consumers in scope with their latest bill previous reading.
    - Computes total unbilled energy gap, over-posted units, average tariff multiplier (~₹6.5/kWh for DS-1D, ₹8.5 for NDS-1D), and status counts.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `vendor/bin/phpunit.bat tests/Unit/ReadingGapAnalyticsServiceTest.php`  
 Expected: PASS.
 
-- [ ] **Step 5: Run Pint and Commit**
+- [x] **Step 5: Run Pint and Commit**
 
 ```bash
 vendor/bin/pint --dirty --format agent
@@ -267,7 +267,7 @@ git commit -m "feat(service): add dial rollover detection, meter replacement, an
   - `GET /reading-gap/export-csv`: CSV download of route inspection sheet.
   - `POST /api/reading-gap/record-swap`: Endpoint to record a meter replacement event.
 
-- [ ] **Step 1: Write the failing feature test for dedicated user hub**
+- [x] **Step 1: Write the failing feature test for dedicated user hub**
 
 ```php
 // tests/Feature/UserReadingGapWorkspaceTest.php
@@ -319,12 +319,12 @@ class UserReadingGapWorkspaceTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/UserReadingGapWorkspaceTest.php`  
 Expected: FAIL.
 
-- [ ] **Step 3: Implement `ReadingGapController`, Blade Partials (< 120 lines), and JS app**
+- [x] **Step 3: Implement `ReadingGapController`, Blade Partials (< 120 lines), and JS app**
 
 1. Create `ReadingGapController`:
    - `index()`: renders `reading-gap.index` with MRUs list and current user config.
@@ -340,12 +340,12 @@ Expected: FAIL.
 3. Decouple logic in `public/js/reading-gap/reading-gap-app.js`.
 4. Register routes in `routes/web.php` and add navigation link to Operations menu.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/UserReadingGapWorkspaceTest.php`  
 Expected: PASS.
 
-- [ ] **Step 5: Run Pint and Commit**
+- [x] **Step 5: Run Pint and Commit**
 
 ```bash
 vendor/bin/pint --dirty --format agent
@@ -374,7 +374,7 @@ git commit -m "feat(hub): implement dedicated User Reading Gap and Field Inspect
   - `GET /admin/reading-gap/data`: System aggregates, MRU risk ranking, and audit log.
   - `GET /admin/reading-gap/export-audit`: Complete inspection audit trail download.
 
-- [ ] **Step 1: Write the failing feature test for admin hub**
+- [x] **Step 1: Write the failing feature test for admin hub**
 
 ```php
 // tests/Feature/AdminReadingGapHubTest.php
@@ -409,12 +409,12 @@ class AdminReadingGapHubTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/AdminReadingGapHubTest.php`  
 Expected: FAIL.
 
-- [ ] **Step 3: Implement `AdminReadingGapController`, Blade partials, and routes**
+- [x] **Step 3: Implement `AdminReadingGapController`, Blade partials, and routes**
 
 1. Create `AdminReadingGapController`:
    - Enforces `role:admin` middleware.
@@ -428,12 +428,12 @@ Expected: FAIL.
 3. Decouple logic into `public/js/admin/admin-reading-gap-app.js`.
 4. Add link to Admin Sidebar under Operations pillar (`resources/views/layouts/admin/partials/nav/operations.blade.php`).
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/AdminReadingGapHubTest.php`  
 Expected: PASS.
 
-- [ ] **Step 5: Run Pint and Commit**
+- [x] **Step 5: Run Pint and Commit**
 
 ```bash
 vendor/bin/pint --dirty --format agent
@@ -458,7 +458,7 @@ git commit -m "feat(admin): implement System-Wide Reading Gap & Unbilled Energy 
     `[████████░░░░] 60% (Remaining: 400 kWh)`.
   - Auto-fill synchronization when user clicks safe slice.
 
-- [ ] **Step 1: Write integration test for card deep-link and progress bar**
+- [x] **Step 1: Write integration test for card deep-link and progress bar**
 
 ```php
 // tests/Feature/DashboardReadingGapIntegrationTest.php
@@ -482,23 +482,23 @@ class DashboardReadingGapIntegrationTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/DashboardReadingGapIntegrationTest.php`  
 Expected: FAIL.
 
-- [ ] **Step 3: Update `reading-gap-badge.blade.php` and `box1-working.blade.php`**
+- [x] **Step 3: Update `reading-gap-badge.blade.php` and `box1-working.blade.php`**
 
 1. In `reading-gap-badge.blade.php`: add a discreet link `[↗ Hub]` pointing to `/reading-gap?ca={ca_number}`.
 2. In `box1-working.blade.php`: add an ultra-compact visual progress bar under the working reading input when `bill.reading_gap_info?.gap_status === 'under_posted'`.
 3. In `dashboard-app.js`: update `applySafeRecovery` to recalculate progress live without reloading page.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/DashboardReadingGapIntegrationTest.php`  
 Expected: PASS.
 
-- [ ] **Step 5: Run Pint and Commit**
+- [x] **Step 5: Run Pint and Commit**
 
 ```bash
 vendor/bin/pint --dirty --format agent
@@ -514,17 +514,17 @@ git commit -m "feat(ui): add gap hub deep-linking and visual recovery progress b
 - Test: All tests under `tests/Feature/` and `tests/Unit/`
 - Command: `vendor/bin/pint --dirty --format agent`
 
-- [ ] **Step 1: Run complete Reading Gap test suite**
+- [x] **Step 1: Run complete Reading Gap test suite**
 
 Run: `vendor/bin/phpunit.bat --filter=ReadingGap`  
 Expected: 100% PASS with zero failures.
 
-- [ ] **Step 2: Run Security Penetration Test**
+- [x] **Step 2: Run Security Penetration Test**
 
 Run: `vendor/bin/phpunit.bat tests/Feature/ReadingGapSecurityTest.php`  
 Expected: PASS (Tenant isolation, 403 checks, rate limits verified).
 
-- [ ] **Step 3: Verify View Modularity Standard (< 120 lines)**
+- [x] **Step 3: Verify View Modularity Standard (< 120 lines)**
 
 Run PowerShell check:
 ```powershell
@@ -532,7 +532,7 @@ Get-ChildItem -Path resources/views/reading-gap, resources/views/admin/reading-g
 ```
 Expected: All files under 120 lines.
 
-- [ ] **Step 4: Run Pint Code Formatter**
+- [x] **Step 4: Run Pint Code Formatter**
 
 ```bash
 vendor/bin/pint --dirty --format agent
