@@ -49,4 +49,11 @@
             ⏱️ Stale
         </span>
     </template>
+
+    <!-- Dedicated Hub Deep Link -->
+    <a :href="'/reading-gap?ca=' + bill.ca_number"
+       class="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-bold text-slate-400 hover:text-white hover:bg-white/10 transition"
+       title="Open Consumer in Reading Gap Hub">
+        ↗ Hub
+    </a>
 </div>

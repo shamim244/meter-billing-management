@@ -75,4 +75,14 @@
             </button>
         </div>
     </div>
+
+    <!-- Mini Recovery Progress Bar for Under-Posted Gap -->
+    <template x-if="bill.reading_gap_info && bill.reading_gap_info.gap_status === 'under_posted' && bill.reading_gap_info.net_gap > 0">
+        <div class="mt-1 pt-0.5" :title="'Remaining unbilled gap: ' + bill.reading_gap_info.net_gap + ' kWh (' + bill.reading_gap_info.estimated_recovery_cycles + ' cycles est.)'">
+            <div class="w-full bg-slate-100 dark:bg-slate-700 h-1 rounded-full overflow-hidden">
+                <div class="bg-rose-500 h-1 rounded-full transition-all duration-300" 
+                     :style="'width: ' + Math.min(100, Math.max(10, Math.round((bill.reading_gap_info.gap_slice_applied / bill.reading_gap_info.net_gap) * 100))) + '%'"></div>
+            </div>
+        </div>
+    </template>
 </div>
