@@ -126,7 +126,7 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
     });
 
     // Reading Gap & Physical Meter Inspection API (PRD-13)
-    Route::prefix('api/reading-gap')->name('api.reading-gap.')->group(function () {
+    Route::prefix('api/reading-gap')->name('api.reading-gap.')->middleware('throttle:60,1')->group(function () {
         Route::post('/record-inspection', [DashboardController::class, 'recordInspection'])->name('record-inspection');
         Route::post('/update-mode', [DashboardController::class, 'updateGapMode'])->name('update-mode');
     });

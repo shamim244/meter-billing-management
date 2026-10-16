@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\RecordInspectionRequest;
+use App\Http\Requests\UpdateGapModeRequest;
 use App\Models\BillingBasisHistory;
 use App\Models\BillRecord;
 use App\Models\BillStatus;
@@ -1823,22 +1825,12 @@ class DashboardController extends Controller
     /**
      * Record a physical meter inspection from the field.
      */
-    public function recordInspection(Request $request): JsonResponse
+    public function recordInspection(RecordInspectionRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'ca_number' => 'required|string',
-            'physical_reading' => 'required|numeric|min:0',
-            'notes' => 'nullable|string|max:255',
-            'inspection_date' => 'nullable|date',
-        ]);
-
-        $userId = Auth::id();
-        /** @var User|null $currentUser */
+        $validated = $request->validated();
         $currentUser = Auth::user();
-        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
 
         $consumer = ConsumerAccount::withoutGlobalScopes()
-            ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
             ->where('ca_number', $validated['ca_number'])
             ->first();
 
@@ -1880,21 +1872,11 @@ class DashboardController extends Controller
     /**
      * Update reading gap recovery mode or custom safe ceiling for a consumer.
      */
-    public function updateGapMode(Request $request): JsonResponse
+    public function updateGapMode(UpdateGapModeRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'ca_number' => 'required|string',
-            'gap_recovery_mode' => 'nullable|in:auto,hold_exact,hold_advance,amortize,amortize_safe,manual',
-            'custom_safe_ceiling' => 'nullable|integer|min:0|max:5000',
-        ]);
-
-        $userId = Auth::id();
-        /** @var User|null $currentUser */
-        $currentUser = Auth::user();
-        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
+        $validated = $request->validated();
 
         $consumer = ConsumerAccount::withoutGlobalScopes()
-            ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
             ->where('ca_number', $validated['ca_number'])
             ->first();
 
