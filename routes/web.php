@@ -39,6 +39,7 @@ use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\PdfManagerController;
 use App\Http\Controllers\ProcessingController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ReadingGapController;
 use App\Http\Controllers\StorageFallbackController;
 use App\Http\Controllers\SubscriptionCheckoutController;
 use App\Http\Controllers\UsageReportController;
@@ -125,9 +126,15 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
         Route::get('/categories', [FieldDeskController::class, 'getCategories'])->name('categories');
     });
 
+    // Reading Gap & Reconciliation Hub (PRD-13)
+    Route::get('/reading-gap', [ReadingGapController::class, 'index'])->name('reading-gap.index');
+    Route::get('/reading-gap/data', [ReadingGapController::class, 'getData'])->name('reading-gap.data');
+    Route::get('/reading-gap/export-csv', [ReadingGapController::class, 'exportCsv'])->name('reading-gap.export-csv');
+
     // Reading Gap & Physical Meter Inspection API (PRD-13)
     Route::prefix('api/reading-gap')->name('api.reading-gap.')->middleware('throttle:60,1')->group(function () {
         Route::post('/record-inspection', [DashboardController::class, 'recordInspection'])->name('record-inspection');
+        Route::post('/record-swap', [ReadingGapController::class, 'recordMeterSwap'])->name('record-swap');
         Route::post('/update-mode', [DashboardController::class, 'updateGapMode'])->name('update-mode');
     });
 

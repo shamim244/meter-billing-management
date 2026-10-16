@@ -1,5 +1,5 @@
 @php
-    $isOpsSection = request()->routeIs('dashboard', 'field-desk.*', 'mrus.*', 'processing.*', 'pdf-manager.*');
+    $isOpsSection = request()->routeIs('dashboard', 'field-desk.*', 'reading-gap.*', 'mrus.*', 'processing.*', 'pdf-manager.*');
 @endphp
 
 <!-- Mobile Operations Accordion -->
@@ -26,6 +26,11 @@
         <x-responsive-nav-link :href="route('field-desk.index')" :active="request()->routeIs('field-desk.*')">
             <span>📋</span>
             <span class="font-bold">FieldDesk</span>
+        </x-responsive-nav-link>
+
+        <x-responsive-nav-link :href="route('reading-gap.index')" :active="request()->routeIs('reading-gap.*')">
+            <span>⚖️</span>
+            <span class="font-bold">Reading Gap Hub</span>
         </x-responsive-nav-link>
 
         <x-responsive-nav-link :href="route('mrus.index')" :active="request()->routeIs('mrus.*')">

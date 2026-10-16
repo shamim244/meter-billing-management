@@ -1,5 +1,5 @@
 @php
-    $isOpsActive = request()->routeIs('field-desk.*', 'mrus.*', 'processing.*', 'pdf-manager.*');
+    $isOpsActive = request()->routeIs('field-desk.*', 'mrus.*', 'processing.*', 'pdf-manager.*', 'reading-gap.*');
 @endphp
 
 <!-- Operations Dropdown Cluster -->
@@ -8,7 +8,7 @@
             @click="open = !open" 
             :aria-expanded="open.toString()"
             aria-haspopup="true"
-            class="inline-flex items-center gap-1.5 whitespace-nowrap px-2.5 lg:px-3 py-1.5 rounded-xl text-xs lg:text-sm font-semibold transition-all duration-150 cursor-pointer {{ $isOpsActive ? 'bg-brand-500/10 dark:bg-brand-500/15 text-brand-600 dark:text-cyan-400 border border-brand-500/20 shadow-xs font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-transparent' }}">
+            class="inline-flex items-center gap-1.5 whitespace-nowrap px-2.5 lg:px-3 py-1.5 rounded-xl text-xs lg:text-sm font-semibold transition-all duration-150 cursor-pointer {{ $isOpsActive ? 'bg-brand-500/10 dark:bg-brand-500/15 text-brand-600 dark:text-cyan-400 border border-brand-500/20 shadow-xs font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:bg-slate-800/80 border border-transparent' }}">
         <span>⚡</span>
         <span class="whitespace-nowrap">Operations</span>
         <svg class="w-3.5 h-3.5 text-slate-400 transition-transform duration-200" :class="open ? 'rotate-180 text-brand-600 dark:text-cyan-400' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -38,6 +38,15 @@
             <div>
                 <div class="text-xs font-bold leading-tight">FieldDesk</div>
                 <div class="text-[10px] text-slate-500 dark:text-slate-400">Field work & consumer survey</div>
+            </div>
+        </a>
+
+        <a href="{{ route('reading-gap.index') }}" 
+           class="flex items-start gap-3 p-2 rounded-xl transition {{ request()->routeIs('reading-gap.*') ? 'bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-cyan-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70' }}">
+            <span class="text-base p-1 rounded-lg bg-slate-100 dark:bg-slate-800">⚖️</span>
+            <div>
+                <div class="text-xs font-bold leading-tight">Reading Gap Hub</div>
+                <div class="text-[10px] text-slate-500 dark:text-slate-400">Field audits & reconciliation</div>
             </div>
         </a>
 
