@@ -170,7 +170,8 @@ class SmartAverageCalculationService
         ?Collection $history = null,
         float|int $tuningPercent = 0,
         array $tuningSteps = [],
-        ?Collection $meterHistory = null
+        ?Collection $meterHistory = null,
+        array $guardrails = []
     ): array {
         // Collect strictly historical months (strictly prior to current cycle)
         $priorHistory = collect();
@@ -376,11 +377,59 @@ class SmartAverageCalculationService
                 }
             }
         }
+        // Guardrails & Exclusion Resolution
+        $customAvg = isset($guardrails['custom_avg_units']) && is_numeric($guardrails['custom_avg_units'])
+            ? (int) $guardrails['custom_avg_units']
+            : ($consumer?->custom_avg_units ?? $currentBill?->custom_avg_units ?? null);
+
+        $isCustomOverride = ($customAvg !== null && $customAvg > 0);
+
+        $minFloor = isset($guardrails['min_units_floor']) && is_numeric($guardrails['min_units_floor'])
+            ? (int) $guardrails['min_units_floor']
+            : (int) SystemSetting::get('smart_avg_min_floor', 0);
+
+        $maxCeiling = isset($guardrails['max_units_ceiling']) && is_numeric($guardrails['max_units_ceiling'])
+            ? (int) $guardrails['max_units_ceiling']
+            : (int) SystemSetting::get('smart_avg_max_ceiling', 0);
+
+        $isOverPosted = (bool) ($guardrails['is_over_posted'] ?? false);
+        $autoExcludeOverposted = array_key_exists('auto_exclude_overposted', $guardrails)
+            ? (bool) $guardrails['auto_exclude_overposted']
+            : (bool) SystemSetting::get('smart_avg_auto_exclude_overposted', true);
+
+        $isCriticalDoubt = (bool) ($guardrails['is_critical_doubt'] ?? false);
+        $autoExcludeCriticalDoubt = array_key_exists('auto_exclude_critical_doubt', $guardrails)
+            ? (bool) $guardrails['auto_exclude_critical_doubt']
+            : (bool) SystemSetting::get('smart_avg_auto_exclude_critical_doubt', false);
+
+        $isExplicitlyExcluded = (bool) ($guardrails['is_avg_excluded'] ?? $consumer?->is_avg_excluded ?? $currentBill?->is_avg_excluded ?? false);
+        $explicitReason = $guardrails['avg_exclude_reason'] ?? $consumer?->avg_exclude_reason ?? $currentBill?->avg_exclude_reason ?? null;
+
+        $isExcluded = false;
+        $excludeReason = null;
+
+        if ($isExplicitlyExcluded) {
+            $isExcluded = true;
+            $excludeReason = $explicitReason ?: 'Manually Excluded';
+        } elseif ($isOverPosted && $autoExcludeOverposted) {
+            $isExcluded = true;
+            $excludeReason = 'Over-Posted (Physical < Posted)';
+        } elseif ($isCriticalDoubt && $autoExcludeCriticalDoubt) {
+            $isExcluded = true;
+            $excludeReason = 'Critical / Doubt Review Status';
+        }
+
         $avgUnits = 50;
         $avgLabel = '50 kWh (Initial)';
         $avgRange = '42–58 kWh';
 
-        if ($cleanBasis === 'MD') {
+        if ($isCustomOverride) {
+            $avgUnits = (int) $customAvg;
+            $avgLabel = "{$avgUnits} kWh (Custom Override)";
+            $minR = max(1, (int) round($avgUnits * 0.85));
+            $maxR = (int) round($avgUnits * 1.15);
+            $avgRange = "{$minR}–{$maxR} kWh";
+        } elseif ($cleanBasis === 'MD') {
             $avgUnits = $currentBillUnits ?: ($currentBill?->units_consumed ?: 76);
             $avgLabel = "{$avgUnits} kWh (MD Assessed)";
             $avgRange = 'Flat Assessed';
@@ -409,25 +458,47 @@ class SmartAverageCalculationService
         $effectiveTuningPercent = 0.0;
         $effectiveSteps = [];
 
-        // Apply percentage tuning / compounding yield if requested
-        if (! empty($tuningSteps)) {
-            $compounded = $this->compoundAdjustAverageUnits($baseUnits, $tuningSteps);
-            $avgUnits = $compounded['tuned_units'];
-            $effectiveTuningPercent = $compounded['net_percent'];
-            $effectiveSteps = $compounded['steps'];
-            $pctSign = $effectiveTuningPercent >= 0 ? "+{$effectiveTuningPercent}%" : "{$effectiveTuningPercent}%";
-            $avgLabel = "{$avgUnits} kWh ({$baseUnits} {$pctSign})";
-            $minR = max(1, (int) round($avgUnits * 0.85));
-            $maxR = (int) round($avgUnits * 1.15);
-            $avgRange = "{$minR}–{$maxR} kWh";
-        } elseif ($tuningPercent != 0) {
-            $avgUnits = $this->adjustAverageUnits($baseUnits, (float) $tuningPercent);
-            $effectiveTuningPercent = (float) $tuningPercent;
-            $pctSign = $effectiveTuningPercent >= 0 ? "+{$effectiveTuningPercent}%" : "{$effectiveTuningPercent}%";
-            $avgLabel = "{$avgUnits} kWh ({$baseUnits} {$pctSign})";
-            $minR = max(1, (int) round($avgUnits * 0.85));
-            $maxR = (int) round($avgUnits * 1.15);
-            $avgRange = "{$minR}–{$maxR} kWh";
+        // Apply percentage tuning / compounding yield if requested (only when not custom overridden and not excluded)
+        if (! $isCustomOverride && ! $isExcluded) {
+            if (! empty($tuningSteps)) {
+                $compounded = $this->compoundAdjustAverageUnits($baseUnits, $tuningSteps);
+                $avgUnits = $compounded['tuned_units'];
+                $effectiveTuningPercent = $compounded['net_percent'];
+                $effectiveSteps = $compounded['steps'];
+                $pctSign = $effectiveTuningPercent >= 0 ? "+{$effectiveTuningPercent}%" : "{$effectiveTuningPercent}%";
+                $avgLabel = "{$avgUnits} kWh ({$baseUnits} {$pctSign})";
+                $minR = max(1, (int) round($avgUnits * 0.85));
+                $maxR = (int) round($avgUnits * 1.15);
+                $avgRange = "{$minR}–{$maxR} kWh";
+            } elseif ($tuningPercent != 0) {
+                $avgUnits = $this->adjustAverageUnits($baseUnits, (float) $tuningPercent);
+                $effectiveTuningPercent = (float) $tuningPercent;
+                $pctSign = $effectiveTuningPercent >= 0 ? "+{$effectiveTuningPercent}%" : "{$effectiveTuningPercent}%";
+                $avgLabel = "{$avgUnits} kWh ({$baseUnits} {$pctSign})";
+                $minR = max(1, (int) round($avgUnits * 0.85));
+                $maxR = (int) round($avgUnits * 1.15);
+                $avgRange = "{$minR}–{$maxR} kWh";
+            }
+        }
+
+        // Apply Minimum Floor & Maximum Ceiling Guardrails
+        $isClampedMin = false;
+        $isClampedMax = false;
+
+        if ($minFloor > 0 && $avgUnits < $minFloor && ! $isExcluded) {
+            $avgUnits = $minFloor;
+            $isClampedMin = true;
+            $avgLabel = "{$avgUnits} kWh (Min Floor Clamped)";
+        }
+
+        if ($maxCeiling > 0 && $avgUnits > $maxCeiling && ! $isExcluded) {
+            $avgUnits = $maxCeiling;
+            $isClampedMax = true;
+            $avgLabel = "{$avgUnits} kWh (Max Ceiling Clamped)";
+        }
+
+        if ($isExcluded) {
+            $avgLabel = "{$avgUnits} kWh ({$excludeReason})";
         }
 
         return [
@@ -446,6 +517,13 @@ class SmartAverageCalculationService
             'multiplier_used' => $multiplier,
             'min_buffer_applied' => $minBuffer,
             'is_agriculture_bypass' => $bypassSpikeFilter,
+            'is_excluded' => $isExcluded,
+            'exclude_reason' => $excludeReason,
+            'is_custom_override' => $isCustomOverride,
+            'is_clamped_min' => $isClampedMin,
+            'is_clamped_max' => $isClampedMax,
+            'min_floor_applied' => $minFloor,
+            'max_ceiling_applied' => $maxCeiling,
         ];
     }
 
