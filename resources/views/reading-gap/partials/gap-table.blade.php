@@ -94,18 +94,10 @@
                         <!-- Quick Actions -->
                         <td class="py-3 px-4 text-center">
                             <div class="inline-flex items-center gap-1.5">
-                                <button type="button" @click="openInspectionModal(c)" 
-                                        class="p-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/40 dark:hover:bg-brand-900/60 text-brand-600 dark:text-cyan-400 transition cursor-pointer" title="Record Physical Inspection">
-                                    <span>🔍</span>
-                                </button>
-                                <button type="button" @click="openMeterSwapModal(c)" 
-                                        class="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition cursor-pointer" title="Meter Swap / Replacement">
-                                    <span>🔄</span>
-                                </button>
-                                <a :href="'/dashboard?search=' + c.ca_number" 
-                                   class="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition cursor-pointer" title="Open in Billing Dashboard">
-                                    <span>↗️</span>
-                                </a>
+                                <button type="button" @click="openInspectionModal(c)" class="p-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/40 text-brand-600 dark:text-cyan-400" title="Record Physical Inspection"><span>🔍</span></button>
+                                <button type="button" @click="openInspectionHistoryModal(c)" class="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400" title="View, Edit & Manage Physical Visits"><span>📜</span></button>
+                                <button type="button" @click="openMeterSwapModal(c)" class="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300" title="Meter Swap / Replacement"><span>🔄</span></button>
+                                <a :href="'/dashboard?search=' + c.ca_number" class="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300" title="Open in Billing Dashboard"><span>↗️</span></a>
                             </div>
                         </td>
                     </tr>

@@ -35,6 +35,12 @@
                           x-text="(selectedInspectionBill.reading_gap_info.net_gap > 0 ? '+' : '') + selectedInspectionBill.reading_gap_info.net_gap + ' kWh'"></span>
                 </div>
             </template>
+            <div class="flex justify-end pt-1 border-t border-slate-800/60 text-[10px]">
+                <a :href="'/reading-gap?ca=' + (selectedInspectionBill?.ca_number || '')" 
+                   class="text-indigo-400 hover:text-indigo-300 hover:underline flex items-center gap-1 font-semibold">
+                    <span>📜</span> View & Manage Past Visits →
+                </a>
+            </div>
         </div>
 
         <!-- Input Form -->

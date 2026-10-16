@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\BillRecord;
 use App\Models\ConsumerAccount;
+use App\Models\MeterInspection;
 use App\Models\Mru;
 use App\Models\SystemSetting;
 use App\Models\User;
@@ -286,6 +287,215 @@ class ReadingGapController extends Controller
             'message' => 'Meter replacement event logged and baseline reset successfully.',
             'data' => [
                 'inspection' => $inspection,
+                'gap_summary' => $summary,
+            ],
+        ]);
+    }
+
+    /**
+     * Get inspection history for a consumer account.
+     */
+    public function getInspections(string $ca): JsonResponse
+    {
+        $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
+
+        $consumer = ConsumerAccount::withoutGlobalScopes()->where('ca_number', $ca)->first();
+        if (! $consumer) {
+            return response()->json(['success' => false, 'message' => 'Consumer account not found.'], 404);
+        }
+
+        if (! $isAdmin && (int) $consumer->user_id !== (int) $userId) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
+        }
+
+        $history = $this->gapService->getInspectionHistory($consumer);
+
+        return response()->json([
+            'success' => true,
+            'consumer' => [
+                'ca_number' => $consumer->ca_number,
+                'consumer_name' => $consumer->consumer_name,
+                'meter_no' => $consumer->meter_no,
+                'last_physical_reading' => $consumer->last_physical_reading,
+                'last_inspected_at' => $consumer->last_inspected_at?->format('Y-m-d'),
+            ],
+            'inspections' => $history,
+        ]);
+    }
+
+    /**
+     * Update an existing physical meter inspection.
+     */
+    public function updateInspection(int $id, Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'physical_reading' => 'required|numeric|min:0|max:9999999',
+            'inspected_at' => 'nullable|date',
+            'notes' => 'nullable|string|max:255',
+        ]);
+
+        $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
+
+        $inspection = MeterInspection::withoutGlobalScopes()->find($id);
+        if (! $inspection) {
+            return response()->json(['success' => false, 'message' => 'Inspection record not found.'], 404);
+        }
+
+        $consumer = ConsumerAccount::withoutGlobalScopes()->find($inspection->consumer_account_id);
+        if (! $consumer) {
+            return response()->json(['success' => false, 'message' => 'Consumer account not found.'], 404);
+        }
+
+        if (! $isAdmin && (int) $consumer->user_id !== (int) $userId) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
+        }
+
+        $updated = $this->gapService->updatePhysicalInspection($inspection, $validated);
+
+        $latestBill = BillRecord::withoutGlobalScopes()
+            ->where('ca_number', $consumer->ca_number)
+            ->orderBy('billing_year', 'desc')
+            ->orderBy('billing_month', 'desc')
+            ->first();
+
+        $summary = $this->gapService->getGapSummary($consumer, $latestBill);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Physical inspection updated successfully.',
+            'data' => [
+                'inspection' => $updated,
+                'gap_summary' => $summary,
+            ],
+        ]);
+    }
+
+    /**
+     * Delete a single physical meter inspection.
+     */
+    public function destroyInspection(int $id): JsonResponse
+    {
+        $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
+
+        $inspection = MeterInspection::withoutGlobalScopes()->find($id);
+        if (! $inspection) {
+            return response()->json(['success' => false, 'message' => 'Inspection record not found.'], 404);
+        }
+
+        $consumer = ConsumerAccount::withoutGlobalScopes()->find($inspection->consumer_account_id);
+        if ($consumer && ! $isAdmin && (int) $consumer->user_id !== (int) $userId) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
+        }
+
+        $this->gapService->deletePhysicalInspection($inspection);
+
+        $summary = null;
+        if ($consumer) {
+            $latestBill = BillRecord::withoutGlobalScopes()
+                ->where('ca_number', $consumer->ca_number)
+                ->orderBy('billing_year', 'desc')
+                ->orderBy('billing_month', 'desc')
+                ->first();
+            $summary = $this->gapService->getGapSummary($consumer, $latestBill);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Physical inspection deleted successfully.',
+            'data' => [
+                'gap_summary' => $summary,
+            ],
+        ]);
+    }
+
+    /**
+     * Bulk delete multiple physical meter inspections.
+     */
+    public function bulkDestroyInspections(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer',
+            'ca_number' => 'required|string',
+        ]);
+
+        $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
+
+        $consumer = ConsumerAccount::withoutGlobalScopes()->where('ca_number', $validated['ca_number'])->first();
+        if (! $consumer) {
+            return response()->json(['success' => false, 'message' => 'Consumer account not found.'], 404);
+        }
+
+        if (! $isAdmin && (int) $consumer->user_id !== (int) $userId) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
+        }
+
+        $deletedCount = $this->gapService->deleteMultipleInspections($validated['ids'], $consumer);
+
+        $latestBill = BillRecord::withoutGlobalScopes()
+            ->where('ca_number', $consumer->ca_number)
+            ->orderBy('billing_year', 'desc')
+            ->orderBy('billing_month', 'desc')
+            ->first();
+
+        $summary = $this->gapService->getGapSummary($consumer, $latestBill);
+
+        return response()->json([
+            'success' => true,
+            'message' => "{$deletedCount} physical inspection(s) removed successfully.",
+            'data' => [
+                'deleted_count' => $deletedCount,
+                'gap_summary' => $summary,
+            ],
+        ]);
+    }
+
+    /**
+     * Clear all physical inspections for a consumer and reset cache.
+     */
+    public function clearAllInspections(string $ca): JsonResponse
+    {
+        $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
+
+        $consumer = ConsumerAccount::withoutGlobalScopes()->where('ca_number', $ca)->first();
+        if (! $consumer) {
+            return response()->json(['success' => false, 'message' => 'Consumer account not found.'], 404);
+        }
+
+        if (! $isAdmin && (int) $consumer->user_id !== (int) $userId) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
+        }
+
+        $deletedCount = $this->gapService->clearAllInspections($consumer);
+
+        $latestBill = BillRecord::withoutGlobalScopes()
+            ->where('ca_number', $consumer->ca_number)
+            ->orderBy('billing_year', 'desc')
+            ->orderBy('billing_month', 'desc')
+            ->first();
+
+        $summary = $this->gapService->getGapSummary($consumer, $latestBill);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'All physical visits cleared. Consumer status reset to uninspected.',
+            'data' => [
+                'deleted_count' => $deletedCount,
                 'gap_summary' => $summary,
             ],
         ]);

@@ -31,7 +31,8 @@
         </div>
 
         @include('reading-gap.partials.modals.meter-swap-modal')
-        @include('dashboard.partials.modals.inspection-modal')
+        @include('reading-gap.partials.modals.inspection-history-modal')
+        @include('reading-gap.partials.modals.inspection-modal')
     </div>
 
     @push('scripts')
@@ -42,6 +43,9 @@
                 recordSwapUrl: "{{ route('api.reading-gap.record-swap') }}",
                 recordInspectionUrl: "{{ route('api.reading-gap.record-inspection') }}",
                 updateModeUrl: "{{ route('api.reading-gap.update-mode') }}",
+                inspectionsUrl: "{{ url('api/reading-gap/inspections') }}",
+                bulkDeleteInspectionsUrl: "{{ route('api.reading-gap.inspections.bulk-destroy') }}",
+                clearAllInspectionsUrl: "{{ url('api/reading-gap/inspections/consumer') }}",
                 csrfToken: "{{ csrf_token() }}",
                 initialCa: "{{ $selectedCa ?? '' }}"
             };

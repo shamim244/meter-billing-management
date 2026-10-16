@@ -33,3 +33,10 @@ function adminReadingGapApp() {
         }
     };
 }
+
+window.adminReadingGapApp = adminReadingGapApp;
+document.addEventListener('alpine:init', () => {
+    if (window.Alpine) {
+        window.Alpine.data('adminReadingGapApp', adminReadingGapApp);
+    }
+});

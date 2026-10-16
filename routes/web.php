@@ -137,6 +137,11 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
         Route::post('/record-inspection', [DashboardController::class, 'recordInspection'])->name('record-inspection');
         Route::post('/record-swap', [ReadingGapController::class, 'recordMeterSwap'])->name('record-swap');
         Route::post('/update-mode', [DashboardController::class, 'updateGapMode'])->name('update-mode');
+        Route::get('/inspections/{ca}', [ReadingGapController::class, 'getInspections'])->name('inspections.index');
+        Route::put('/inspections/{id}', [ReadingGapController::class, 'updateInspection'])->name('inspections.update');
+        Route::delete('/inspections/{id}', [ReadingGapController::class, 'destroyInspection'])->name('inspections.destroy');
+        Route::post('/inspections/bulk-delete', [ReadingGapController::class, 'bulkDestroyInspections'])->name('inspections.bulk-destroy');
+        Route::delete('/inspections/consumer/{ca}/clear', [ReadingGapController::class, 'clearAllInspections'])->name('inspections.clear-all');
     });
 
     // Usage Tracking & ROI Reports

@@ -8,6 +8,7 @@ use App\Models\MeterInspection;
 use App\Models\SystemSetting;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 class ReadingGapReconciliationService
 {
@@ -34,13 +35,145 @@ class ReadingGapReconciliationService
             'notes' => $notes,
         ]);
 
-        $consumer->update([
-            'last_physical_reading' => $readingStr,
-            'last_inspected_at' => $inspectionDate,
-            'inspected_by_user_id' => $userId,
-        ]);
+        $this->syncConsumerInspectionCache($consumer);
 
         return $inspection;
+    }
+
+    /**
+     * Synchronize a consumer's cached physical inspection data with the most recent inspection entry.
+     */
+    public function syncConsumerInspectionCache(ConsumerAccount $consumer): void
+    {
+        $latest = MeterInspection::withoutGlobalScopes()
+            ->where('consumer_account_id', $consumer->id)
+            ->orderByDesc('inspected_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($latest) {
+            $consumer->update([
+                'last_physical_reading' => (string) $latest->physical_reading,
+                'last_inspected_at' => $latest->inspected_at,
+                'inspected_by_user_id' => $latest->user_id,
+            ]);
+        } else {
+            $consumer->update([
+                'last_physical_reading' => null,
+                'last_inspected_at' => null,
+                'inspected_by_user_id' => null,
+            ]);
+        }
+    }
+
+    /**
+     * Retrieve all historical inspections for a consumer.
+     */
+    public function getInspectionHistory(ConsumerAccount $consumer): Collection
+    {
+        return MeterInspection::withoutGlobalScopes()
+            ->where('consumer_account_id', $consumer->id)
+            ->with('user:id,name,email')
+            ->orderByDesc('inspected_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(function (MeterInspection $item) {
+                return [
+                    'id' => $item->id,
+                    'ca_number' => $item->ca_number,
+                    'physical_reading' => $item->physical_reading,
+                    'posted_reading_at_inspection' => $item->posted_reading_at_inspection,
+                    'gap_at_inspection' => $item->gap_at_inspection,
+                    'notes' => $item->notes,
+                    'inspected_at' => $item->inspected_at?->format('Y-m-d'),
+                    'inspected_at_human' => $item->inspected_at?->diffForHumans(),
+                    'inspected_by_name' => $item->user?->name ?? 'System',
+                    'created_at' => $item->created_at?->toIso8601String(),
+                ];
+            });
+    }
+
+    /**
+     * Update an existing physical inspection and re-sync consumer cache.
+     */
+    public function updatePhysicalInspection(MeterInspection $inspection, array $data): MeterInspection
+    {
+        $updateData = [];
+
+        if (array_key_exists('physical_reading', $data)) {
+            $updateData['physical_reading'] = (string) $data['physical_reading'];
+        }
+
+        if (array_key_exists('inspected_at', $data)) {
+            $updateData['inspected_at'] = ! empty($data['inspected_at']) ? Carbon::parse($data['inspected_at']) : now();
+        }
+
+        if (array_key_exists('notes', $data)) {
+            $updateData['notes'] = $data['notes'];
+        }
+
+        $inspection->update($updateData);
+
+        /** @var ConsumerAccount|null $consumer */
+        $consumer = $inspection->consumerAccount ?: ConsumerAccount::withoutGlobalScopes()->find($inspection->consumer_account_id);
+        if ($consumer) {
+            $this->syncConsumerInspectionCache($consumer);
+        }
+
+        return $inspection;
+    }
+
+    /**
+     * Delete an inspection and re-sync consumer cache to previous or null.
+     */
+    public function deletePhysicalInspection(MeterInspection $inspection): void
+    {
+        /** @var ConsumerAccount|null $consumer */
+        $consumer = $inspection->consumerAccount ?: ConsumerAccount::withoutGlobalScopes()->find($inspection->consumer_account_id);
+        $inspection->delete();
+
+        if ($consumer) {
+            $this->syncConsumerInspectionCache($consumer);
+        }
+    }
+
+    /**
+     * Delete multiple inspections by ID and re-sync consumer cache.
+     */
+    public function deleteMultipleInspections(array $inspectionIds, ?ConsumerAccount $consumer = null): int
+    {
+        if (empty($inspectionIds)) {
+            return 0;
+        }
+
+        $inspections = MeterInspection::withoutGlobalScopes()->whereIn('id', $inspectionIds)->get();
+        if ($inspections->isEmpty()) {
+            return 0;
+        }
+
+        $consumerId = $consumer?->id ?? $inspections->first()->consumer_account_id;
+        $deleted = MeterInspection::withoutGlobalScopes()->whereIn('id', $inspectionIds)->delete();
+
+        $targetConsumer = $consumer ?: ConsumerAccount::withoutGlobalScopes()->find($consumerId);
+        if ($targetConsumer) {
+            $this->syncConsumerInspectionCache($targetConsumer);
+        }
+
+        return $deleted;
+    }
+
+    /**
+     * Clear all physical inspections for a consumer and reset cache to uninspected.
+     */
+    public function clearAllInspections(ConsumerAccount $consumer): int
+    {
+        $deleted = MeterInspection::withoutGlobalScopes()
+            ->where('consumer_account_id', $consumer->id)
+            ->delete();
+
+        $this->syncConsumerInspectionCache($consumer);
+
+        return $deleted;
     }
 
     /**

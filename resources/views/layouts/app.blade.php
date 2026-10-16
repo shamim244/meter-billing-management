@@ -54,5 +54,6 @@
         @auth
             <x-bug-reporter-modal />
         @endauth
+        @stack('scripts')
     </body>
 </html>
