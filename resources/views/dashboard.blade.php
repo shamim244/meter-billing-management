@@ -24,6 +24,7 @@
             @include('dashboard.partials.modals.quick-pull-modal')
             @include('dashboard.partials.modals.shortcuts-modal')
             @include('dashboard.partials.modals.tuning-modal')
+            @include('dashboard.partials.modals.individual-avg-modal')
             @include('dashboard.partials.modals.meter-history-modal')
             @include('dashboard.partials.modals.mobile-modal')
             @include('dashboard.partials.modals.bulk-mobile-modal')
