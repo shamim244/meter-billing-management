@@ -1,5 +1,5 @@
 @php
-    $isOpsActive = request()->routeIs('admin.dashboard', 'admin.users.*', 'admin.mrus.*', 'admin.bills.*', 'admin.compression.*');
+    $isOpsActive = request()->routeIs('admin.dashboard', 'admin.users.*', 'admin.mrus.*', 'admin.bills.*', 'admin.reading-gap.*', 'admin.compression.*');
 @endphp
 
 <!-- Pillar 1: Core Operations -->
@@ -47,6 +47,12 @@
            class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[11px] transition {{ request()->routeIs('admin.bills.engine-settings*') ? 'bg-indigo-600 text-white font-bold shadow-xs' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
             <span>⚡</span>
             <span>Billing Engine Settings</span>
+        </a>
+
+        <a href="{{ route('admin.reading-gap.index') }}" 
+           class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[11px] transition {{ request()->routeIs('admin.reading-gap.*') ? 'bg-indigo-600 text-white font-bold shadow-xs' : 'text-slate-400 hover:text-white hover:bg-slate-900/60' }}">
+            <span>⚖️</span>
+            <span>Reading Gap & Audit</span>
         </a>
 
         <a href="{{ route('admin.compression.index') }}" 

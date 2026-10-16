@@ -16,6 +16,7 @@ use App\Http\Controllers\Admin\AdminPaymentController;
 use App\Http\Controllers\Admin\AdminPlanController;
 use App\Http\Controllers\Admin\AdminPlanDurationController;
 use App\Http\Controllers\Admin\AdminRateLimitController;
+use App\Http\Controllers\Admin\AdminReadingGapController;
 use App\Http\Controllers\Admin\AdminReferralController;
 use App\Http\Controllers\Admin\AdminServerMigrationController;
 use App\Http\Controllers\Admin\AdminShortcutController;
@@ -274,6 +275,11 @@ Route::middleware(['auth', 'admin.restore_impersonation', 'role:admin', 'active'
     Route::post('/bills/engine-settings', [AdminBillController::class, 'updateEngineSettings'])->name('bills.engine-settings.update');
     Route::post('/bills/engine-settings/reset', [AdminBillController::class, 'resetEngineSettings'])->name('bills.engine-settings.reset');
     Route::post('/bills/engine-settings/diagnostic', [AdminBillController::class, 'testEngineDiagnostic'])->name('bills.engine-settings.diagnostic');
+
+    // Admin Reading Gap & Unbilled Energy Intelligence Hub (PRD-13)
+    Route::get('/reading-gap', [AdminReadingGapController::class, 'index'])->name('reading-gap.index');
+    Route::get('/reading-gap/data', [AdminReadingGapController::class, 'getData'])->name('reading-gap.data');
+    Route::get('/reading-gap/export-audit', [AdminReadingGapController::class, 'exportAudit'])->name('reading-gap.export-audit');
 
     // Admin Adaptive Compression Management & Live Diagnostics
     Route::get('/compression', [AdminCompressionController::class, 'index'])->name('compression.index');
