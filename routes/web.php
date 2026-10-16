@@ -105,6 +105,7 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
     Route::post('/user/shortcuts/reset', [DashboardController::class, 'resetShortcuts'])->name('user.shortcuts.reset');
     Route::post('/bills/delete-pdf', [BillController::class, 'deletePdf'])->name('bills.delete-pdf');
     Route::get('/bills/pdf/{bill}', [BillController::class, 'viewPdf'])->name('bills.pdf');
+    Route::get('/bills/export-csv', [BillController::class, 'exportCsv'])->name('bills.export-csv');
     Route::get('/bills/export-zip', [BillController::class, 'exportZip'])->middleware('throttle:30,1')->name('bills.export-zip');
     // Dedicated 360-Degree Consumer Hub & Legacy History Alias
     Route::get('/consumers/{ca}', [ConsumerController::class, 'show'])->name('consumers.show');

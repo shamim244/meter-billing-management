@@ -8,7 +8,7 @@
                 </a>
             @else
                 <a href="{{ route('dashboard') }}" class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-cyan-400 transition">
-                    <span>←</span> Dashboard
+                    <span>←</span> Back to Dashboard
                 </a>
                 <span class="text-slate-400 dark:text-slate-600">/</span>
                 <a href="{{ route('reading-gap.index') }}" class="inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-cyan-400 transition">

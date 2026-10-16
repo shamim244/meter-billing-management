@@ -2,7 +2,7 @@
 <div x-show="activeTab === 'bills'" class="space-y-4">
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
         <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Monthly Bills Ledger ({{ $bills->count() }})</h3>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Billing History Across Months ({{ $bills->count() }})</h3>
             <span class="text-xs font-mono text-slate-500">CA: {{ $account->ca_number }}</span>
         </div>
         <div class="overflow-x-auto">
