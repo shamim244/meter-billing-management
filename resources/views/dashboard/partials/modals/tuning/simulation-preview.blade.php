@@ -37,10 +37,22 @@
                       x-text="'(' + (getNetTuningPercent(tuningBaseUnits) >= 0 ? '+' : '') + getNetTuningPercent(tuningBaseUnits) + '% net)'"></span>
             </div>
         </div>
-        <template x-if="avgTuningSteps.length > 1">
-            <span class="px-2.5 py-1 text-[10px] font-black uppercase rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-cyan-300 border border-indigo-200 dark:border-indigo-700">
-                Sequential Compounding Active
-            </span>
-        </template>
+        <div class="flex items-center gap-1.5 flex-wrap justify-end">
+            <template x-if="tuningMinFloor > 0 && getCompoundedUnits(tuningBaseUnits) <= tuningMinFloor">
+                <span class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                    Min Floor Clamped (<span x-text="tuningMinFloor"></span>k)
+                </span>
+            </template>
+            <template x-if="tuningMaxCeiling > 0 && getCompoundedUnits(tuningBaseUnits) >= tuningMaxCeiling">
+                <span class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-700">
+                    Max Ceiling Clamped (<span x-text="tuningMaxCeiling"></span>k)
+                </span>
+            </template>
+            <template x-if="avgTuningSteps.length > 1">
+                <span class="px-2.5 py-1 text-[10px] font-black uppercase rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-cyan-300 border border-indigo-200 dark:border-indigo-700">
+                    Compounding Active
+                </span>
+            </template>
+        </div>
     </div>
 </div>

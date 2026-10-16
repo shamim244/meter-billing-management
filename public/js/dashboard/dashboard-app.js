@@ -122,6 +122,17 @@ function dashboardApp() {
                 showRemarkPresets: !!cfg.showRemarkPresets,
                 colorSettings: cfg.colorSettings || { enabled: true, amount_safe_ceiling: 500, amount_warning_ceiling: 1500, amount_danger_floor: 2500, units_safe_ceiling: 50, units_warning_ceiling: 120, units_danger_floor: 200 },
 
+                // Smart Average Tuning Guardrails & Individual Override State
+                tuningMinFloor: parseInt(localStorage.getItem('dashboard_tuning_min_floor') || '30', 10),
+                tuningMaxCeiling: parseInt(localStorage.getItem('dashboard_tuning_max_ceiling') || '180', 10),
+                tuningAutoExcludeOverposted: localStorage.getItem('dashboard_tuning_auto_exclude_overposted') !== 'false',
+                tuningExcludeCriticalDoubt: localStorage.getItem('dashboard_tuning_exclude_critical_doubt') !== 'false',
+                showIndividualAvgModal: false,
+                activeIndividualBill: null,
+                individualCustomUnits: null,
+                individualIsExcluded: false,
+                individualExcludeReason: '',
+
                 // Module 13: Reading Gap & Physical Meter Inspection State
                 showInspectionModal: false,
                 selectedGapItem: null,
@@ -1248,7 +1259,7 @@ function dashboardApp() {
 
                 // ⚡ Bulk Auto-Project All Unfilled Readings
                 bulkAutoProjectAll() {
-                    if (!confirm(`Auto-project working readings (Previous + Avg) for all active accounts in this cycle?\n\n(Submitted bills and manual custom overrides will remain protected.)`)) return;
+                    if (!confirm(`Auto-project working readings (Previous + Avg) for active accounts in this cycle?\n\n(Over-posted, submitted, and excluded accounts will be protected/skipped.)`)) return;
                     fetch('/bills/bulk-project-readings', {
                         method: 'POST',
                         headers: {
@@ -1261,7 +1272,11 @@ function dashboardApp() {
                             year: this.selectedYear,
                             mru_id: this.filterMru || null,
                             adjustment_percent: this.avgAdjustmentPercent || 0,
-                            tuning_steps: this.avgTuningSteps || []
+                            tuning_steps: this.avgTuningSteps || [],
+                            min_units_floor: this.tuningMinFloor,
+                            max_units_ceiling: this.tuningMaxCeiling,
+                            auto_exclude_overposted: this.tuningAutoExcludeOverposted,
+                            exclude_critical_doubt: this.tuningExcludeCriticalDoubt
                         })
                     })
                     .then(r => r.json())
@@ -1277,6 +1292,11 @@ function dashboardApp() {
                 // --- SMART AVERAGE TUNING & SEQUENTIAL COMPOUNDING ---
                 openTuningModal() {
                     this.showTuningModal = true;
+                },
+
+                getExcludedCount() {
+                    if (!this.bills || !Array.isArray(this.bills)) return 0;
+                    return this.bills.filter(b => !!b.is_avg_excluded).length;
                 },
 
                 addTuningStep(pct) {
@@ -1295,8 +1315,16 @@ function dashboardApp() {
                 clearTuning() {
                     this.avgTuningSteps = [];
                     this.avgAdjustmentPercent = 0;
+                    this.tuningMinFloor = 30;
+                    this.tuningMaxCeiling = 180;
+                    this.tuningAutoExcludeOverposted = true;
+                    this.tuningExcludeCriticalDoubt = false;
                     localStorage.removeItem('dashboard_avg_tuning_steps');
                     localStorage.setItem('dashboard_avg_adjustment', '0');
+                    localStorage.removeItem('dashboard_tuning_min_floor');
+                    localStorage.removeItem('dashboard_tuning_max_ceiling');
+                    localStorage.removeItem('dashboard_tuning_auto_exclude_overposted');
+                    localStorage.removeItem('dashboard_tuning_exclude_critical_doubt');
                     fetch('/dashboard/tuning/reset', {
                         method: 'POST',
                         headers: {
@@ -1311,6 +1339,10 @@ function dashboardApp() {
                     this.showTuningModal = false;
                     localStorage.setItem('dashboard_avg_tuning_steps', JSON.stringify(this.avgTuningSteps));
                     localStorage.setItem('dashboard_avg_adjustment', String(this.getNetTuningPercent(this.tuningBaseUnits)));
+                    localStorage.setItem('dashboard_tuning_min_floor', String(this.tuningMinFloor || 0));
+                    localStorage.setItem('dashboard_tuning_max_ceiling', String(this.tuningMaxCeiling || 0));
+                    localStorage.setItem('dashboard_tuning_auto_exclude_overposted', String(this.tuningAutoExcludeOverposted));
+                    localStorage.setItem('dashboard_tuning_exclude_critical_doubt', String(this.tuningExcludeCriticalDoubt));
 
                     // Save to server session
                     fetch('/dashboard/tuning', {
@@ -1323,12 +1355,16 @@ function dashboardApp() {
                         body: JSON.stringify({
                             steps: this.avgTuningSteps,
                             percent: this.getNetTuningPercent(this.tuningBaseUnits),
-                            base_units: this.tuningBaseUnits
+                            base_units: this.tuningBaseUnits,
+                            min_units_floor: this.tuningMinFloor,
+                            max_units_ceiling: this.tuningMaxCeiling,
+                            auto_exclude_overposted: this.tuningAutoExcludeOverposted,
+                            exclude_critical_doubt: this.tuningExcludeCriticalDoubt
                         })
                     }).catch(e => console.error(e));
 
                     this.fetchData(1);
-                    this.showToastNotification('⚡', `Tuned average applied: ${this.getCompoundedUnits(this.tuningBaseUnits)} kWh (${(this.getNetTuningPercent(this.tuningBaseUnits) >= 0 ? '+' : '')}${this.getNetTuningPercent(this.tuningBaseUnits)}%)`);
+                    this.showToastNotification('⚡', `Tuned average applied (Min ${this.tuningMinFloor}k | Max ${this.tuningMaxCeiling}k | ${(this.getNetTuningPercent(this.tuningBaseUnits) >= 0 ? '+' : '')}${this.getNetTuningPercent(this.tuningBaseUnits)}%)`);
                 },
 
                 getCompoundedStepsDetails(base = 50) {
@@ -1351,7 +1387,14 @@ function dashboardApp() {
                     for (const step of this.avgTuningSteps) {
                         cur = cur * (1 + (step / 100));
                     }
-                    return Math.max(1, Math.round(cur));
+                    let res = Math.max(1, Math.round(cur));
+                    if (this.tuningMinFloor > 0 && res < this.tuningMinFloor) {
+                        res = this.tuningMinFloor;
+                    }
+                    if (this.tuningMaxCeiling > 0 && res > this.tuningMaxCeiling) {
+                        res = this.tuningMaxCeiling;
+                    }
+                    return res;
                 },
 
                 getNetTuningPercent(base = 50) {
@@ -1360,6 +1403,45 @@ function dashboardApp() {
                     }
                     const tuned = this.getCompoundedUnits(base);
                     return Math.round(((tuned - base) / base) * 100);
+                },
+
+                // --- INDIVIDUAL CONSUMER AVERAGE TUNING & EXCLUSION ---
+                openIndividualTuningModal(bill) {
+                    if (!bill) return;
+                    this.activeIndividualBill = bill;
+                    this.individualCustomUnits = bill.custom_avg_units || null;
+                    this.individualIsExcluded = !!bill.is_avg_excluded;
+                    this.individualExcludeReason = bill.avg_exclude_reason || '';
+                    this.showIndividualAvgModal = true;
+                },
+
+                saveIndividualAverageTuning() {
+                    if (!this.activeIndividualBill) return;
+                    const ca = this.activeIndividualBill.ca_number;
+                    fetch(`/consumers/${ca}/average-tuning`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': this.getCsrfToken(),
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            custom_avg_units: this.individualCustomUnits || null,
+                            is_avg_excluded: this.individualIsExcluded,
+                            avg_exclude_reason: this.individualExcludeReason || null,
+                            month: this.selectedMonth,
+                            year: this.selectedYear
+                        })
+                    })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            this.showIndividualAvgModal = false;
+                            this.showToastNotification('🎯', res.message);
+                            this.fetchData(this.pagination?.current_page || 1);
+                        }
+                    })
+                    .catch(err => console.error(err));
                 },
 
                 // --- 2D METER READING HISTORY MODAL ---

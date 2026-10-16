@@ -4,8 +4,9 @@
         @include('dashboard.partials.modals.tuning.header')
 
         <!-- Modal Body -->
-        <div class="p-5 sm:p-6 space-y-5">
+        <div class="p-5 sm:p-6 space-y-4">
             @include('dashboard.partials.modals.tuning.simulation-preview')
+            @include('dashboard.partials.modals.tuning.guardrails-controls')
             @include('dashboard.partials.modals.tuning.step-controls')
         </div>
 

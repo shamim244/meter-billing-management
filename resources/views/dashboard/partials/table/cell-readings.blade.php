@@ -62,10 +62,19 @@
 <!-- 📊 Average Usage (Avg kWh) -->
 <td class="py-3 px-2 text-center font-mono text-xs cursor-pointer hover:bg-indigo-50/60 dark:hover:bg-indigo-950/40 transition group rounded-xl"
     @click="openMeterHistoryModal(bill.ca_number, bill.consumer_name)"
-    title="Click to view 2D Monthly Reading History & calculation breakdown">
-    <div class="transition" :class="getAvgUnitStyle(bill.smart_avg_units)" x-text="(bill.smart_avg_units ?? 50) + ' k'"></div>
-    <div class="text-[9px] text-indigo-500 font-semibold opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-0.5">
-        <span>📊</span> History
+    :title="bill.is_avg_excluded ? ('Excluded: ' + (bill.avg_exclude_reason || 'Safe Filter')) : 'Click to view 2D Monthly Reading History'">
+    <div class="transition" :class="bill.is_avg_excluded ? 'text-amber-600 dark:text-amber-400 font-bold' : getAvgUnitStyle(bill.smart_avg_units)" x-text="(bill.smart_avg_units ?? 50) + ' k'"></div>
+    <div class="text-[9px] font-semibold flex items-center justify-center gap-1">
+        <template x-if="bill.is_over_posted">
+            <span class="text-amber-500 font-bold">⚠️ Over</span>
+        </template>
+        <template x-if="bill.is_avg_excluded && !bill.is_over_posted">
+            <span class="text-slate-400 font-bold">🚫 Excl</span>
+        </template>
+        <template x-if="bill.is_custom_override">
+            <span class="text-indigo-500 font-bold">🎯 Lock</span>
+        </template>
+        <button type="button" @click.stop="openIndividualTuningModal(bill)" class="text-slate-400 hover:text-indigo-600 dark:hover:text-cyan-400 opacity-0 group-hover:opacity-100 transition">⚙️</button>
     </div>
 </td>
 
