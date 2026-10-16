@@ -110,6 +110,7 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
     // Dedicated 360-Degree Consumer Hub & Legacy History Alias
     Route::get('/consumers/{ca}', [ConsumerController::class, 'show'])->name('consumers.show');
     Route::put('/consumers/{ca}', [ConsumerController::class, 'update'])->name('consumers.update');
+    Route::post('/consumers/{ca}/average-tuning', [DashboardController::class, 'updateConsumerAverageTuning'])->name('consumers.average-tuning');
     Route::get('/bills/history/{ca_number}', [ConsumerController::class, 'show'])->name('bills.history');
 
     // Reading Gap & Physical Meter Inspection (Module 13)

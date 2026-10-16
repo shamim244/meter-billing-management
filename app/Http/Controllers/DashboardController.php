@@ -614,8 +614,13 @@ class DashboardController extends Controller
         $unitsSafeCeiling = (int) SystemSetting::get('color_units_safe_ceiling', 50);
         $unitsDangerFloor = (int) SystemSetting::get('color_units_danger_floor', 200);
 
+        $minUnitsFloor = (int) $request->input('min_units_floor', session('dashboard_tuning_min_floor', SystemSetting::get('smart_avg_min_floor', 0)));
+        $maxUnitsCeiling = (int) $request->input('max_units_ceiling', session('dashboard_tuning_max_ceiling', SystemSetting::get('smart_avg_max_ceiling', 0)));
+        $autoExcludeOverposted = (bool) $request->input('auto_exclude_overposted', session('dashboard_tuning_auto_exclude_overposted', SystemSetting::get('smart_avg_auto_exclude_overposted', true)));
+        $excludeCriticalDoubt = (bool) $request->input('exclude_critical_doubt', session('dashboard_tuning_exclude_critical_doubt', SystemSetting::get('smart_avg_auto_exclude_critical_doubt', false)));
+
         // Attach review_status, remark, and 4-Box Reading Metrics (ONLY for paginated CAs)
-        $items = $paginatedRecords->map(function ($bill) use ($userStatusModels, $historicalBills, $meterHistories, $basisHistories, $consumers, $month, $year, $adjPercent, $tuningSteps, $colorSafeCeiling, $colorDangerFloor, $unitsSafeCeiling, $unitsDangerFloor) {
+        $items = $paginatedRecords->map(function ($bill) use ($userStatusModels, $historicalBills, $meterHistories, $basisHistories, $consumers, $month, $year, $adjPercent, $tuningSteps, $colorSafeCeiling, $colorDangerFloor, $unitsSafeCeiling, $unitsDangerFloor, $minUnitsFloor, $maxUnitsCeiling, $autoExcludeOverposted, $excludeCriticalDoubt) {
             $st = $userStatusModels[$bill->ca_number] ?? null;
             $bill->review_status = ! empty($bill->review_status) && $bill->review_status !== 'pending' ? $bill->review_status : ($st ? $st->status : ($bill->review_status ?: 'pending'));
             $bill->remark = ! empty($bill->remark) ? $bill->remark : ($st ? ($st->remark ?? '') : '');
@@ -679,6 +684,32 @@ class DashboardController extends Controller
             $bill->db_prev_reading = $resolvedPrev['reading_str'];
             $bill->db_prev_label = $resolvedPrev['label'];
 
+            // Over-posted detection (Physical < Posted)
+            $physReading = ! empty($consumerAcc?->last_physical_reading) && is_numeric($consumerAcc->last_physical_reading)
+                ? (int) $consumerAcc->last_physical_reading
+                : (! empty($bill->physical_reading) && is_numeric($bill->physical_reading) ? (int) $bill->physical_reading : null);
+
+            $postedReading = $resolvedPrev['reading'] ?? (! empty($bill->previous_reading) && is_numeric($bill->previous_reading) ? (int) $bill->previous_reading : null);
+
+            $isOverPosted = false;
+            if ($physReading !== null && $postedReading !== null && $physReading > 0 && $postedReading > 0 && $physReading < $postedReading) {
+                $isOverPosted = true;
+            }
+
+            $isCriticalDoubt = in_array(strtolower(trim($bill->review_status ?? '')), ['critical', 'doubt']);
+
+            $guardrails = [
+                'min_units_floor' => $minUnitsFloor,
+                'max_units_ceiling' => $maxUnitsCeiling,
+                'custom_avg_units' => $consumerAcc?->custom_avg_units ?? $bill->custom_avg_units ?? null,
+                'is_avg_excluded' => (bool) ($consumerAcc?->is_avg_excluded ?? $bill->is_avg_excluded ?? false),
+                'avg_exclude_reason' => $consumerAcc?->avg_exclude_reason ?? $bill->avg_exclude_reason ?? null,
+                'is_over_posted' => $isOverPosted,
+                'auto_exclude_overposted' => $autoExcludeOverposted,
+                'is_critical_doubt' => $isCriticalDoubt,
+                'auto_exclude_critical_doubt' => $excludeCriticalDoubt,
+            ];
+
             // 2. Box 3: Smart Average Usage Calculation (Outlier-Proof DB-driven delta & OK vs LK vs MD)
             $avgCalc = $this->smartAverageService->calculateSmartAverage(
                 $bill->ca_number,
@@ -690,7 +721,8 @@ class DashboardController extends Controller
                 $history,
                 $adjPercent,
                 $tuningSteps,
-                $mrhForCa
+                $mrhForCa,
+                $guardrails
             );
 
             $baseAvg = $avgCalc['base_units'];
@@ -700,13 +732,22 @@ class DashboardController extends Controller
             $bill->smart_avg_range = $avgCalc['range'];
             $bill->tuning_percent = $avgCalc['tuning_percent'];
             $bill->tuning_steps = $avgCalc['tuning_steps'];
+            $bill->is_avg_excluded = (bool) $avgCalc['is_excluded'];
+            $bill->avg_exclude_reason = $avgCalc['exclude_reason'];
+            $bill->is_custom_override = (bool) $avgCalc['is_custom_override'];
+            $bill->custom_avg_units = $avgCalc['is_custom_override'] ? $avgCalc['avg_units'] : ($consumerAcc?->custom_avg_units ?? $bill->custom_avg_units ?? null);
+            $bill->is_clamped_min = (bool) $avgCalc['is_clamped_min'];
+            $bill->is_clamped_max = (bool) $avgCalc['is_clamped_max'];
+            $bill->is_over_posted = $isOverPosted;
 
             // 3. Box 1: Working Reading (Current) & Auto-Fill Projection
             $prevNum = $resolvedPrev['reading'] ?? 0;
             $pdfNum = (! empty($bill->current_reading) && is_numeric($bill->current_reading)) ? (int) $bill->current_reading : null;
-            $projectedReading = $this->smartAverageService->calculateProjectedReading($prevNum, $avgCalc['avg_units'], $pdfNum, 0);
+            $projectedReading = (! $bill->is_avg_excluded)
+                ? $this->smartAverageService->calculateProjectedReading($prevNum, $avgCalc['avg_units'], $pdfNum, 0)
+                : null;
 
-            $bill->projected_reading = (string) $projectedReading;
+            $bill->projected_reading = $projectedReading !== null ? (string) $projectedReading : null;
 
             $readingSource = $bill->reading_source ?: 'auto';
 
@@ -716,11 +757,11 @@ class DashboardController extends Controller
                 $bill->reading_source = 'manual';
             } else {
                 $bill->is_manual = false;
-                $bill->is_projected = true;
+                $bill->is_projected = ! $bill->is_avg_excluded;
                 $bill->reading_source = 'auto';
 
-                if (empty($bill->working_reading) || $bill->working_reading == '0' || (int) $bill->working_reading < $projectedReading || ($prevNum > 0 && (int) $bill->working_reading <= $prevNum)) {
-                    if ($projectedReading > 0) {
+                if (! $bill->is_avg_excluded && $projectedReading !== null && $projectedReading > 0) {
+                    if (empty($bill->working_reading) || $bill->working_reading == '0' || (int) $bill->working_reading < $projectedReading || ($prevNum > 0 && (int) $bill->working_reading <= $prevNum)) {
                         $bill->working_reading = (string) $projectedReading;
                     }
                 }
@@ -1165,8 +1206,14 @@ class DashboardController extends Controller
 
         $bills = $query->get();
 
-        $count = DB::transaction(function () use ($userId, $isAdmin, $bills, $month, $year, $adjPercent, $tuningSteps) {
+        $minUnitsFloor = (int) $request->input('min_units_floor', session('dashboard_tuning_min_floor', SystemSetting::get('smart_avg_min_floor', 0)));
+        $maxUnitsCeiling = (int) $request->input('max_units_ceiling', session('dashboard_tuning_max_ceiling', SystemSetting::get('smart_avg_max_ceiling', 0)));
+        $autoExcludeOverposted = (bool) $request->input('auto_exclude_overposted', session('dashboard_tuning_auto_exclude_overposted', SystemSetting::get('smart_avg_auto_exclude_overposted', true)));
+        $excludeCriticalDoubt = (bool) $request->input('exclude_critical_doubt', session('dashboard_tuning_exclude_critical_doubt', SystemSetting::get('smart_avg_auto_exclude_critical_doubt', false)));
+
+        $result = DB::transaction(function () use ($userId, $isAdmin, $bills, $month, $year, $adjPercent, $tuningSteps, $minUnitsFloor, $maxUnitsCeiling, $autoExcludeOverposted, $excludeCriticalDoubt) {
             $count = 0;
+            $skippedExcludedCount = 0;
             $caNumbers = $bills->pluck('ca_number')->unique()->values();
             $historicalBills = BillRecord::whereIn('ca_number', $caNumbers)
                 ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
@@ -1217,6 +1264,31 @@ class DashboardController extends Controller
                     $mrhForCa
                 );
 
+                $physReading = ! empty($consumer?->last_physical_reading) && is_numeric($consumer->last_physical_reading)
+                    ? (int) $consumer->last_physical_reading
+                    : (! empty($bill->physical_reading) && is_numeric($bill->physical_reading) ? (int) $bill->physical_reading : null);
+
+                $postedReading = $resolvedPrev['reading'] ?? (! empty($bill->previous_reading) && is_numeric($bill->previous_reading) ? (int) $bill->previous_reading : null);
+
+                $isOverPosted = false;
+                if ($physReading !== null && $postedReading !== null && $physReading > 0 && $postedReading > 0 && $physReading < $postedReading) {
+                    $isOverPosted = true;
+                }
+
+                $isCriticalDoubt = in_array(strtolower(trim($bill->review_status ?? '')), ['critical', 'doubt']);
+
+                $guardrails = [
+                    'min_units_floor' => $minUnitsFloor,
+                    'max_units_ceiling' => $maxUnitsCeiling,
+                    'custom_avg_units' => $consumer?->custom_avg_units ?? $bill->custom_avg_units ?? null,
+                    'is_avg_excluded' => (bool) ($consumer?->is_avg_excluded ?? $bill->is_avg_excluded ?? false),
+                    'avg_exclude_reason' => $consumer?->avg_exclude_reason ?? $bill->avg_exclude_reason ?? null,
+                    'is_over_posted' => $isOverPosted,
+                    'auto_exclude_overposted' => $autoExcludeOverposted,
+                    'is_critical_doubt' => $isCriticalDoubt,
+                    'auto_exclude_critical_doubt' => $excludeCriticalDoubt,
+                ];
+
                 $avgCalc = $this->smartAverageService->calculateSmartAverage(
                     $bill->ca_number,
                     $month,
@@ -1227,8 +1299,15 @@ class DashboardController extends Controller
                     $history,
                     $adjPercent,
                     $tuningSteps,
-                    $mrhForCa
+                    $mrhForCa,
+                    $guardrails
                 );
+
+                if (! empty($avgCalc['is_excluded'])) {
+                    $skippedExcludedCount++;
+
+                    continue;
+                }
 
                 $dbPrevReading = $resolvedPrev['reading'] ?? 0;
                 $effectiveUnits = $avgCalc['avg_units'];
@@ -1281,13 +1360,21 @@ class DashboardController extends Controller
                 $count++;
             }
 
-            return $count;
+            return [
+                'projected_count' => $count,
+                'skipped_excluded_count' => $skippedExcludedCount,
+            ];
         });
+
+        $projectedCount = $result['projected_count'];
+        $skippedCount = $result['skipped_excluded_count'];
 
         return response()->json([
             'success' => true,
-            'message' => "Successfully projected working readings for {$count} accounts.",
-            'count' => $count,
+            'message' => "Successfully projected working readings for {$projectedCount} accounts".($skippedCount > 0 ? " ({$skippedCount} excluded/protected accounts skipped)." : '.'),
+            'count' => $projectedCount,
+            'projected_count' => $projectedCount,
+            'skipped_excluded_count' => $skippedCount,
         ]);
     }
 
@@ -1573,16 +1660,39 @@ class DashboardController extends Controller
             'steps' => 'nullable|array',
             'steps.*' => 'numeric|min:-90|max:300',
             'base_units' => 'nullable|integer|min:1',
+            'min_units_floor' => 'nullable|integer|min:0|max:1000',
+            'max_units_ceiling' => 'nullable|integer|min:0|max:5000',
+            'auto_exclude_overposted' => 'nullable|boolean',
+            'exclude_critical_doubt' => 'nullable|boolean',
         ]);
 
         $percent = (float) $request->input('percent', 0);
         $steps = $request->input('steps', []);
         $baseUnits = (int) $request->input('base_units', 50);
 
-        session([
+        $minFloor = $request->has('min_units_floor') ? (int) $request->input('min_units_floor') : null;
+        $maxCeiling = $request->has('max_units_ceiling') ? (int) $request->input('max_units_ceiling') : null;
+        $autoExcludeOverposted = $request->has('auto_exclude_overposted') ? (bool) $request->input('auto_exclude_overposted') : null;
+        $excludeCriticalDoubt = $request->has('exclude_critical_doubt') ? (bool) $request->input('exclude_critical_doubt') : null;
+
+        $sessionData = [
             'dashboard_tuning_percent' => $percent,
             'dashboard_tuning_steps' => $steps,
-        ]);
+        ];
+        if ($minFloor !== null) {
+            $sessionData['dashboard_tuning_min_floor'] = $minFloor;
+        }
+        if ($maxCeiling !== null) {
+            $sessionData['dashboard_tuning_max_ceiling'] = $maxCeiling;
+        }
+        if ($autoExcludeOverposted !== null) {
+            $sessionData['dashboard_tuning_auto_exclude_overposted'] = $autoExcludeOverposted;
+        }
+        if ($excludeCriticalDoubt !== null) {
+            $sessionData['dashboard_tuning_exclude_critical_doubt'] = $excludeCriticalDoubt;
+        }
+
+        session($sessionData);
 
         $compounded = ! empty($steps)
             ? $this->smartAverageService->compoundAdjustAverageUnits($baseUnits, $steps)
@@ -1600,6 +1710,10 @@ class DashboardController extends Controller
                 'percent' => $percent,
                 'steps' => $steps,
                 'base_units' => $baseUnits,
+                'min_units_floor' => $minFloor ?? session('dashboard_tuning_min_floor', 0),
+                'max_units_ceiling' => $maxCeiling ?? session('dashboard_tuning_max_ceiling', 0),
+                'auto_exclude_overposted' => $autoExcludeOverposted ?? session('dashboard_tuning_auto_exclude_overposted', true),
+                'exclude_critical_doubt' => $excludeCriticalDoubt ?? session('dashboard_tuning_exclude_critical_doubt', false),
                 'tuned_units' => $compounded['tuned_units'],
                 'net_percent' => $compounded['net_percent'],
                 'step_details' => $compounded['steps'],
@@ -1612,11 +1726,86 @@ class DashboardController extends Controller
      */
     public function resetTuning(Request $request): JsonResponse
     {
-        session()->forget(['dashboard_tuning_percent', 'dashboard_tuning_steps']);
+        session()->forget([
+            'dashboard_tuning_percent',
+            'dashboard_tuning_steps',
+            'dashboard_tuning_min_floor',
+            'dashboard_tuning_max_ceiling',
+            'dashboard_tuning_auto_exclude_overposted',
+            'dashboard_tuning_exclude_critical_doubt',
+        ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Tuning reset to baseline normal',
+        ]);
+    }
+
+    /**
+     * Update individual consumer average tuning preferences, custom unit overrides, and exclusion flags.
+     */
+    public function updateConsumerAverageTuning(Request $request, string $ca): JsonResponse
+    {
+        $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && $currentUser->hasRole('admin');
+
+        $validated = $request->validate([
+            'custom_avg_units' => 'nullable|integer|min:1|max:5000',
+            'is_avg_excluded' => 'nullable|boolean',
+            'avg_exclude_reason' => 'nullable|string|max:100',
+            'month' => 'nullable|integer|min:1|max:12',
+            'year' => 'nullable|integer|min:2020|max:2035',
+        ]);
+
+        $consumer = ConsumerAccount::query()
+            ->where('ca_number', $ca)
+            ->when(! $isAdmin, fn ($q) => $q->where('user_id', $userId))
+            ->first();
+
+        if (! $consumer) {
+            $consumer = ConsumerAccount::create([
+                'user_id' => $userId,
+                'ca_number' => $ca,
+                'consumer_name' => "Consumer {$ca}",
+                'custom_avg_units' => $validated['custom_avg_units'] ?? null,
+                'is_avg_excluded' => (bool) ($validated['is_avg_excluded'] ?? false),
+                'avg_exclude_reason' => $validated['avg_exclude_reason'] ?? null,
+            ]);
+        } else {
+            $consumer->update([
+                'custom_avg_units' => array_key_exists('custom_avg_units', $validated) ? $validated['custom_avg_units'] : $consumer->custom_avg_units,
+                'is_avg_excluded' => array_key_exists('is_avg_excluded', $validated) ? (bool) $validated['is_avg_excluded'] : $consumer->is_avg_excluded,
+                'avg_exclude_reason' => array_key_exists('avg_exclude_reason', $validated) ? $validated['avg_exclude_reason'] : $consumer->avg_exclude_reason,
+            ]);
+        }
+
+        // Also sync matching BillRecord for the current cycle if active
+        $month = (int) $request->input('month', 0);
+        $year = (int) $request->input('year', 0);
+        if ($month > 0 && $year > 0) {
+            BillRecord::query()
+                ->where('ca_number', $ca)
+                ->where('billing_month', $month)
+                ->where('billing_year', $year)
+                ->when(! $isAdmin, fn ($q) => $q->where('user_id', $userId))
+                ->update([
+                    'custom_avg_units' => $consumer->custom_avg_units,
+                    'is_avg_excluded' => $consumer->is_avg_excluded,
+                    'avg_exclude_reason' => $consumer->avg_exclude_reason,
+                ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Average tuning preferences updated for CA {$ca}",
+            'consumer' => [
+                'ca_number' => $consumer->ca_number,
+                'custom_avg_units' => $consumer->custom_avg_units,
+                'is_avg_excluded' => (bool) $consumer->is_avg_excluded,
+                'avg_exclude_reason' => $consumer->avg_exclude_reason,
+            ],
         ]);
     }
 
