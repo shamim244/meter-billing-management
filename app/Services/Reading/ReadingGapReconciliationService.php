@@ -122,7 +122,8 @@ class ReadingGapReconciliationService
         }
 
         $physicalReading = (int) $consumer->last_physical_reading;
-        $netGap = $physicalReading - $postedReading;
+        $rolloverCheck = $this->detectMeterRollover($physicalReading, $postedReading);
+        $netGap = $rolloverCheck['adjusted_gap'];
 
         // Case 1: Over-posted (M < P, netGap < 0)
         if ($netGap < 0) {
@@ -240,5 +241,202 @@ class ReadingGapReconciliationService
         }
 
         return $summary;
+    }
+
+    /**
+     * Detect mechanical or digital dial rollover (e.g. 99,950 -> 00,050).
+     *
+     * @return array{is_rollover: bool, adjusted_gap: int}
+     */
+    public function detectMeterRollover(float|int $physical, float|int $posted, int $dialCapacity = 100000): array
+    {
+        $physical = (int) $physical;
+        $posted = (int) $posted;
+        $rawDelta = $physical - $posted;
+
+        // If posted reading is near top of capacity (> 80%) and physical is near bottom (< 20%)
+        if ($rawDelta < 0 && $posted >= ($dialCapacity * 0.8) && $physical <= ($dialCapacity * 0.2)) {
+            $adjustedGap = ($dialCapacity - $posted) + $physical;
+
+            return [
+                'is_rollover' => true,
+                'adjusted_gap' => $adjustedGap,
+            ];
+        }
+
+        return [
+            'is_rollover' => false,
+            'adjusted_gap' => $rawDelta,
+        ];
+    }
+
+    /**
+     * Record a meter replacement / change-out event.
+     */
+    public function recordMeterReplacement(
+        ConsumerAccount $consumer,
+        string|float|int $initialReading,
+        ?Carbon $date = null,
+        ?string $oldMeterFinalReading = null,
+        ?string $newMeterNo = null,
+        ?string $notes = null,
+        ?User $user = null
+    ): MeterInspection {
+        $readingStr = (string) $initialReading;
+        $eventDate = $date ?? now();
+        $userId = $user?->id ?? $consumer->user_id;
+
+        $auditNote = 'Meter Replacement: ';
+        if ($newMeterNo) {
+            $auditNote .= "New Meter: {$newMeterNo}. ";
+        }
+        if ($oldMeterFinalReading !== null) {
+            $auditNote .= "Old Final Reading: {$oldMeterFinalReading}. ";
+        }
+        if ($notes) {
+            $auditNote .= "Notes: {$notes}";
+        }
+
+        $inspection = MeterInspection::create([
+            'consumer_account_id' => $consumer->id,
+            'user_id' => $userId,
+            'ca_number' => $consumer->ca_number,
+            'physical_reading' => $readingStr,
+            'inspected_at' => $eventDate,
+            'notes' => trim($auditNote),
+        ]);
+
+        $updateData = [
+            'last_physical_reading' => $readingStr,
+            'last_inspected_at' => $eventDate,
+            'inspected_by_user_id' => $userId,
+        ];
+
+        if (! empty($newMeterNo)) {
+            $updateData['meter_no'] = $newMeterNo;
+        }
+
+        $consumer->update($updateData);
+
+        return $inspection;
+    }
+
+    /**
+     * Aggregate reading gap analytics across an MRU or user workspace.
+     *
+     * @return array{
+     *     total_consumers: int,
+     *     inspected_count: int,
+     *     uninspected_count: int,
+     *     over_posted_count: int,
+     *     under_posted_count: int,
+     *     in_sync_count: int,
+     *     stale_inspections_count: int,
+     *     total_unbilled_kwh: int,
+     *     total_over_posted_kwh: int,
+     *     estimated_financial_gap_rs: float
+     * }
+     */
+    public function getMruGapAnalytics(?int $userId = null, ?int $mruId = null): array
+    {
+        $consumersQuery = ConsumerAccount::query()
+            ->when($userId, fn ($q) => $q->where('user_id', $userId))
+            ->when($mruId, fn ($q) => $q->where('mru_id', $mruId));
+
+        $consumers = $consumersQuery->get();
+        if ($consumers->isEmpty()) {
+            return [
+                'total_consumers' => 0,
+                'inspected_count' => 0,
+                'uninspected_count' => 0,
+                'over_posted_count' => 0,
+                'under_posted_count' => 0,
+                'in_sync_count' => 0,
+                'stale_inspections_count' => 0,
+                'total_unbilled_kwh' => 0,
+                'total_over_posted_kwh' => 0,
+                'estimated_financial_gap_rs' => 0.0,
+            ];
+        }
+
+        $caNumbers = $consumers->pluck('ca_number')->filter()->unique();
+
+        $latestBills = BillRecord::whereIn('ca_number', $caNumbers)
+            ->when($userId, fn ($q) => $q->where('user_id', $userId))
+            ->orderBy('billing_year', 'desc')
+            ->orderBy('billing_month', 'desc')
+            ->get()
+            ->groupBy('ca_number')
+            ->map(fn ($group) => $group->first());
+
+        $staleWarningDays = (int) SystemSetting::get('inspection_stale_warning_days', 90);
+        $totalConsumers = $consumers->count();
+        $inspectedCount = 0;
+        $uninspectedCount = 0;
+        $overPostedCount = 0;
+        $underPostedCount = 0;
+        $inSyncCount = 0;
+        $staleInspectionsCount = 0;
+        $totalUnbilledKwh = 0;
+        $totalOverPostedKwh = 0;
+        $estimatedFinancialGapRs = 0.0;
+
+        foreach ($consumers as $consumer) {
+            if ($consumer->last_physical_reading === null || ! is_numeric($consumer->last_physical_reading)) {
+                $uninspectedCount++;
+
+                continue;
+            }
+
+            $inspectedCount++;
+
+            $daysSince = $consumer->last_inspected_at
+                ? (int) Carbon::parse($consumer->last_inspected_at)->diffInDays(now())
+                : null;
+            if ($daysSince !== null && $daysSince > $staleWarningDays) {
+                $staleInspectionsCount++;
+            }
+
+            $latestBill = $latestBills->get($consumer->ca_number);
+            $postedReading = 0;
+            if ($latestBill) {
+                if ($latestBill->previous_reading !== null && is_numeric($latestBill->previous_reading)) {
+                    $postedReading = (int) $latestBill->previous_reading;
+                } elseif ($latestBill->current_reading !== null && is_numeric($latestBill->current_reading)) {
+                    $postedReading = (int) $latestBill->current_reading;
+                }
+            }
+
+            $physicalReading = (int) $consumer->last_physical_reading;
+            $rolloverCheck = $this->detectMeterRollover($physicalReading, $postedReading);
+            $netGap = $rolloverCheck['adjusted_gap'];
+
+            $tariff = strtoupper(trim((string) $consumer->tariff_category));
+            $ratePerKwh = (str_contains($tariff, 'NDS') || str_contains($tariff, 'COM')) ? 8.5 : 6.5;
+
+            if ($netGap > 0) {
+                $underPostedCount++;
+                $totalUnbilledKwh += $netGap;
+                $estimatedFinancialGapRs += ($netGap * $ratePerKwh);
+            } elseif ($netGap < 0) {
+                $overPostedCount++;
+                $totalOverPostedKwh += abs($netGap);
+            } else {
+                $inSyncCount++;
+            }
+        }
+
+        return [
+            'total_consumers' => $totalConsumers,
+            'inspected_count' => $inspectedCount,
+            'uninspected_count' => $uninspectedCount,
+            'over_posted_count' => $overPostedCount,
+            'under_posted_count' => $underPostedCount,
+            'in_sync_count' => $inSyncCount,
+            'stale_inspections_count' => $staleInspectionsCount,
+            'total_unbilled_kwh' => $totalUnbilledKwh,
+            'total_over_posted_kwh' => $totalOverPostedKwh,
+            'estimated_financial_gap_rs' => round($estimatedFinancialGapRs, 2),
+        ];
     }
 }
