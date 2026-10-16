@@ -27,6 +27,7 @@ use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\AdminWalletController;
 use App\Http\Controllers\AgentReferralController;
 use App\Http\Controllers\BillController;
+use App\Http\Controllers\ConsumerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeveloperDocumentationController;
 use App\Http\Controllers\DocsController;
@@ -105,7 +106,10 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
     Route::post('/bills/delete-pdf', [BillController::class, 'deletePdf'])->name('bills.delete-pdf');
     Route::get('/bills/pdf/{bill}', [BillController::class, 'viewPdf'])->name('bills.pdf');
     Route::get('/bills/export-zip', [BillController::class, 'exportZip'])->middleware('throttle:30,1')->name('bills.export-zip');
-    Route::get('/bills/history/{ca_number}', [BillController::class, 'history'])->name('bills.history');
+    // Dedicated 360-Degree Consumer Hub & Legacy History Alias
+    Route::get('/consumers/{ca}', [ConsumerController::class, 'show'])->name('consumers.show');
+    Route::put('/consumers/{ca}', [ConsumerController::class, 'update'])->name('consumers.update');
+    Route::get('/bills/history/{ca_number}', [ConsumerController::class, 'show'])->name('bills.history');
 
     // Reading Gap & Physical Meter Inspection (Module 13)
     Route::post('/api/reading-gap/record-inspection', [DashboardController::class, 'recordInspection'])->name('api.reading-gap.record-inspection');
