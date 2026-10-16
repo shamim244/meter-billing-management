@@ -36,7 +36,29 @@ class SmartAverageGuardrailsCalculationTest extends TestCase
     {
         $service = app(SmartAverageCalculationService::class);
 
-        // Test Min Clamp: base 15 clamped to min 30
+        $lowHistory = collect([
+            (object) ['billing_month' => 9, 'billing_year' => 2026, 'units_consumed' => 15, 'billing_basis' => 'OK'],
+            (object) ['billing_month' => 8, 'billing_year' => 2026, 'units_consumed' => 15, 'billing_basis' => 'OK'],
+        ]);
+
+        // Default mode (tweaking OFF): base dynamic average (15 kWh) is returned untouched with NO floor clamping
+        $dynamicDefault = $service->calculateSmartAverage(
+            caNumber: '99990002',
+            month: 10,
+            year: 2026,
+            basis: 'OK',
+            currentBill: null,
+            consumer: null,
+            history: $lowHistory,
+            tuningPercent: 0,
+            tuningSteps: [],
+            meterHistory: collect(),
+            guardrails: ['min_units_floor' => 30, 'tuning_enabled' => false]
+        );
+        $this->assertEquals(15, $dynamicDefault['avg_units'], 'Base calculation must preserve pure dynamic median when tweaking is off');
+        $this->assertFalse($dynamicDefault['is_clamped_min']);
+
+        // Tweaking mode (tuning_enabled ON): base 15 is clamped to min 30
         $minClamped = $service->calculateSmartAverage(
             caNumber: '99990002',
             month: 10,
@@ -44,16 +66,38 @@ class SmartAverageGuardrailsCalculationTest extends TestCase
             basis: 'OK',
             currentBill: null,
             consumer: null,
-            history: collect(),
+            history: $lowHistory,
             tuningPercent: 0,
             tuningSteps: [],
             meterHistory: collect(),
-            guardrails: ['min_units_floor' => 30, 'custom_avg_units' => 15]
+            guardrails: ['min_units_floor' => 30, 'tuning_enabled' => true]
         );
         $this->assertEquals(30, $minClamped['avg_units']);
         $this->assertTrue($minClamped['is_clamped_min']);
 
-        // Test Max Clamp: base 220 clamped to max 180
+        $highHistory = collect([
+            (object) ['billing_month' => 9, 'billing_year' => 2026, 'units_consumed' => 220, 'billing_basis' => 'OK'],
+            (object) ['billing_month' => 8, 'billing_year' => 2026, 'units_consumed' => 220, 'billing_basis' => 'OK'],
+        ]);
+
+        // Default mode (tweaking OFF): high history (220 kWh) is returned untouched with NO ceiling clamping
+        $dynamicDefaultHigh = $service->calculateSmartAverage(
+            caNumber: '99990003',
+            month: 10,
+            year: 2026,
+            basis: 'OK',
+            currentBill: null,
+            consumer: null,
+            history: $highHistory,
+            tuningPercent: 0,
+            tuningSteps: [],
+            meterHistory: collect(),
+            guardrails: ['max_units_ceiling' => 180, 'tuning_enabled' => false]
+        );
+        $this->assertEquals(220, $dynamicDefaultHigh['avg_units'], 'Base calculation must preserve pure dynamic median when tweaking is off');
+        $this->assertFalse($dynamicDefaultHigh['is_clamped_max']);
+
+        // Tweaking mode (tuning_enabled ON): base 220 is clamped to max 180
         $maxClamped = $service->calculateSmartAverage(
             caNumber: '99990003',
             month: 10,
@@ -61,11 +105,11 @@ class SmartAverageGuardrailsCalculationTest extends TestCase
             basis: 'OK',
             currentBill: null,
             consumer: null,
-            history: collect(),
+            history: $highHistory,
             tuningPercent: 0,
             tuningSteps: [],
             meterHistory: collect(),
-            guardrails: ['max_units_ceiling' => 180, 'custom_avg_units' => 220]
+            guardrails: ['max_units_ceiling' => 180, 'tuning_enabled' => true]
         );
         $this->assertEquals(180, $maxClamped['avg_units']);
         $this->assertTrue($maxClamped['is_clamped_max']);

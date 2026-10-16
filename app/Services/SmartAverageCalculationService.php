@@ -457,9 +457,19 @@ class SmartAverageCalculationService
         $baseUnits = $avgUnits;
         $effectiveTuningPercent = 0.0;
         $effectiveSteps = [];
+        $isClampedMin = false;
+        $isClampedMax = false;
 
-        // Apply percentage tuning / compounding yield if requested (only when not custom overridden and not excluded)
-        if (! $isCustomOverride && ! $isExcluded) {
+        // Tweaking is an optional add-on: only active when explicitly enabled or tuning steps/percentage provided
+        $tuningEnabledFlag = $guardrails['tuning_enabled'] ?? null;
+        if ($tuningEnabledFlag === false) {
+            $isTuningActive = false;
+        } else {
+            $isTuningActive = (! empty($tuningSteps) || (float) $tuningPercent != 0.0 || ! empty($tuningEnabledFlag));
+        }
+
+        // Apply tweaking overlay (percentage tuning / compounding / min-max clamps) ONLY when tuning is active
+        if ($isTuningActive && ! $isCustomOverride && ! $isExcluded) {
             if (! empty($tuningSteps)) {
                 $compounded = $this->compoundAdjustAverageUnits($baseUnits, $tuningSteps);
                 $avgUnits = $compounded['tuned_units'];
@@ -479,22 +489,19 @@ class SmartAverageCalculationService
                 $maxR = (int) round($avgUnits * 1.15);
                 $avgRange = "{$minR}–{$maxR} kWh";
             }
-        }
 
-        // Apply Minimum Floor & Maximum Ceiling Guardrails
-        $isClampedMin = false;
-        $isClampedMax = false;
+            // Apply Minimum Floor & Maximum Ceiling Guardrails ONLY within active tweaking
+            if ($minFloor > 0 && $avgUnits < $minFloor) {
+                $avgUnits = $minFloor;
+                $isClampedMin = true;
+                $avgLabel = "{$avgUnits} kWh (Min Floor Clamped)";
+            }
 
-        if ($minFloor > 0 && $avgUnits < $minFloor && ! $isExcluded) {
-            $avgUnits = $minFloor;
-            $isClampedMin = true;
-            $avgLabel = "{$avgUnits} kWh (Min Floor Clamped)";
-        }
-
-        if ($maxCeiling > 0 && $avgUnits > $maxCeiling && ! $isExcluded) {
-            $avgUnits = $maxCeiling;
-            $isClampedMax = true;
-            $avgLabel = "{$avgUnits} kWh (Max Ceiling Clamped)";
+            if ($maxCeiling > 0 && $avgUnits > $maxCeiling) {
+                $avgUnits = $maxCeiling;
+                $isClampedMax = true;
+                $avgLabel = "{$avgUnits} kWh (Max Ceiling Clamped)";
+            }
         }
 
         if ($isExcluded) {

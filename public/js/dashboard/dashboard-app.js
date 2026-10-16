@@ -123,10 +123,11 @@ function dashboardApp() {
                 colorSettings: cfg.colorSettings || { enabled: true, amount_safe_ceiling: 500, amount_warning_ceiling: 1500, amount_danger_floor: 2500, units_safe_ceiling: 50, units_warning_ceiling: 120, units_danger_floor: 200 },
 
                 // Smart Average Tuning Guardrails & Individual Override State
-                tuningMinFloor: parseInt(localStorage.getItem('dashboard_tuning_min_floor') || '30', 10),
-                tuningMaxCeiling: parseInt(localStorage.getItem('dashboard_tuning_max_ceiling') || '180', 10),
+                tuningEnabled: localStorage.getItem('dashboard_tuning_enabled') === 'true',
+                tuningMinFloor: parseInt(localStorage.getItem('dashboard_tuning_min_floor') || '0', 10),
+                tuningMaxCeiling: parseInt(localStorage.getItem('dashboard_tuning_max_ceiling') || '0', 10),
                 tuningAutoExcludeOverposted: localStorage.getItem('dashboard_tuning_auto_exclude_overposted') !== 'false',
-                tuningExcludeCriticalDoubt: localStorage.getItem('dashboard_tuning_exclude_critical_doubt') !== 'false',
+                tuningExcludeCriticalDoubt: localStorage.getItem('dashboard_tuning_exclude_critical_doubt') === 'true',
                 showIndividualAvgModal: false,
                 activeIndividualBill: null,
                 individualCustomUnits: null,
@@ -699,9 +700,20 @@ function dashboardApp() {
                     url.searchParams.append('status_sort', this.statusSort);
                     url.searchParams.append('sort_col', this.sortCol);
                     url.searchParams.append('sort_asc', this.sortAsc ? 'true' : 'false');
-                    if (this.avgAdjustmentPercent) url.searchParams.append('adjustment_percent', this.avgAdjustmentPercent);
-                    if (this.avgTuningSteps && this.avgTuningSteps.length > 0) {
-                        url.searchParams.append('tuning_steps', JSON.stringify(this.avgTuningSteps));
+                    url.searchParams.append('tuning_enabled', this.tuningEnabled ? '1' : '0');
+                    if (this.tuningEnabled) {
+                        if (this.avgAdjustmentPercent) url.searchParams.append('adjustment_percent', this.avgAdjustmentPercent);
+                        if (this.avgTuningSteps && this.avgTuningSteps.length > 0) {
+                            url.searchParams.append('tuning_steps', JSON.stringify(this.avgTuningSteps));
+                        }
+                        if (this.tuningMinFloor > 0) url.searchParams.append('min_units_floor', this.tuningMinFloor);
+                        if (this.tuningMaxCeiling > 0) url.searchParams.append('max_units_ceiling', this.tuningMaxCeiling);
+                    }
+                    if (this.tuningAutoExcludeOverposted !== undefined) {
+                        url.searchParams.append('auto_exclude_overposted', this.tuningAutoExcludeOverposted ? '1' : '0');
+                    }
+                    if (this.tuningExcludeCriticalDoubt) {
+                        url.searchParams.append('exclude_critical_doubt', '1');
                     }
 
                     // Standard enterprise pagination: 50 records per page for both table and card views
@@ -1271,10 +1283,11 @@ function dashboardApp() {
                             month: this.selectedMonth,
                             year: this.selectedYear,
                             mru_id: this.filterMru || null,
-                            adjustment_percent: this.avgAdjustmentPercent || 0,
-                            tuning_steps: this.avgTuningSteps || [],
-                            min_units_floor: this.tuningMinFloor,
-                            max_units_ceiling: this.tuningMaxCeiling,
+                            tuning_enabled: this.tuningEnabled,
+                            adjustment_percent: this.tuningEnabled ? (this.avgAdjustmentPercent || 0) : 0,
+                            tuning_steps: this.tuningEnabled ? (this.avgTuningSteps || []) : [],
+                            min_units_floor: this.tuningEnabled ? (this.tuningMinFloor || 0) : 0,
+                            max_units_ceiling: this.tuningEnabled ? (this.tuningMaxCeiling || 0) : 0,
                             auto_exclude_overposted: this.tuningAutoExcludeOverposted,
                             exclude_critical_doubt: this.tuningExcludeCriticalDoubt
                         })
@@ -1302,6 +1315,7 @@ function dashboardApp() {
                 addTuningStep(pct) {
                     const val = parseFloat(pct);
                     if (!isNaN(val) && val !== 0) {
+                        this.tuningEnabled = true;
                         this.avgTuningSteps.push(val);
                         localStorage.setItem('dashboard_avg_tuning_steps', JSON.stringify(this.avgTuningSteps));
                     }
@@ -1313,12 +1327,14 @@ function dashboardApp() {
                 },
 
                 clearTuning() {
+                    this.tuningEnabled = false;
                     this.avgTuningSteps = [];
                     this.avgAdjustmentPercent = 0;
-                    this.tuningMinFloor = 30;
-                    this.tuningMaxCeiling = 180;
+                    this.tuningMinFloor = 0;
+                    this.tuningMaxCeiling = 0;
                     this.tuningAutoExcludeOverposted = true;
                     this.tuningExcludeCriticalDoubt = false;
+                    localStorage.removeItem('dashboard_tuning_enabled');
                     localStorage.removeItem('dashboard_avg_tuning_steps');
                     localStorage.setItem('dashboard_avg_adjustment', '0');
                     localStorage.removeItem('dashboard_tuning_min_floor');
@@ -1337,10 +1353,11 @@ function dashboardApp() {
 
                 applyTuningAndFetch() {
                     this.showTuningModal = false;
+                    localStorage.setItem('dashboard_tuning_enabled', String(this.tuningEnabled));
                     localStorage.setItem('dashboard_avg_tuning_steps', JSON.stringify(this.avgTuningSteps));
-                    localStorage.setItem('dashboard_avg_adjustment', String(this.getNetTuningPercent(this.tuningBaseUnits)));
-                    localStorage.setItem('dashboard_tuning_min_floor', String(this.tuningMinFloor || 0));
-                    localStorage.setItem('dashboard_tuning_max_ceiling', String(this.tuningMaxCeiling || 0));
+                    localStorage.setItem('dashboard_avg_adjustment', String(this.tuningEnabled ? this.getNetTuningPercent(this.tuningBaseUnits) : 0));
+                    localStorage.setItem('dashboard_tuning_min_floor', String(this.tuningEnabled ? (this.tuningMinFloor || 0) : 0));
+                    localStorage.setItem('dashboard_tuning_max_ceiling', String(this.tuningEnabled ? (this.tuningMaxCeiling || 0) : 0));
                     localStorage.setItem('dashboard_tuning_auto_exclude_overposted', String(this.tuningAutoExcludeOverposted));
                     localStorage.setItem('dashboard_tuning_exclude_critical_doubt', String(this.tuningExcludeCriticalDoubt));
 
@@ -1353,18 +1370,22 @@ function dashboardApp() {
                             'Accept': 'application/json'
                         },
                         body: JSON.stringify({
-                            steps: this.avgTuningSteps,
-                            percent: this.getNetTuningPercent(this.tuningBaseUnits),
+                            tuning_enabled: this.tuningEnabled,
+                            steps: this.tuningEnabled ? this.avgTuningSteps : [],
+                            percent: this.tuningEnabled ? this.getNetTuningPercent(this.tuningBaseUnits) : 0,
                             base_units: this.tuningBaseUnits,
-                            min_units_floor: this.tuningMinFloor,
-                            max_units_ceiling: this.tuningMaxCeiling,
+                            min_units_floor: this.tuningEnabled ? (this.tuningMinFloor || 0) : 0,
+                            max_units_ceiling: this.tuningEnabled ? (this.tuningMaxCeiling || 0) : 0,
                             auto_exclude_overposted: this.tuningAutoExcludeOverposted,
                             exclude_critical_doubt: this.tuningExcludeCriticalDoubt
                         })
                     }).catch(e => console.error(e));
 
                     this.fetchData(1);
-                    this.showToastNotification('⚡', `Tuned average applied (Min ${this.tuningMinFloor}k | Max ${this.tuningMaxCeiling}k | ${(this.getNetTuningPercent(this.tuningBaseUnits) >= 0 ? '+' : '')}${this.getNetTuningPercent(this.tuningBaseUnits)}%)`);
+                    const toastMsg = this.tuningEnabled
+                        ? `Tuned average applied (Min ${this.tuningMinFloor || 0}k | Max ${this.tuningMaxCeiling || 0}k | ${(this.getNetTuningPercent(this.tuningBaseUnits) >= 0 ? '+' : '')}${this.getNetTuningPercent(this.tuningBaseUnits)}%)`
+                        : 'Pure dynamic Smart Average restored (tweaking overlay off)';
+                    this.showToastNotification('⚡', toastMsg);
                 },
 
                 getCompoundedStepsDetails(base = 50) {
@@ -1383,6 +1404,9 @@ function dashboardApp() {
                 },
 
                 getCompoundedUnits(base = 50) {
+                    if (!this.tuningEnabled) {
+                        return base;
+                    }
                     let cur = base;
                     for (const step of this.avgTuningSteps) {
                         cur = cur * (1 + (step / 100));
@@ -1398,6 +1422,9 @@ function dashboardApp() {
                 },
 
                 getNetTuningPercent(base = 50) {
+                    if (!this.tuningEnabled) {
+                        return 0;
+                    }
                     if (this.avgTuningSteps.length === 0) {
                         return this.avgAdjustmentPercent || 0;
                     }

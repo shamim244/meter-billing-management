@@ -17,6 +17,7 @@ class DashboardSmartAvgGuardrailsTest extends TestCase
     {
         $user = User::factory()->create();
         $response = $this->actingAs($user)->postJson('/dashboard/tuning', [
+            'tuning_enabled' => true,
             'percent' => 10,
             'steps' => [10],
             'base_units' => 50,
@@ -30,10 +31,17 @@ class DashboardSmartAvgGuardrailsTest extends TestCase
         $response->assertJson([
             'success' => true,
         ]);
+        $this->assertTrue(session('dashboard_tuning_enabled'));
         $this->assertEquals(30, session('dashboard_tuning_min_floor'));
         $this->assertEquals(150, session('dashboard_tuning_max_ceiling'));
         $this->assertTrue(session('dashboard_tuning_auto_exclude_overposted'));
         $this->assertTrue(session('dashboard_tuning_exclude_critical_doubt'));
+
+        // Reset tuning back to baseline normal
+        $resetRes = $this->actingAs($user)->postJson('/dashboard/tuning/reset');
+        $resetRes->assertOk();
+        $this->assertNull(session('dashboard_tuning_enabled'));
+        $this->assertNull(session('dashboard_tuning_min_floor'));
     }
 
     public function test_individual_ca_average_tuning_endpoint_updates_consumer_profile(): void
@@ -143,6 +151,7 @@ class DashboardSmartAvgGuardrailsTest extends TestCase
             'month' => 10,
             'year' => 2026,
             'mru_id' => $mru->id,
+            'tuning_enabled' => true,
             'min_units_floor' => 30,
             'max_units_ceiling' => 150,
             'auto_exclude_overposted' => true,

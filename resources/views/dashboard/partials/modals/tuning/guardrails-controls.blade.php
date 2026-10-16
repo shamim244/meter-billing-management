@@ -9,15 +9,29 @@
               x-text="'Batch Excluded: ' + getExcludedCount() + ' CAs'"></span>
     </div>
 
+    <!-- Master Tweaking Enable Toggle -->
+    <div class="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <label class="flex items-start gap-2.5 cursor-pointer select-none">
+            <input type="checkbox" x-model="tuningEnabled" class="mt-0.5 rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 h-4 w-4" />
+            <div>
+                <span class="text-xs font-bold text-slate-800 dark:text-slate-100 block">Enable Tweaking Overlay for this Session / MRU</span>
+                <span class="text-[10px] text-slate-400">When OFF, system uses pure dynamic Smart Average from OK history with zero clamps.</span>
+            </div>
+        </label>
+        <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full shrink-0"
+              :class="tuningEnabled ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'"
+              x-text="tuningEnabled ? 'TWEAKING ON' : 'DYNAMIC BASE'"></span>
+    </div>
+
     <!-- Min Floor & Max Ceiling Controls -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" :class="{'opacity-50 pointer-events-none': !tuningEnabled}">
         <div class="flex items-center justify-between bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
             <div>
                 <label class="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">Min Floor Clamp</label>
-                <span class="text-[10px] text-slate-400">Never project below</span>
+                <span class="text-[10px] text-slate-400">Never project below (0 = off)</span>
             </div>
             <div class="flex items-center gap-1.5">
-                <input type="number" min="0" max="1000" x-model.number="tuningMinFloor" class="w-16 py-1 px-2 text-center text-xs font-bold font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-indigo-500" />
+                <input type="number" min="0" max="1000" x-model.number="tuningMinFloor" :disabled="!tuningEnabled" class="w-16 py-1 px-2 text-center text-xs font-bold font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-indigo-500" />
                 <span class="text-[11px] font-bold text-slate-400">kWh</span>
             </div>
         </div>
@@ -25,10 +39,10 @@
         <div class="flex items-center justify-between bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
             <div>
                 <label class="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">Max Ceiling Clamp</label>
-                <span class="text-[10px] text-slate-400">Cap runaway projections</span>
+                <span class="text-[10px] text-slate-400">Cap runaway projections (0 = off)</span>
             </div>
             <div class="flex items-center gap-1.5">
-                <input type="number" min="0" max="5000" x-model.number="tuningMaxCeiling" class="w-16 py-1 px-2 text-center text-xs font-bold font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-indigo-500" />
+                <input type="number" min="0" max="5000" x-model.number="tuningMaxCeiling" :disabled="!tuningEnabled" class="w-16 py-1 px-2 text-center text-xs font-bold font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-indigo-500" />
                 <span class="text-[11px] font-bold text-slate-400">kWh</span>
             </div>
         </div>

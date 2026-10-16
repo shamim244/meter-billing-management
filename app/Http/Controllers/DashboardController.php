@@ -609,18 +609,27 @@ class DashboardController extends Controller
             $adjPercent = (float) session('dashboard_tuning_percent', 0);
         }
 
+        $tuningEnabled = $request->boolean('tuning_enabled', session('dashboard_tuning_enabled', false));
+        if ($adjPercent != 0 || ! empty($tuningSteps)) {
+            $tuningEnabled = true;
+        }
+
         $colorSafeCeiling = (float) SystemSetting::get('color_amount_safe_ceiling', 500.0);
         $colorDangerFloor = (float) SystemSetting::get('color_amount_danger_floor', 2500.0);
         $unitsSafeCeiling = (int) SystemSetting::get('color_units_safe_ceiling', 50);
         $unitsDangerFloor = (int) SystemSetting::get('color_units_danger_floor', 200);
 
-        $minUnitsFloor = (int) $request->input('min_units_floor', session('dashboard_tuning_min_floor', SystemSetting::get('smart_avg_min_floor', 0)));
-        $maxUnitsCeiling = (int) $request->input('max_units_ceiling', session('dashboard_tuning_max_ceiling', SystemSetting::get('smart_avg_max_ceiling', 0)));
-        $autoExcludeOverposted = (bool) $request->input('auto_exclude_overposted', session('dashboard_tuning_auto_exclude_overposted', SystemSetting::get('smart_avg_auto_exclude_overposted', true)));
-        $excludeCriticalDoubt = (bool) $request->input('exclude_critical_doubt', session('dashboard_tuning_exclude_critical_doubt', SystemSetting::get('smart_avg_auto_exclude_critical_doubt', false)));
+        $minUnitsFloor = $tuningEnabled
+            ? (int) $request->input('min_units_floor', session('dashboard_tuning_min_floor', 0))
+            : 0;
+        $maxUnitsCeiling = $tuningEnabled
+            ? (int) $request->input('max_units_ceiling', session('dashboard_tuning_max_ceiling', 0))
+            : 0;
+        $autoExcludeOverposted = (bool) $request->input('auto_exclude_overposted', session('dashboard_tuning_auto_exclude_overposted', true));
+        $excludeCriticalDoubt = (bool) $request->input('exclude_critical_doubt', session('dashboard_tuning_exclude_critical_doubt', false));
 
         // Attach review_status, remark, and 4-Box Reading Metrics (ONLY for paginated CAs)
-        $items = $paginatedRecords->map(function ($bill) use ($userStatusModels, $historicalBills, $meterHistories, $basisHistories, $consumers, $month, $year, $adjPercent, $tuningSteps, $colorSafeCeiling, $colorDangerFloor, $unitsSafeCeiling, $unitsDangerFloor, $minUnitsFloor, $maxUnitsCeiling, $autoExcludeOverposted, $excludeCriticalDoubt) {
+        $items = $paginatedRecords->map(function ($bill) use ($userStatusModels, $historicalBills, $meterHistories, $basisHistories, $consumers, $month, $year, $adjPercent, $tuningSteps, $colorSafeCeiling, $colorDangerFloor, $unitsSafeCeiling, $unitsDangerFloor, $minUnitsFloor, $maxUnitsCeiling, $autoExcludeOverposted, $excludeCriticalDoubt, $tuningEnabled) {
             $st = $userStatusModels[$bill->ca_number] ?? null;
             $bill->review_status = ! empty($bill->review_status) && $bill->review_status !== 'pending' ? $bill->review_status : ($st ? $st->status : ($bill->review_status ?: 'pending'));
             $bill->remark = ! empty($bill->remark) ? $bill->remark : ($st ? ($st->remark ?? '') : '');
@@ -699,6 +708,7 @@ class DashboardController extends Controller
             $isCriticalDoubt = in_array(strtolower(trim($bill->review_status ?? '')), ['critical', 'doubt']);
 
             $guardrails = [
+                'tuning_enabled' => $tuningEnabled,
                 'min_units_floor' => $minUnitsFloor,
                 'max_units_ceiling' => $maxUnitsCeiling,
                 'custom_avg_units' => $consumerAcc?->custom_avg_units ?? $bill->custom_avg_units ?? null,
@@ -1206,12 +1216,21 @@ class DashboardController extends Controller
 
         $bills = $query->get();
 
-        $minUnitsFloor = (int) $request->input('min_units_floor', session('dashboard_tuning_min_floor', SystemSetting::get('smart_avg_min_floor', 0)));
-        $maxUnitsCeiling = (int) $request->input('max_units_ceiling', session('dashboard_tuning_max_ceiling', SystemSetting::get('smart_avg_max_ceiling', 0)));
-        $autoExcludeOverposted = (bool) $request->input('auto_exclude_overposted', session('dashboard_tuning_auto_exclude_overposted', SystemSetting::get('smart_avg_auto_exclude_overposted', true)));
-        $excludeCriticalDoubt = (bool) $request->input('exclude_critical_doubt', session('dashboard_tuning_exclude_critical_doubt', SystemSetting::get('smart_avg_auto_exclude_critical_doubt', false)));
+        $tuningEnabled = $request->boolean('tuning_enabled', session('dashboard_tuning_enabled', false));
+        if ($adjPercent != 0 || ! empty($tuningSteps)) {
+            $tuningEnabled = true;
+        }
 
-        $result = DB::transaction(function () use ($userId, $isAdmin, $bills, $month, $year, $adjPercent, $tuningSteps, $minUnitsFloor, $maxUnitsCeiling, $autoExcludeOverposted, $excludeCriticalDoubt) {
+        $minUnitsFloor = $tuningEnabled
+            ? (int) $request->input('min_units_floor', session('dashboard_tuning_min_floor', 0))
+            : 0;
+        $maxUnitsCeiling = $tuningEnabled
+            ? (int) $request->input('max_units_ceiling', session('dashboard_tuning_max_ceiling', 0))
+            : 0;
+        $autoExcludeOverposted = (bool) $request->input('auto_exclude_overposted', session('dashboard_tuning_auto_exclude_overposted', true));
+        $excludeCriticalDoubt = (bool) $request->input('exclude_critical_doubt', session('dashboard_tuning_exclude_critical_doubt', false));
+
+        $result = DB::transaction(function () use ($userId, $isAdmin, $bills, $month, $year, $adjPercent, $tuningSteps, $minUnitsFloor, $maxUnitsCeiling, $autoExcludeOverposted, $excludeCriticalDoubt, $tuningEnabled) {
             $count = 0;
             $skippedExcludedCount = 0;
             $caNumbers = $bills->pluck('ca_number')->unique()->values();
@@ -1278,6 +1297,7 @@ class DashboardController extends Controller
                 $isCriticalDoubt = in_array(strtolower(trim($bill->review_status ?? '')), ['critical', 'doubt']);
 
                 $guardrails = [
+                    'tuning_enabled' => $tuningEnabled,
                     'min_units_floor' => $minUnitsFloor,
                     'max_units_ceiling' => $maxUnitsCeiling,
                     'custom_avg_units' => $consumer?->custom_avg_units ?? $bill->custom_avg_units ?? null,
@@ -1656,6 +1676,7 @@ class DashboardController extends Controller
     public function saveTuning(Request $request): JsonResponse
     {
         $request->validate([
+            'tuning_enabled' => 'nullable|boolean',
             'percent' => 'nullable|numeric|min:-90|max:300',
             'steps' => 'nullable|array',
             'steps.*' => 'numeric|min:-90|max:300',
@@ -1666,6 +1687,7 @@ class DashboardController extends Controller
             'exclude_critical_doubt' => 'nullable|boolean',
         ]);
 
+        $tuningEnabled = $request->has('tuning_enabled') ? (bool) $request->input('tuning_enabled') : null;
         $percent = (float) $request->input('percent', 0);
         $steps = $request->input('steps', []);
         $baseUnits = (int) $request->input('base_units', 50);
@@ -1679,6 +1701,9 @@ class DashboardController extends Controller
             'dashboard_tuning_percent' => $percent,
             'dashboard_tuning_steps' => $steps,
         ];
+        if ($tuningEnabled !== null) {
+            $sessionData['dashboard_tuning_enabled'] = $tuningEnabled;
+        }
         if ($minFloor !== null) {
             $sessionData['dashboard_tuning_min_floor'] = $minFloor;
         }
@@ -1707,6 +1732,7 @@ class DashboardController extends Controller
             'success' => true,
             'message' => 'Average tuning preferences updated',
             'tuning' => [
+                'tuning_enabled' => $tuningEnabled ?? session('dashboard_tuning_enabled', false),
                 'percent' => $percent,
                 'steps' => $steps,
                 'base_units' => $baseUnits,
@@ -1727,6 +1753,7 @@ class DashboardController extends Controller
     public function resetTuning(Request $request): JsonResponse
     {
         session()->forget([
+            'dashboard_tuning_enabled',
             'dashboard_tuning_percent',
             'dashboard_tuning_steps',
             'dashboard_tuning_min_floor',
