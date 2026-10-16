@@ -2,13 +2,19 @@
 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
     <div>
         <div class="flex items-center gap-2 mb-2">
-            <a href="{{ route('dashboard') }}" class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-cyan-400 transition">
-                <span>←</span> Dashboard
-            </a>
-            <span class="text-slate-400 dark:text-slate-600">/</span>
-            <a href="{{ route('reading-gap.index') }}" class="inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-cyan-400 transition">
-                Reading Gap Hub
-            </a>
+            @if(($fromHub ?? null) === 'reading-gap')
+                <a href="{{ route('reading-gap.index') }}" class="inline-flex items-center gap-1.5 text-xs font-bold text-brand-600 dark:text-cyan-400 hover:underline transition">
+                    <span>←</span> Reading Gap Hub
+                </a>
+            @else
+                <a href="{{ route('dashboard') }}" class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-cyan-400 transition">
+                    <span>←</span> Dashboard
+                </a>
+                <span class="text-slate-400 dark:text-slate-600">/</span>
+                <a href="{{ route('reading-gap.index') }}" class="inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-cyan-400 transition">
+                    Reading Gap Hub
+                </a>
+            @endif
             <span class="text-slate-400 dark:text-slate-600">/</span>
             <span class="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">{{ $account->ca_number }}</span>
         </div>

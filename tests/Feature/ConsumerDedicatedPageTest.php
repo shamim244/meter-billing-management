@@ -120,6 +120,25 @@ class ConsumerDedicatedPageTest extends TestCase
             ->assertSee('Alias Route Consumer');
     }
 
+    public function test_reading_gap_route_renders_consumer_page_with_gap_tab_by_default(): void
+    {
+        $user = User::factory()->create();
+        $consumer = ConsumerAccount::create([
+            'user_id' => $user->id,
+            'ca_number' => '88880002227',
+            'consumer_name' => 'Reading Gap Linked Consumer',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('reading-gap.consumer', ['ca' => $consumer->ca_number]));
+
+        $response->assertOk()
+            ->assertViewIs('consumers.show')
+            ->assertViewHas('defaultTab', 'gap')
+            ->assertViewHas('fromHub', 'reading-gap')
+            ->assertSee('Reading Gap Linked Consumer')
+            ->assertSee('Reading Gap Hub');
+    }
+
     public function test_operator_cannot_view_another_operators_consumer(): void
     {
         $operator1 = User::factory()->create();

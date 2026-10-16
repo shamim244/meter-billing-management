@@ -33,8 +33,10 @@
                     <tr class="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition">
                         <!-- CA & Name -->
                         <td class="py-3 px-4">
-                            <div class="font-bold text-slate-900 dark:text-white" x-text="c.consumer_name"></div>
-                            <div class="font-mono text-[11px] text-slate-400" x-text="c.ca_number"></div>
+                            <a :href="'/reading-gap/' + c.ca_number" class="group block" title="Open Reading Gap 360 Workspace">
+                                <div class="font-bold text-slate-900 dark:text-white group-hover:text-brand-600 dark:group-hover:text-cyan-400 transition" x-text="c.consumer_name"></div>
+                                <div class="font-mono text-[11px] text-slate-400 group-hover:text-brand-500 dark:group-hover:text-cyan-400/80 transition" x-text="c.ca_number"></div>
+                            </a>
                         </td>
                         <!-- MRU & Tariff -->
                         <td class="py-3 px-3">
@@ -94,6 +96,7 @@
                         <!-- Quick Actions -->
                         <td class="py-3 px-4 text-center">
                             <div class="inline-flex items-center gap-1.5">
+                                <a :href="'/reading-gap/' + c.ca_number" class="p-1.5 rounded-lg bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 transition" title="Open Reading Gap 360 Workspace"><span>⚖️</span></a>
                                 <button type="button" @click="openInspectionModal(c)" class="p-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/40 text-brand-600 dark:text-cyan-400" title="Record Physical Inspection"><span>🔍</span></button>
                                 <button type="button" @click="openInspectionHistoryModal(c)" class="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400" title="View, Edit & Manage Physical Visits"><span>📜</span></button>
                                 <button type="button" @click="openMeterSwapModal(c)" class="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300" title="Meter Swap / Replacement"><span>🔄</span></button>

@@ -96,7 +96,9 @@ class ConsumerController extends Controller
             'latest_bill_month' => $latestBill ? $latestBill->billing_month.'/'.$latestBill->billing_year : 'N/A',
         ];
 
-        $defaultTab = $request->query('tab', 'overview');
+        $isReadingGapRoute = $request->routeIs('reading-gap.consumer');
+        $defaultTab = $request->query('tab', $isReadingGapRoute ? 'gap' : 'overview');
+        $fromHub = $request->query('from', $isReadingGapRoute ? 'reading-gap' : null);
 
         return view('consumers.show', compact(
             'account',
@@ -107,7 +109,8 @@ class ConsumerController extends Controller
             'fieldDeskActions',
             'meterMatrix',
             'stats',
-            'defaultTab'
+            'defaultTab',
+            'fromHub'
         ));
     }
 

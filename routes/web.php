@@ -135,6 +135,7 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
     Route::get('/reading-gap', [ReadingGapController::class, 'index'])->name('reading-gap.index');
     Route::get('/reading-gap/data', [ReadingGapController::class, 'getData'])->name('reading-gap.data');
     Route::get('/reading-gap/export-csv', [ReadingGapController::class, 'exportCsv'])->name('reading-gap.export-csv');
+    Route::get('/reading-gap/{ca}', [ConsumerController::class, 'show'])->name('reading-gap.consumer');
 
     // Reading Gap & Physical Meter Inspection API (PRD-13)
     Route::prefix('api/reading-gap')->name('api.reading-gap.')->middleware('throttle:60,1')->group(function () {
