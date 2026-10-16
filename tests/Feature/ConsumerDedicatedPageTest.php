@@ -120,7 +120,7 @@ class ConsumerDedicatedPageTest extends TestCase
             ->assertSee('Alias Route Consumer');
     }
 
-    public function test_reading_gap_route_renders_consumer_page_with_gap_tab_by_default(): void
+    public function test_reading_gap_route_renders_dedicated_forensic_dossier_page(): void
     {
         $user = User::factory()->create();
         $consumer = ConsumerAccount::create([
@@ -132,11 +132,19 @@ class ConsumerDedicatedPageTest extends TestCase
         $response = $this->actingAs($user)->get(route('reading-gap.consumer', ['ca' => $consumer->ca_number]));
 
         $response->assertOk()
-            ->assertViewIs('consumers.show')
-            ->assertViewHas('defaultTab', 'gap')
-            ->assertViewHas('fromHub', 'reading-gap')
-            ->assertSee('Reading Gap Linked Consumer')
-            ->assertSee('Reading Gap Hub');
+            ->assertViewIs('reading-gap.show')
+            ->assertViewHasAll([
+                'account',
+                'bills',
+                'gapSummary',
+                'inspections',
+                'comparativeLedger',
+                'financialExposure',
+            ])
+            ->assertSeeText('Reading Gap Linked Consumer')
+            ->assertSeeText('Reading Gap Hub')
+            ->assertSeeText('Forensic Recovery Strategy & Pacing Workbench')
+            ->assertSeeText('Comparative Reading Deviation Ledger');
     }
 
     public function test_operator_cannot_view_another_operators_consumer(): void

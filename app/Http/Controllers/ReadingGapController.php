@@ -500,4 +500,88 @@ class ReadingGapController extends Controller
             ],
         ]);
     }
+
+    /**
+     * Display the dedicated Reading Gap & Physical Meter Reconciliation Dossier page.
+     */
+    public function show(string $ca, Request $request): View
+    {
+        $userId = Auth::id();
+        /** @var User|null $currentUser */
+        $currentUser = Auth::user();
+        $isAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('admin');
+
+        $account = ConsumerAccount::withoutGlobalScopes()
+            ->with('mru')
+            ->where('ca_number', $ca)
+            ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
+            ->firstOrFail();
+
+        // 1. Bill Records
+        $bills = BillRecord::withoutGlobalScopes()
+            ->where('ca_number', $ca)
+            ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
+            ->orderBy('billing_year', 'desc')
+            ->orderBy('billing_month', 'desc')
+            ->get();
+
+        $latestBill = $bills->first();
+
+        // 2. Reading Gap Reconciliation Summary
+        $gapSummary = $this->gapService->getGapSummary($account, $latestBill);
+
+        // 3. Historical Physical Inspections with User Info
+        $inspections = MeterInspection::withoutGlobalScopes()
+            ->where('consumer_account_id', $account->id)
+            ->with('user:id,name,email')
+            ->orderByDesc('inspected_at')
+            ->orderByDesc('id')
+            ->get();
+
+        // 4. Comparative Ledger (Bill Posted Reading vs Nearest Physical Reading)
+        $comparativeLedger = $bills->map(function ($bill) use ($inspections) {
+            $billDate = $bill->bill_date ?? Carbon::createFromDate($bill->billing_year, $bill->billing_month, 1);
+
+            // Find nearest physical inspection within +/- 45 days of bill date
+            $nearestInspection = $inspections->first(function ($ins) use ($billDate) {
+                if (! $ins->inspected_at) {
+                    return false;
+                }
+
+                return abs($ins->inspected_at->diffInDays($billDate)) <= 45;
+            });
+
+            $posted = (int) ($bill->current_reading ?? $bill->previous_reading ?? 0);
+            $physical = $nearestInspection ? (int) $nearestInspection->physical_reading : null;
+            $deviation = $physical !== null ? ($physical - $posted) : null;
+
+            return [
+                'billing_period' => Carbon::createFromDate($bill->billing_year, $bill->billing_month, 1)->format('M, Y'),
+                'billing_month' => $bill->billing_month,
+                'billing_year' => $bill->billing_year,
+                'posted_reading' => $posted,
+                'units_consumed' => (int) $bill->units_consumed,
+                'total_amount' => (float) $bill->total_amount,
+                'nearest_physical' => $physical,
+                'nearest_inspection_date' => $nearestInspection?->inspected_at?->format('d M Y'),
+                'deviation' => $deviation,
+                'status' => $bill->status ?? 'OK',
+            ];
+        });
+
+        // 5. Estimated Financial Exposure (approx ₹6.50/kWh average tariff)
+        $ratePerKwh = 6.50;
+        $netGapUnits = abs((int) ($gapSummary['net_gap'] ?? 0));
+        $financialExposure = round($netGapUnits * $ratePerKwh, 2);
+
+        return view('reading-gap.show', compact(
+            'account',
+            'bills',
+            'latestBill',
+            'gapSummary',
+            'inspections',
+            'comparativeLedger',
+            'financialExposure'
+        ));
+    }
 }
