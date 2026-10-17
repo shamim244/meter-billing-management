@@ -1,5 +1,6 @@
 @php
     $isExpired = $key->expires_at && $key->expires_at->isPast();
+    $plainKey = $key->getPlainKey();
 @endphp
 <tr class="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
     <!-- Name -->
@@ -14,7 +15,7 @@
     </td>
 
     <!-- Key Prefix / Revealable Secret -->
-    <td class="py-4 px-6" x-data="apiKeyRow({{ $key->id }}, '{{ $key->key_prefix }}', {{ $key->isRevealable() ? 'true' : 'false' }})">
+    <td class="py-4 px-6" x-data="apiKeyRow({{ $key->id }}, '{{ $key->key_prefix }}', '{{ addslashes($plainKey ?? '') }}')">
         <div class="flex items-center gap-2">
             <!-- Masked state -->
             <div x-show="!revealed" class="flex items-center">
@@ -30,24 +31,21 @@
                 </code>
             </div>
 
-            @if($key->isRevealable())
+            @if($plainKey)
                 <!-- Reveal / Unreveal Toggle Button -->
                 <button type="button"
                         @click="toggleReveal()"
-                        :disabled="loading"
                         :title="revealed ? 'Hide API Key' : 'Reveal API Key'"
-                        class="p-1 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer disabled:opacity-50">
-                    <span x-show="loading" class="animate-spin text-xs">⏳</span>
-                    <span x-show="!loading && !revealed" class="text-xs">👁️</span>
-                    <span x-show="!loading && revealed" x-cloak class="text-xs">🙈</span>
+                        class="p-1 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer">
+                    <span x-show="!revealed" class="text-xs">👁️</span>
+                    <span x-show="revealed" x-cloak class="text-xs">🙈</span>
                 </button>
 
                 <!-- Copy Button -->
                 <button type="button"
                         @click="copyKey()"
-                        :disabled="loading"
                         title="Copy API Key to clipboard"
-                        class="p-1 rounded-lg text-slate-500 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer disabled:opacity-50">
+                        class="p-1 rounded-lg text-slate-500 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer">
                     <span x-show="!copied" class="text-xs">📋</span>
                     <span x-show="copied" x-cloak class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">✓ Copied!</span>
                 </button>
