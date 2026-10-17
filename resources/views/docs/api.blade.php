@@ -64,7 +64,7 @@
     <script>
         window.devPortalConfig = {
             baseUrl: '{{ $baseUrl }}',
-            initialApiKey: '{{ $activeKey ? session("new_api_key")["plain_text_token"] ?? "nbp_live_NVdxdbAW6UImuxuyFDzEr5xGXq3APyt5W7kU8O10" : "" }}'
+            initialApiKey: '{{ session("new_api_key")["plain_text_token"] ?? ($activeKey ?? "") }}'
         };
     </script>
     <script src="{{ asset('js/docs/api-docs-app.js') }}?v={{ file_exists(public_path('js/docs/api-docs-app.js')) ? filemtime(public_path('js/docs/api-docs-app.js')) : time() }}"></script>

@@ -32,8 +32,9 @@ class DocsController extends Controller
                 ->latest('id')
                 ->first();
 
-            // Masked prefix or session token if newly generated
-            $activeKey = $latestKey ? $latestKey->key_prefix.'••••••••' : null;
+            // Decrypted plain key if available, otherwise masked prefix or null
+            $plain = $latestKey?->getPlainKey();
+            $activeKey = $plain ?: ($latestKey ? $latestKey->key_prefix.'••••••••' : null);
             $latestKeyId = $latestKey?->id ?? 0;
             $latestKeyUpdated = $latestKey?->updated_at?->timestamp ?? 0;
             $userMrus = $user->mrus()->take(5)->get();

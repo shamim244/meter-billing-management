@@ -97,6 +97,34 @@ class OpenApiController extends Controller
                         ],
                     ],
                 ],
+                '/api-keys/{id}/reveal' => [
+                    'post' => [
+                        'summary' => 'Reveal Plain-Text API Key Secret',
+                        'description' => 'Decrypts and reveals the full secret API key for the authenticated user on demand.',
+                        'operationId' => 'revealApiKey',
+                        'parameters' => [
+                            ['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer'], 'description' => 'API Key ID'],
+                        ],
+                        'responses' => [
+                            '200' => [
+                                'description' => 'Plain-text key successfully revealed.',
+                                'content' => [
+                                    'application/json' => [
+                                        'example' => [
+                                            'success' => true,
+                                            'id' => 12,
+                                            'plain_key' => 'nbp_live_abc123...',
+                                            'message' => 'Key revealed successfully.',
+                                        ],
+                                    ],
+                                ],
+                            ],
+                            '404' => ['description' => 'Key not found.'],
+                            '422' => ['description' => 'Legacy key not decryptable.'],
+                            '401' => ['$ref' => '#/components/responses/UnauthorizedError'],
+                        ],
+                    ],
+                ],
                 '/mrus' => [
                     'get' => [
                         'summary' => 'List All MRU Workspaces',

@@ -7,6 +7,7 @@ use App\Models\ApiKey;
 use App\Models\ApiRequestLog;
 use App\Services\Api\ApiConfigurationService;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -196,6 +197,28 @@ class AdminApiHubController extends Controller
         return redirect()
             ->route('admin.api_hub.index', ['tab' => 'keys'])
             ->with('status', "API key '{$keyName}' ({$userName}) has been permanently revoked.");
+    }
+
+    /**
+     * Admin reveal plain-text secret for any API key (audit & support).
+     */
+    public function revealKey(ApiKey $apiKey): JsonResponse
+    {
+        $plainKey = $apiKey->getPlainKey();
+
+        if (! $plainKey) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This API key was created before reversible storage was enabled. Please regenerate.',
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'id' => $apiKey->id,
+            'plain_key' => $plainKey,
+            'message' => 'Key revealed successfully.',
+        ]);
     }
 
     /**

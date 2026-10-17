@@ -11,7 +11,7 @@
                         Save Your Secret API Key Now!
                     </h3>
                     <p class="text-xs text-amber-800 dark:text-amber-400/90 mt-1">
-                        For your security, this secret token will <strong>never be shown again</strong>. Copy and store it immediately in your Python script or password manager.
+                        Your secret API key has been generated and securely encrypted. You can copy it now, or view and copy it anytime from the table below using the <strong>Reveal / Unreveal (👁️)</strong> button.
                     </p>
                 </div>
 

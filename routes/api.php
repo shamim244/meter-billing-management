@@ -46,6 +46,7 @@ Route::prefix('v1')->middleware(['api.analytics', 'api.feature'])->group(functio
         Route::get('/api-keys', [ApiKeyManagementController::class, 'index']);
         Route::post('/api-keys', [ApiKeyManagementController::class, 'store']);
         Route::delete('/api-keys/{id}', [ApiKeyManagementController::class, 'destroy']);
+        Route::post('/api-keys/{id}/reveal', [ApiKeyManagementController::class, 'reveal']);
 
         // MRU Workspaces & Billing Cycles
         Route::get('/mrus', [MruApiController::class, 'index']);

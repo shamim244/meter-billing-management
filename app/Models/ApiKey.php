@@ -6,6 +6,7 @@ use DateTimeInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Str;
 
 class ApiKey extends Model
@@ -17,6 +18,7 @@ class ApiKey extends Model
         'name',
         'key_prefix',
         'key_hash',
+        'encrypted_key',
         'abilities',
         'last_used_at',
         'last_ip',
@@ -39,7 +41,7 @@ class ApiKey extends Model
 
     /**
      * Generate a new secure API key for the given user.
-     * Returns an array containing the Eloquent model and the plain-text key (shown only once).
+     * Returns an array containing the Eloquent model and the plain-text key.
      *
      * @return array{apiKey: self, plainTextToken: string}
      */
@@ -48,12 +50,14 @@ class ApiKey extends Model
         $plainKey = 'nbp_live_'.Str::random(40);
         $prefix = substr($plainKey, 0, 16);
         $hash = hash('sha256', $plainKey);
+        $encryptedKey = Crypt::encryptString($plainKey);
 
         $apiKey = self::create([
             'user_id' => $user->id,
             'name' => $name,
             'key_prefix' => $prefix,
             'key_hash' => $hash,
+            'encrypted_key' => $encryptedKey,
             'abilities' => $abilities ?? ['*'],
             'expires_at' => $expiresAt,
         ]);
@@ -62,6 +66,30 @@ class ApiKey extends Model
             'apiKey' => $apiKey,
             'plainTextToken' => $plainKey,
         ];
+    }
+
+    /**
+     * Decrypt and return the plain-text API key, or null if legacy/unencrypted.
+     */
+    public function getPlainKey(): ?string
+    {
+        if (empty($this->encrypted_key)) {
+            return null;
+        }
+
+        try {
+            return Crypt::decryptString($this->encrypted_key);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Determine whether this API key can be revealed / unrevealed.
+     */
+    public function isRevealable(): bool
+    {
+        return ! empty($this->encrypted_key);
     }
 
     /**

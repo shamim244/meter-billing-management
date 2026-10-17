@@ -206,6 +206,55 @@ class UserPanelTest extends TestCase
         $this->assertDatabaseHas('api_keys', ['id' => $keyId]);
     }
 
+    public function test_user_can_reveal_their_encrypted_api_key(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+
+        $gen = ApiKey::generate($user, 'Test Revealable Key');
+        $keyId = $gen['apiKey']->id;
+        $plainKey = $gen['plainTextToken'];
+
+        $response = $this->actingAs($user)->postJson(route('user-panel.api-keys.reveal', $keyId));
+
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('id', $keyId)
+            ->assertJsonPath('plain_key', $plainKey);
+    }
+
+    public function test_user_cannot_reveal_another_users_api_key(): void
+    {
+        $user1 = User::factory()->create(['status' => 'active']);
+        $user2 = User::factory()->create(['status' => 'active']);
+
+        $gen = ApiKey::generate($user2, 'User 2 Key');
+        $keyId = $gen['apiKey']->id;
+
+        $response = $this->actingAs($user1)->postJson(route('user-panel.api-keys.reveal', $keyId));
+
+        $response->assertStatus(404)
+            ->assertJsonPath('success', false);
+    }
+
+    public function test_legacy_api_key_without_encryption_returns_error_response(): void
+    {
+        $user = User::factory()->create(['status' => 'active']);
+
+        $legacyKey = ApiKey::create([
+            'user_id' => $user->id,
+            'name' => 'Legacy Key',
+            'key_prefix' => 'nbp_live_legacy1',
+            'key_hash' => hash('sha256', 'nbp_live_legacy12345'),
+            'encrypted_key' => null,
+            'abilities' => ['*'],
+        ]);
+
+        $response = $this->actingAs($user)->postJson(route('user-panel.api-keys.reveal', $legacyKey->id));
+
+        $response->assertStatus(422)
+            ->assertJsonPath('success', false);
+    }
+
     public function test_user_panel_api_keys_view_obeys_modularity_and_decoupling_standard(): void
     {
         $viewPath = resource_path('views/user-panel/api-keys.blade.php');

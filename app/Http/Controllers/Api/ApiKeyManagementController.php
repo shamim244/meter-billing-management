@@ -91,4 +91,38 @@ class ApiKeyManagementController extends Controller
             'message' => "API key '{$apiKey->name}' has been revoked successfully.",
         ]);
     }
+
+    /**
+     * Reveal the plain-text secret for an API key.
+     */
+    public function reveal(Request $request, int $id): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $apiKey = $user->apiKeys()->where('id', $id)->first();
+
+        if (! $apiKey) {
+            return response()->json([
+                'success' => false,
+                'message' => 'API key not found or does not belong to your account.',
+            ], 404);
+        }
+
+        $plainKey = $apiKey->getPlainKey();
+
+        if (! $plainKey) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This API key was created before the reversible storage feature was enabled. Please generate a new key.',
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'id' => $apiKey->id,
+            'plain_key' => $plainKey,
+            'message' => 'Key revealed successfully.',
+        ]);
+    }
 }

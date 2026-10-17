@@ -9,6 +9,7 @@ use App\Models\Plan;
 use App\Models\User;
 use App\Services\Api\ApiConfigurationService;
 use App\Services\Wallet\WalletService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -362,5 +363,39 @@ class UserPanelController extends Controller
 
         return redirect()->route('user-panel.api-keys')
             ->with('success', "API Key '{$keyName}' has been revoked successfully and can no longer be used.");
+    }
+
+    /**
+     * Reveal the plain-text secret for an API key owned by the authenticated user.
+     */
+    public function revealApiKey(Request $request, int $id): JsonResponse
+    {
+        /** @var User $user */
+        $user = Auth::user();
+
+        $apiKey = $user->apiKeys()->where('id', $id)->first();
+
+        if (! $apiKey) {
+            return response()->json([
+                'success' => false,
+                'message' => 'API Key not found or does not belong to your account.',
+            ], 404);
+        }
+
+        $plainKey = $apiKey->getPlainKey();
+
+        if (! $plainKey) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This API key was created before the reversible storage feature was enabled. Please generate a new key to enable reveal/unreveal.',
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'id' => $apiKey->id,
+            'plain_key' => $plainKey,
+            'message' => 'Key revealed successfully.',
+        ]);
     }
 }

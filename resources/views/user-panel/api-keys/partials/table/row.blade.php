@@ -13,11 +13,48 @@
         </div>
     </td>
 
-    <!-- Key Prefix Masked -->
-    <td class="py-4 px-6">
-        <code class="font-mono text-xs font-bold text-brand-600 dark:text-cyan-400 bg-brand-50 dark:bg-cyan-950/40 border border-brand-200/50 dark:border-cyan-800/40 px-2 py-0.5 rounded-md">
-            {{ $key->key_prefix }}••••••••
-        </code>
+    <!-- Key Prefix / Revealable Secret -->
+    <td class="py-4 px-6" x-data="apiKeyRow({{ $key->id }}, '{{ $key->key_prefix }}', {{ $key->isRevealable() ? 'true' : 'false' }})">
+        <div class="flex items-center gap-2">
+            <!-- Masked state -->
+            <div x-show="!revealed" class="flex items-center">
+                <code class="font-mono text-xs font-bold text-brand-600 dark:text-cyan-400 bg-brand-50 dark:bg-cyan-950/40 border border-brand-200/50 dark:border-cyan-800/40 px-2 py-0.5 rounded-md select-none">
+                    {{ $key->key_prefix }}••••••••
+                </code>
+            </div>
+
+            <!-- Revealed state -->
+            <div x-show="revealed" x-cloak class="flex items-center">
+                <code class="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/50 dark:border-emerald-800/40 px-2 py-0.5 rounded-md select-all"
+                      x-text="plainKey">
+                </code>
+            </div>
+
+            @if($key->isRevealable())
+                <!-- Reveal / Unreveal Toggle Button -->
+                <button type="button"
+                        @click="toggleReveal()"
+                        :disabled="loading"
+                        :title="revealed ? 'Hide API Key' : 'Reveal API Key'"
+                        class="p-1 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer disabled:opacity-50">
+                    <span x-show="loading" class="animate-spin text-xs">⏳</span>
+                    <span x-show="!loading && !revealed" class="text-xs">👁️</span>
+                    <span x-show="!loading && revealed" x-cloak class="text-xs">🙈</span>
+                </button>
+
+                <!-- Copy Button -->
+                <button type="button"
+                        @click="copyKey()"
+                        :disabled="loading"
+                        title="Copy API Key to clipboard"
+                        class="p-1 rounded-lg text-slate-500 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer disabled:opacity-50">
+                    <span x-show="!copied" class="text-xs">📋</span>
+                    <span x-show="copied" x-cloak class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">✓ Copied!</span>
+                </button>
+            @else
+                <span class="text-[10px] text-slate-400 italic" title="Legacy key created before reveal feature. Regenerate to enable reveal.">Legacy</span>
+            @endif
+        </div>
     </td>
 
     <!-- Status -->

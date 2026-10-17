@@ -108,6 +108,13 @@ class RestApiAndSyncTest extends TestCase
         $checkRes = $this->withHeader('X-API-Key', $newPlainKey)->getJson('/api/v1/auth/me');
         $checkRes->assertStatus(200);
 
+        // 2b. Test revealing the key via API
+        $revealRes = $this->withHeader('X-API-Key', $this->plainApiKey)->postJson("/api/v1/api-keys/{$newKeyId}/reveal");
+        $revealRes->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('id', $newKeyId)
+            ->assertJsonPath('plain_key', $newPlainKey);
+
         // 3. List keys
         $listRes = $this->withHeader('X-API-Key', $this->plainApiKey)->getJson('/api/v1/api-keys');
         $listRes->assertStatus(200);

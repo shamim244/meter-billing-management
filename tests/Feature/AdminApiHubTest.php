@@ -267,6 +267,26 @@ class AdminApiHubTest extends TestCase
         $this->assertEquals(0, ApiRequestLog::count());
     }
 
+    public function test_admin_can_reveal_key_and_non_admin_cannot(): void
+    {
+        $gen = ApiKey::generate($this->operatorUser, 'Operator Key For Admin Reveal');
+        $key = $gen['apiKey'];
+        $plainKey = $gen['plainTextToken'];
+
+        // 1. Non-admin is rejected
+        $nonAdminRes = $this->actingAs($this->operatorUser)
+            ->postJson(route('admin.api_hub.keys.reveal', $key));
+        $nonAdminRes->assertStatus(403);
+
+        // 2. Admin successfully reveals
+        $adminRes = $this->actingAs($this->adminUser)
+            ->postJson(route('admin.api_hub.keys.reveal', $key));
+        $adminRes->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('id', $key->id)
+            ->assertJsonPath('plain_key', $plainKey);
+    }
+
     public function test_api_hub_master_view_is_compact_under_60_lines(): void
     {
         $viewPath = resource_path('views/admin/api-hub/index.blade.php');

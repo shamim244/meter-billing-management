@@ -235,6 +235,7 @@ Route::middleware(['auth', 'verified', 'active', 'subscription.not_suspended'])-
         Route::get('/api-keys', [UserPanelController::class, 'apiKeys'])->name('api-keys');
         Route::post('/api-keys', [UserPanelController::class, 'storeApiKey'])->name('api-keys.store');
         Route::delete('/api-keys/{id}', [UserPanelController::class, 'revokeApiKey'])->name('api-keys.revoke');
+        Route::post('/api-keys/{id}/reveal', [UserPanelController::class, 'revealApiKey'])->name('api-keys.reveal');
     });
 });
 
@@ -312,6 +313,7 @@ Route::middleware(['auth', 'admin.restore_impersonation', 'role:admin', 'active'
     Route::post('/api-hub/settings', [AdminApiHubController::class, 'updateSettings'])->name('api_hub.settings.update');
     Route::post('/api-hub/reset', [AdminApiHubController::class, 'resetSettings'])->name('api_hub.settings.reset');
     Route::delete('/api-hub/keys/{apiKey}', [AdminApiHubController::class, 'revokeKey'])->name('api_hub.keys.revoke');
+    Route::post('/api-hub/keys/{apiKey}/reveal', [AdminApiHubController::class, 'revealKey'])->name('api_hub.keys.reveal');
     Route::post('/api-hub/analytics/clear', [AdminApiHubController::class, 'clearAnalytics'])->name('api_hub.analytics.clear');
 
     // Backward-compatible routes for rate-limits
