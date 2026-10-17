@@ -81,6 +81,27 @@ class DashboardSmartAvgGuardrailsTest extends TestCase
         $this->assertEquals('Defective slow meter under dispute', $consumer->avg_exclude_reason);
     }
 
+    public function test_individual_tuning_rejects_min_greater_than_max(): void
+    {
+        $user = User::factory()->create();
+        $consumer = ConsumerAccount::create([
+            'user_id' => $user->id,
+            'ca_number' => '99990098',
+            'consumer_name' => 'Test Inverted Bounds Consumer',
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/consumers/{$consumer->ca_number}/average-tuning", [
+            'min_avg_units' => 100,
+            'max_avg_units' => 40,
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJson([
+            'success' => false,
+        ]);
+        $this->assertStringContainsString('cannot be greater than Max Ceiling', (string) $response->json('message'));
+    }
+
     public function test_bulk_project_skips_excluded_and_overposted_accounts(): void
     {
         $user = User::factory()->create();

@@ -1477,6 +1477,12 @@ function dashboardApp() {
 
                 saveIndividualAverageTuning() {
                     if (!this.activeIndividualBill) return;
+                    const minVal = parseInt(this.individualMinUnits, 10);
+                    const maxVal = parseInt(this.individualMaxUnits, 10);
+                    if (!isNaN(minVal) && !isNaN(maxVal) && minVal > 0 && maxVal > 0 && minVal > maxVal) {
+                        this.showToastNotification('⚠️', `Min Floor (${minVal} kWh) cannot exceed Max Ceiling (${maxVal} kWh).`);
+                        return;
+                    }
                     const ca = this.activeIndividualBill.ca_number;
                     fetch(`/consumers/${ca}/average-tuning`, {
                         method: 'POST',
@@ -1487,8 +1493,8 @@ function dashboardApp() {
                         },
                         body: JSON.stringify({
                             custom_avg_units: this.individualCustomUnits || null,
-                            min_avg_units: this.individualMinUnits || null,
-                            max_avg_units: this.individualMaxUnits || null,
+                            min_avg_units: !isNaN(minVal) && minVal > 0 ? minVal : null,
+                            max_avg_units: !isNaN(maxVal) && maxVal > 0 ? maxVal : null,
                             is_avg_excluded: this.individualIsExcluded,
                             avg_exclude_reason: this.individualExcludeReason || null,
                             month: this.selectedMonth,
@@ -1501,9 +1507,14 @@ function dashboardApp() {
                             this.showIndividualAvgModal = false;
                             this.showToastNotification('🎯', res.message);
                             this.fetchData(this.pagination?.current_page || 1);
+                        } else {
+                            this.showToastNotification('⚠️', res.message || 'Error updating average tuning.');
                         }
                     })
-                    .catch(err => console.error(err));
+                    .catch(err => {
+                        console.error(err);
+                        this.showToastNotification('❌', 'Connection failed while updating average tuning.');
+                    });
                 },
 
                 // --- 2D METER READING HISTORY MODAL ---

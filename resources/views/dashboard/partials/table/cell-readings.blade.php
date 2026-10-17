@@ -74,7 +74,16 @@
         <template x-if="bill.is_custom_override">
             <span class="text-indigo-500 font-bold">🎯 Lock</span>
         </template>
-        <button type="button" @click.stop="openIndividualTuningModal(bill)" class="text-slate-400 hover:text-indigo-600 dark:hover:text-cyan-400 opacity-0 group-hover:opacity-100 transition">⚙️</button>
+        <template x-if="bill.is_clamped_min">
+            <span class="text-[8px] font-bold text-amber-500 font-mono">Floor</span>
+        </template>
+        <template x-if="bill.is_clamped_max">
+            <span class="text-[8px] font-bold text-rose-500 font-mono">Cap</span>
+        </template>
+        <button type="button" @click.stop="openIndividualTuningModal(bill)" 
+                :class="(bill.min_avg_units || bill.max_avg_units || bill.custom_avg_units || bill.is_avg_excluded) ? 'text-indigo-600 dark:text-cyan-400 opacity-100 font-bold' : 'text-slate-400 opacity-0 group-hover:opacity-100'"
+                class="hover:text-indigo-600 dark:hover:text-cyan-400 transition"
+                title="Configure individual override / exclusion">⚙️</button>
     </div>
 </td>
 

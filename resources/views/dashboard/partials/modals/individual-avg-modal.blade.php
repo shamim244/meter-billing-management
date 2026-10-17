@@ -54,6 +54,11 @@
                         <p class="text-[9px] text-slate-400 mt-0.5">Cap if avg &gt; max</p>
                     </div>
                 </div>
+                <template x-if="individualMinUnits && individualMaxUnits && parseInt(individualMinUnits) > parseInt(individualMaxUnits)">
+                    <div class="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-[10px] text-rose-600 dark:text-rose-400 font-bold">
+                        ⚠️ Min Floor cannot exceed Max Ceiling.
+                    </div>
+                </template>
             </div>
 
             <!-- Custom Units Override -->

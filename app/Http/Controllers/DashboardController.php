@@ -1794,6 +1794,13 @@ class DashboardController extends Controller
             'year' => 'nullable|integer|min:2020|max:2035',
         ]);
 
+        if (! empty($validated['min_avg_units']) && ! empty($validated['max_avg_units']) && (int) $validated['min_avg_units'] > (int) $validated['max_avg_units']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Min Floor ('.$validated['min_avg_units'].' kWh) cannot be greater than Max Ceiling ('.$validated['max_avg_units'].' kWh).',
+            ], 422);
+        }
+
         $consumer = ConsumerAccount::query()
             ->where('ca_number', $ca)
             ->where('user_id', $userId)

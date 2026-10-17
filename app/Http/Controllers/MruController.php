@@ -952,6 +952,11 @@ class MruController extends Controller
                         'reading_source' => $readingSourceToSave,
                         'review_status' => $reviewStatusToSave,
                         'download_status' => $existingCurrentBill ? $existingCurrentBill->download_status : 'pending',
+                        'custom_avg_units' => $existingCurrentBill?->custom_avg_units ?? $consumer->custom_avg_units,
+                        'min_avg_units' => $existingCurrentBill?->min_avg_units ?? $consumer->min_avg_units,
+                        'max_avg_units' => $existingCurrentBill?->max_avg_units ?? $consumer->max_avg_units,
+                        'is_avg_excluded' => (bool) ($existingCurrentBill?->is_avg_excluded ?? $consumer->is_avg_excluded ?? false),
+                        'avg_exclude_reason' => $existingCurrentBill?->avg_exclude_reason ?? $consumer->avg_exclude_reason,
                     ]
                 );
 

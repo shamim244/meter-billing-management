@@ -16,7 +16,13 @@
             <template x-if="bill.is_custom_override">
                 <span class="px-1.5 py-0.2 text-[9px] font-black rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-cyan-300 border border-indigo-200 dark:border-indigo-800">🎯 Lock</span>
             </template>
-            <button type="button" @click.stop="openIndividualTuningModal(bill)" class="text-[10px] text-slate-400 hover:text-indigo-600 dark:hover:text-cyan-400 px-1 py-0.5 rounded transition cursor-pointer" title="Configure individual override / exclusion">
+            <template x-if="(bill.min_avg_units || bill.max_avg_units) && !bill.is_custom_override && !bill.is_clamped_min && !bill.is_clamped_max">
+                <span class="px-1 py-0.2 text-[8px] font-bold rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950/80 dark:text-cyan-300 border border-indigo-200 dark:border-indigo-800">🛡️ Range</span>
+            </template>
+            <button type="button" @click.stop="openIndividualTuningModal(bill)" 
+                    class="text-[10px] px-1 py-0.5 rounded transition cursor-pointer"
+                    :class="(bill.min_avg_units || bill.max_avg_units || bill.custom_avg_units || bill.is_avg_excluded) ? 'text-indigo-600 dark:text-cyan-400 bg-indigo-50 dark:bg-indigo-950 font-bold border border-indigo-200 dark:border-indigo-800' : 'text-slate-400 hover:text-indigo-600 dark:hover:text-cyan-400'"
+                    title="Configure individual override / exclusion">
                 ⚙️
             </button>
         </div>

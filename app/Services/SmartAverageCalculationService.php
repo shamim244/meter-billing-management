@@ -517,8 +517,7 @@ class SmartAverageCalculationService
                 $avgLabel = ($indivMin !== null && $indivMin > 0)
                     ? "{$avgUnits} kWh (Min Floor {$indivMin})"
                     : "{$avgUnits} kWh (Min Floor Clamped)";
-            }
-            if ($effectiveMax > 0 && $avgUnits > $effectiveMax) {
+            } elseif ($effectiveMax > 0 && $avgUnits > $effectiveMax) {
                 $avgUnits = $effectiveMax;
                 $isClampedMax = true;
                 $avgLabel = ($indivMax !== null && $indivMax > 0)
