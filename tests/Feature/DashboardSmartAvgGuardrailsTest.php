@@ -55,6 +55,8 @@ class DashboardSmartAvgGuardrailsTest extends TestCase
 
         $response = $this->actingAs($user)->postJson("/consumers/{$consumer->ca_number}/average-tuning", [
             'custom_avg_units' => 75,
+            'min_avg_units' => 30,
+            'max_avg_units' => 120,
             'is_avg_excluded' => true,
             'avg_exclude_reason' => 'Defective slow meter under dispute',
         ]);
@@ -65,12 +67,16 @@ class DashboardSmartAvgGuardrailsTest extends TestCase
             'consumer' => [
                 'ca_number' => '99990099',
                 'custom_avg_units' => 75,
+                'min_avg_units' => 30,
+                'max_avg_units' => 120,
                 'is_avg_excluded' => true,
             ],
         ]);
 
         $consumer->refresh();
         $this->assertEquals(75, $consumer->custom_avg_units);
+        $this->assertEquals(30, $consumer->min_avg_units);
+        $this->assertEquals(120, $consumer->max_avg_units);
         $this->assertTrue($consumer->is_avg_excluded);
         $this->assertEquals('Defective slow meter under dispute', $consumer->avg_exclude_reason);
     }

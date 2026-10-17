@@ -131,6 +131,8 @@ function dashboardApp() {
                 showIndividualAvgModal: false,
                 activeIndividualBill: null,
                 individualCustomUnits: null,
+                individualMinUnits: null,
+                individualMaxUnits: null,
                 individualIsExcluded: false,
                 individualExcludeReason: '',
 
@@ -1437,9 +1439,40 @@ function dashboardApp() {
                     if (!bill) return;
                     this.activeIndividualBill = bill;
                     this.individualCustomUnits = bill.custom_avg_units || null;
+                    this.individualMinUnits = bill.min_avg_units || null;
+                    this.individualMaxUnits = bill.max_avg_units || null;
                     this.individualIsExcluded = !!bill.is_avg_excluded;
                     this.individualExcludeReason = bill.avg_exclude_reason || '';
                     this.showIndividualAvgModal = true;
+                },
+
+                getIndividualEffectivePreview() {
+                    if (!this.activeIndividualBill) return { units: 50, label: '50 kWh', status: 'normal' };
+                    if (this.individualIsExcluded) {
+                        return { units: 0, label: 'Excluded from Smart Average', status: 'excluded' };
+                    }
+                    if (this.individualCustomUnits && this.individualCustomUnits > 0) {
+                        return { units: this.individualCustomUnits, label: `${this.individualCustomUnits} kWh (Custom Fixed Override)`, status: 'custom' };
+                    }
+                    let base = this.activeIndividualBill.base_avg_units || 50;
+                    let units = base;
+                    let label = `${units} kWh (Baseline OK)`;
+                    let status = 'normal';
+
+                    const minFloor = parseInt(this.individualMinUnits, 10);
+                    const maxCeiling = parseInt(this.individualMaxUnits, 10);
+
+                    if (!isNaN(minFloor) && minFloor > 0 && units < minFloor) {
+                        units = minFloor;
+                        label = `${units} kWh (Clamped to Min Floor ${minFloor})`;
+                        status = 'clamped_min';
+                    } else if (!isNaN(maxCeiling) && maxCeiling > 0 && units > maxCeiling) {
+                        units = maxCeiling;
+                        label = `${units} kWh (Clamped to Max Ceiling ${maxCeiling})`;
+                        status = 'clamped_max';
+                    }
+
+                    return { units, label, status };
                 },
 
                 saveIndividualAverageTuning() {
@@ -1454,6 +1487,8 @@ function dashboardApp() {
                         },
                         body: JSON.stringify({
                             custom_avg_units: this.individualCustomUnits || null,
+                            min_avg_units: this.individualMinUnits || null,
+                            max_avg_units: this.individualMaxUnits || null,
                             is_avg_excluded: this.individualIsExcluded,
                             avg_exclude_reason: this.individualExcludeReason || null,
                             month: this.selectedMonth,

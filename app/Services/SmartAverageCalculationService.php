@@ -384,6 +384,15 @@ class SmartAverageCalculationService
 
         $isCustomOverride = ($customAvg !== null && $customAvg > 0);
 
+        // Individual Consumer Safe Range Limits (Floor & Ceiling)
+        $indivMin = isset($guardrails['min_avg_units']) && is_numeric($guardrails['min_avg_units'])
+            ? (int) $guardrails['min_avg_units']
+            : ($consumer?->min_avg_units ?? $currentBill?->min_avg_units ?? null);
+
+        $indivMax = isset($guardrails['max_avg_units']) && is_numeric($guardrails['max_avg_units'])
+            ? (int) $guardrails['max_avg_units']
+            : ($consumer?->max_avg_units ?? $currentBill?->max_avg_units ?? null);
+
         $minFloor = isset($guardrails['min_units_floor']) && is_numeric($guardrails['min_units_floor'])
             ? (int) $guardrails['min_units_floor']
             : (int) SystemSetting::get('smart_avg_min_floor', 0);
@@ -468,7 +477,7 @@ class SmartAverageCalculationService
             $isTuningActive = (! empty($tuningSteps) || (float) $tuningPercent != 0.0 || ! empty($tuningEnabledFlag));
         }
 
-        // Apply tweaking overlay (percentage tuning / compounding / min-max clamps) ONLY when tuning is active
+        // Apply tweaking overlay (percentage tuning / compounding) ONLY when tuning is active
         if ($isTuningActive && ! $isCustomOverride && ! $isExcluded) {
             if (! empty($tuningSteps)) {
                 $compounded = $this->compoundAdjustAverageUnits($baseUnits, $tuningSteps);
@@ -489,18 +498,37 @@ class SmartAverageCalculationService
                 $maxR = (int) round($avgUnits * 1.15);
                 $avgRange = "{$minR}–{$maxR} kWh";
             }
+        }
 
-            // Apply Minimum Floor & Maximum Ceiling Guardrails ONLY within active tweaking
-            if ($minFloor > 0 && $avgUnits < $minFloor) {
-                $avgUnits = $minFloor;
+        // Apply Minimum Floor & Maximum Ceiling Guardrails
+        // Individual consumer limits take priority and apply directly; batch MRU tweaking limits apply when tuning is active.
+        $effectiveMin = ($indivMin !== null && $indivMin > 0)
+            ? $indivMin
+            : ($isTuningActive && $minFloor > 0 ? $minFloor : 0);
+
+        $effectiveMax = ($indivMax !== null && $indivMax > 0)
+            ? $indivMax
+            : ($isTuningActive && $maxCeiling > 0 ? $maxCeiling : 0);
+
+        if (! $isCustomOverride && ! $isExcluded) {
+            if ($effectiveMin > 0 && $avgUnits < $effectiveMin) {
+                $avgUnits = $effectiveMin;
                 $isClampedMin = true;
-                $avgLabel = "{$avgUnits} kWh (Min Floor Clamped)";
+                $avgLabel = ($indivMin !== null && $indivMin > 0)
+                    ? "{$avgUnits} kWh (Min Floor {$indivMin})"
+                    : "{$avgUnits} kWh (Min Floor Clamped)";
             }
-
-            if ($maxCeiling > 0 && $avgUnits > $maxCeiling) {
-                $avgUnits = $maxCeiling;
+            if ($effectiveMax > 0 && $avgUnits > $effectiveMax) {
+                $avgUnits = $effectiveMax;
                 $isClampedMax = true;
-                $avgLabel = "{$avgUnits} kWh (Max Ceiling Clamped)";
+                $avgLabel = ($indivMax !== null && $indivMax > 0)
+                    ? "{$avgUnits} kWh (Max Ceiling {$indivMax})"
+                    : "{$avgUnits} kWh (Max Ceiling Clamped)";
+            }
+            if ($isClampedMin || $isClampedMax) {
+                $minR = max(1, (int) round($avgUnits * 0.85));
+                $maxR = (int) round($avgUnits * 1.15);
+                $avgRange = "{$minR}–{$maxR} kWh";
             }
         }
 
@@ -529,8 +557,10 @@ class SmartAverageCalculationService
             'is_custom_override' => $isCustomOverride,
             'is_clamped_min' => $isClampedMin,
             'is_clamped_max' => $isClampedMax,
-            'min_floor_applied' => $minFloor,
-            'max_ceiling_applied' => $maxCeiling,
+            'min_floor_applied' => $effectiveMin,
+            'max_ceiling_applied' => $effectiveMax,
+            'indiv_min_units' => $indivMin,
+            'indiv_max_units' => $indivMax,
         ];
     }
 

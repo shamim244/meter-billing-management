@@ -115,6 +115,57 @@ class SmartAverageGuardrailsCalculationTest extends TestCase
         $this->assertTrue($maxClamped['is_clamped_max']);
     }
 
+    public function test_individual_consumer_min_floor_and_max_ceiling_guardrails(): void
+    {
+        $service = app(SmartAverageCalculationService::class);
+
+        $lowHistory = collect([
+            (object) ['billing_month' => 9, 'billing_year' => 2026, 'units_consumed' => 15, 'billing_basis' => 'OK'],
+            (object) ['billing_month' => 8, 'billing_year' => 2026, 'units_consumed' => 15, 'billing_basis' => 'OK'],
+        ]);
+
+        // Individual min floor applies directly even when tweaking is OFF
+        $indivMinClamped = $service->calculateSmartAverage(
+            caNumber: '99990005',
+            month: 10,
+            year: 2026,
+            basis: 'OK',
+            currentBill: null,
+            consumer: null,
+            history: $lowHistory,
+            tuningPercent: 0,
+            tuningSteps: [],
+            meterHistory: collect(),
+            guardrails: ['min_avg_units' => 28, 'tuning_enabled' => false]
+        );
+        $this->assertEquals(28, $indivMinClamped['avg_units']);
+        $this->assertTrue($indivMinClamped['is_clamped_min']);
+        $this->assertStringContainsString('Min Floor 28', $indivMinClamped['label']);
+
+        $highHistory = collect([
+            (object) ['billing_month' => 9, 'billing_year' => 2026, 'units_consumed' => 90, 'billing_basis' => 'OK'],
+            (object) ['billing_month' => 8, 'billing_year' => 2026, 'units_consumed' => 90, 'billing_basis' => 'OK'],
+        ]);
+
+        // Individual max ceiling applies directly even when tweaking is OFF
+        $indivMaxClamped = $service->calculateSmartAverage(
+            caNumber: '99990006',
+            month: 10,
+            year: 2026,
+            basis: 'OK',
+            currentBill: null,
+            consumer: null,
+            history: $highHistory,
+            tuningPercent: 0,
+            tuningSteps: [],
+            meterHistory: collect(),
+            guardrails: ['max_avg_units' => 55, 'tuning_enabled' => false]
+        );
+        $this->assertEquals(55, $indivMaxClamped['avg_units']);
+        $this->assertTrue($indivMaxClamped['is_clamped_max']);
+        $this->assertStringContainsString('Max Ceiling 55', $indivMaxClamped['label']);
+    }
+
     public function test_overposted_and_manual_exclusion(): void
     {
         $service = app(SmartAverageCalculationService::class);

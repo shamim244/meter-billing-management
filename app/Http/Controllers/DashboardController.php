@@ -711,6 +711,8 @@ class DashboardController extends Controller
                 'tuning_enabled' => $tuningEnabled,
                 'min_units_floor' => $minUnitsFloor,
                 'max_units_ceiling' => $maxUnitsCeiling,
+                'min_avg_units' => $consumerAcc?->min_avg_units ?? $bill->min_avg_units ?? null,
+                'max_avg_units' => $consumerAcc?->max_avg_units ?? $bill->max_avg_units ?? null,
                 'custom_avg_units' => $consumerAcc?->custom_avg_units ?? $bill->custom_avg_units ?? null,
                 'is_avg_excluded' => (bool) ($consumerAcc?->is_avg_excluded ?? $bill->is_avg_excluded ?? false),
                 'avg_exclude_reason' => $consumerAcc?->avg_exclude_reason ?? $bill->avg_exclude_reason ?? null,
@@ -746,6 +748,8 @@ class DashboardController extends Controller
             $bill->avg_exclude_reason = $avgCalc['exclude_reason'];
             $bill->is_custom_override = (bool) $avgCalc['is_custom_override'];
             $bill->custom_avg_units = $avgCalc['is_custom_override'] ? $avgCalc['avg_units'] : ($consumerAcc?->custom_avg_units ?? $bill->custom_avg_units ?? null);
+            $bill->min_avg_units = $avgCalc['indiv_min_units'] ?? ($consumerAcc?->min_avg_units ?? $bill->min_avg_units ?? null);
+            $bill->max_avg_units = $avgCalc['indiv_max_units'] ?? ($consumerAcc?->max_avg_units ?? $bill->max_avg_units ?? null);
             $bill->is_clamped_min = (bool) $avgCalc['is_clamped_min'];
             $bill->is_clamped_max = (bool) $avgCalc['is_clamped_max'];
             $bill->is_over_posted = $isOverPosted;
@@ -1300,6 +1304,8 @@ class DashboardController extends Controller
                     'tuning_enabled' => $tuningEnabled,
                     'min_units_floor' => $minUnitsFloor,
                     'max_units_ceiling' => $maxUnitsCeiling,
+                    'min_avg_units' => $consumer?->min_avg_units ?? $bill->min_avg_units ?? null,
+                    'max_avg_units' => $consumer?->max_avg_units ?? $bill->max_avg_units ?? null,
                     'custom_avg_units' => $consumer?->custom_avg_units ?? $bill->custom_avg_units ?? null,
                     'is_avg_excluded' => (bool) ($consumer?->is_avg_excluded ?? $bill->is_avg_excluded ?? false),
                     'avg_exclude_reason' => $consumer?->avg_exclude_reason ?? $bill->avg_exclude_reason ?? null,
@@ -1780,6 +1786,8 @@ class DashboardController extends Controller
 
         $validated = $request->validate([
             'custom_avg_units' => 'nullable|integer|min:1|max:5000',
+            'min_avg_units' => 'nullable|integer|min:0|max:5000',
+            'max_avg_units' => 'nullable|integer|min:0|max:5000',
             'is_avg_excluded' => 'nullable|boolean',
             'avg_exclude_reason' => 'nullable|string|max:100',
             'month' => 'nullable|integer|min:1|max:12',
@@ -1788,8 +1796,15 @@ class DashboardController extends Controller
 
         $consumer = ConsumerAccount::query()
             ->where('ca_number', $ca)
-            ->when(! $isAdmin, fn ($q) => $q->where('user_id', $userId))
+            ->where('user_id', $userId)
             ->first();
+
+        if (! $consumer && $isAdmin) {
+            $consumer = ConsumerAccount::query()
+                ->where('ca_number', $ca)
+                ->where('user_id', '!=', 9)
+                ->first();
+        }
 
         if (! $consumer) {
             $consumer = ConsumerAccount::create([
@@ -1797,12 +1812,16 @@ class DashboardController extends Controller
                 'ca_number' => $ca,
                 'consumer_name' => "Consumer {$ca}",
                 'custom_avg_units' => $validated['custom_avg_units'] ?? null,
+                'min_avg_units' => $validated['min_avg_units'] ?? null,
+                'max_avg_units' => $validated['max_avg_units'] ?? null,
                 'is_avg_excluded' => (bool) ($validated['is_avg_excluded'] ?? false),
                 'avg_exclude_reason' => $validated['avg_exclude_reason'] ?? null,
             ]);
         } else {
             $consumer->update([
                 'custom_avg_units' => array_key_exists('custom_avg_units', $validated) ? $validated['custom_avg_units'] : $consumer->custom_avg_units,
+                'min_avg_units' => array_key_exists('min_avg_units', $validated) ? $validated['min_avg_units'] : $consumer->min_avg_units,
+                'max_avg_units' => array_key_exists('max_avg_units', $validated) ? $validated['max_avg_units'] : $consumer->max_avg_units,
                 'is_avg_excluded' => array_key_exists('is_avg_excluded', $validated) ? (bool) $validated['is_avg_excluded'] : $consumer->is_avg_excluded,
                 'avg_exclude_reason' => array_key_exists('avg_exclude_reason', $validated) ? $validated['avg_exclude_reason'] : $consumer->avg_exclude_reason,
             ]);
@@ -1816,9 +1835,11 @@ class DashboardController extends Controller
                 ->where('ca_number', $ca)
                 ->where('billing_month', $month)
                 ->where('billing_year', $year)
-                ->when(! $isAdmin, fn ($q) => $q->where('user_id', $userId))
+                ->where('user_id', $userId)
                 ->update([
                     'custom_avg_units' => $consumer->custom_avg_units,
+                    'min_avg_units' => $consumer->min_avg_units,
+                    'max_avg_units' => $consumer->max_avg_units,
                     'is_avg_excluded' => $consumer->is_avg_excluded,
                     'avg_exclude_reason' => $consumer->avg_exclude_reason,
                 ]);
@@ -1830,6 +1851,8 @@ class DashboardController extends Controller
             'consumer' => [
                 'ca_number' => $consumer->ca_number,
                 'custom_avg_units' => $consumer->custom_avg_units,
+                'min_avg_units' => $consumer->min_avg_units,
+                'max_avg_units' => $consumer->max_avg_units,
                 'is_avg_excluded' => (bool) $consumer->is_avg_excluded,
                 'avg_exclude_reason' => $consumer->avg_exclude_reason,
             ],
