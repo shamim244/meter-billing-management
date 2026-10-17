@@ -37,6 +37,8 @@ class AutomationController extends Controller
         $mruId = $request->input('mru_id');
         $cycle = $request->input('cycle'); // e.g. "SEP-2026" or "09-2026"
         $statusFilter = strtolower($request->input('status', 'unsubmitted'));
+        $applyTuning = filter_var($request->input('apply_tuning', false), FILTER_VALIDATE_BOOLEAN)
+            || filter_var($request->input('include_tuning', false), FILTER_VALIDATE_BOOLEAN);
         $limit = min((int) $request->input('limit', 50), 250);
 
         // Resolve MRU if provided
@@ -136,16 +138,20 @@ class AutomationController extends Controller
             ->get()
             ->groupBy('ca_number');
 
-        $formatted = $bills->map(function (BillRecord $bill) use ($consumers, $historicalBills, $meterHistories) {
+        $formatted = $bills->map(function (BillRecord $bill) use ($consumers, $historicalBills, $meterHistories, $applyTuning) {
             $consumer = $consumers->get($bill->ca_number);
             $history = $historicalBills->get($bill->ca_number, collect());
             $mrhForCa = $meterHistories->get($bill->ca_number, collect());
 
+            $guardrails = $applyTuning ? [] : ['tuning_enabled' => false];
             $resolved = $this->smartAverageService->resolveWorkingAndSuggestedReading(
                 $bill,
                 $consumer,
                 $history,
-                $mrhForCa
+                $mrhForCa,
+                0,
+                [],
+                $guardrails
             );
 
             $consumerName = ! empty($bill->consumer_name) && ! str_starts_with($bill->consumer_name, 'Consumer ')
@@ -165,6 +171,8 @@ class AutomationController extends Controller
                 'previous_reading' => $resolved['previous_reading'],
                 'working_reading' => $resolved['working_reading'],
                 'smart_average_kwh' => $resolved['smart_average_kwh'],
+                'base_avg_units' => (int) ($resolved['base_avg_units'] ?? $resolved['smart_average_kwh']),
+                'tuned_avg_units' => $resolved['tuned_avg_units'] ?? null,
                 'suggested_reading' => $resolved['suggested_reading'],
                 'min_avg_units' => $consumer?->min_avg_units ?? $bill->min_avg_units,
                 'max_avg_units' => $consumer?->max_avg_units ?? $bill->max_avg_units,

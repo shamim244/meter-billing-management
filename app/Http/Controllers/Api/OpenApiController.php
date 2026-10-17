@@ -162,12 +162,13 @@ class OpenApiController extends Controller
                             ['name' => 'sort_asc', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'boolean'], 'description' => 'Ascending (true) or Descending (false)'],
                             ['name' => 'status_sort', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string', 'enum' => ['default', 'pdcs', 'dcps', 'cdps', 'spdc']], 'description' => 'Priority grouping sequence'],
                             ['name' => 'search', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string'], 'description' => 'Search by CA, Name, or Meter Number'],
+                            ['name' => 'apply_tuning', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'boolean', 'default' => false], 'description' => 'Apply batch tuning/guardrails to suggested reading (default false: guarantees pure historical baseline)'],
                             ['name' => 'per_page', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'integer', 'default' => 50, 'maximum' => 250]],
                             ['name' => 'page', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'integer', 'default' => 1]],
                         ],
                         'responses' => [
                             '200' => [
-                                'description' => 'Filtered bills with calculated 4-box readings and counts.',
+                                'description' => 'Filtered bills with calculated 4-box readings, baseline average, and counts.',
                                 'content' => [
                                     'application/json' => [
                                         'example' => [
@@ -184,6 +185,8 @@ class OpenApiController extends Controller
                                                     'db_prev_reading' => '500',
                                                     'working_reading' => '800',
                                                     'smart_avg_units' => 60,
+                                                    'base_avg_units' => 60,
+                                                    'tuned_avg_units' => null,
                                                     'min_avg_units' => 40,
                                                     'max_avg_units' => 80,
                                                     'custom_avg_units' => null,
@@ -309,10 +312,11 @@ class OpenApiController extends Controller
                             ['name' => 'mru_id', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string']],
                             ['name' => 'cycle', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string', 'example' => 'SEP-2026']],
                             ['name' => 'limit', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'integer', 'default' => 50]],
+                            ['name' => 'apply_tuning', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'boolean', 'default' => false], 'description' => 'Whether to apply batch average tuning to suggested reading (default false: pure baseline)'],
                         ],
                         'responses' => [
                             '200' => [
-                                'description' => 'Queue items with suggested readings.',
+                                'description' => 'Queue items with suggested readings and pure baseline smart average.',
                                 'content' => [
                                     'application/json' => [
                                         'example' => [
@@ -326,6 +330,8 @@ class OpenApiController extends Controller
                                                     'previous_reading' => 3400,
                                                     'suggested_reading' => 3446,
                                                     'smart_average_kwh' => 46,
+                                                    'base_avg_units' => 46,
+                                                    'tuned_avg_units' => null,
                                                     'min_avg_units' => 30,
                                                     'max_avg_units' => 90,
                                                     'custom_avg_units' => null,

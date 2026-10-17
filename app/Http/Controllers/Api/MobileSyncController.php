@@ -96,6 +96,9 @@ class MobileSyncController extends Controller
             ->get()
             ->groupBy('ca_number');
 
+        $applyTuning = filter_var($request->input('apply_tuning', false), FILTER_VALIDATE_BOOLEAN)
+            || filter_var($request->input('include_tuning', false), FILTER_VALIDATE_BOOLEAN);
+
         $consumerPayload = [];
         foreach ($consumers as $consumer) {
             $bill = $activeBills->get($consumer->ca_number);
@@ -103,11 +106,15 @@ class MobileSyncController extends Controller
             $mrhForCa = $meterHistories->get($consumer->ca_number, collect());
 
             if ($bill) {
+                $guardrails = $applyTuning ? [] : ['tuning_enabled' => false];
                 $resolved = $this->smartAverageService->resolveWorkingAndSuggestedReading(
                     $bill,
                     $consumer,
                     $history,
-                    $mrhForCa
+                    $mrhForCa,
+                    0,
+                    [],
+                    $guardrails
                 );
                 $prevReading = $resolved['previous_reading'];
                 $smartAvg = $resolved['smart_average_kwh'];
@@ -123,6 +130,11 @@ class MobileSyncController extends Controller
                 $smartAvg = 50;
                 $suggestedReading = $prevReading > 0 ? $prevReading + $smartAvg : 0;
                 $workingReading = $suggestedReading > 0 ? (string) $suggestedReading : null;
+                $resolved = [
+                    'smart_average_kwh' => 50,
+                    'base_avg_units' => 50,
+                    'tuned_avg_units' => null,
+                ];
             }
 
             $consumerPayload[] = [
@@ -135,6 +147,8 @@ class MobileSyncController extends Controller
                 'billing_basis' => $consumer->billing_basis ?: ($bill?->billing_basis ?: 'Normal(OK)'),
                 'previous_reading' => $prevReading,
                 'smart_average_kwh' => (int) $smartAvg,
+                'base_avg_units' => (int) ($resolved['base_avg_units'] ?? $smartAvg),
+                'tuned_avg_units' => $resolved['tuned_avg_units'] ?? null,
                 'suggested_reading' => $suggestedReading,
                 'min_avg_units' => $consumer->min_avg_units ?? $bill?->min_avg_units,
                 'max_avg_units' => $consumer->max_avg_units ?? $bill?->max_avg_units,

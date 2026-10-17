@@ -744,6 +744,7 @@ class DashboardController extends Controller
             $baseAvg = $avgCalc['base_units'];
             $bill->base_avg_units = $baseAvg;
             $bill->smart_avg_units = $avgCalc['avg_units'];
+            $bill->tuned_avg_units = ($avgCalc['avg_units'] !== $baseAvg) ? $avgCalc['avg_units'] : null;
             $bill->smart_avg_label = $avgCalc['label'];
             $bill->smart_avg_range = $avgCalc['range'];
             $bill->tuning_percent = $avgCalc['tuning_percent'];

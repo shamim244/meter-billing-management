@@ -810,4 +810,83 @@ class RestApiAndSyncTest extends TestCase
                 'message' => 'Min Floor (90 kWh) cannot be greater than Max Ceiling (40 kWh).',
             ]);
     }
+
+    public function test_api_endpoints_always_return_pure_baseline_average_even_with_active_tuning_guardrails(): void
+    {
+        $ca = '99010000777';
+
+        // Historical bill with 50 units OK
+        BillRecord::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'billing_month' => 9,
+            'billing_year' => 2026,
+            'previous_reading' => '1000',
+            'current_reading' => '1050',
+            'units_consumed' => 50,
+            'billing_basis' => 'OK',
+            'review_status' => 'submitted',
+        ]);
+
+        // Current month bill and consumer with min floor clamped to 70 (higher than 50)
+        $consumer = ConsumerAccount::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'consumer_name' => 'PURE BASELINE TEST CONSUMER',
+            'status' => 'active',
+            'billing_basis' => 'OK',
+            'min_avg_units' => 70, // Min floor clamp!
+            'max_avg_units' => 120,
+        ]);
+
+        $currentBill = BillRecord::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'billing_month' => 10,
+            'billing_year' => 2026,
+            'previous_reading' => '1050',
+            'working_reading' => '1120',
+            'reading_source' => 'auto',
+            'review_status' => 'pending',
+            'billing_basis' => 'OK',
+            'min_avg_units' => 70,
+            'max_avg_units' => 120,
+        ]);
+
+        // 1. GET /api/v1/bills: smart_avg_units & base_avg_units MUST guarantee the pure historical baseline (50)
+        $billRes = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson("/api/v1/bills?mru_id={$this->mru->id}&month=10&year=2026&search={$ca}");
+        $billRes->assertOk();
+        $billData = collect($billRes->json('data'))->firstWhere('ca_number', $ca);
+
+        $this->assertNotNull($billData);
+        $this->assertEquals(50, $billData['smart_avg_units'], 'smart_avg_units must always guarantee pure historical average');
+        $this->assertEquals(50, $billData['base_avg_units'], 'base_avg_units must explicitly provide pure baseline');
+        $this->assertEquals(70, $billData['tuned_avg_units'], 'tuned_avg_units must reflect clamped/tuned value');
+
+        // 2. GET /api/v1/sync/mrus/{id}/download: smart_average_kwh MUST guarantee pure historical baseline (50)
+        $syncRes = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson("/api/v1/sync/mrus/{$this->mru->id}/download");
+        $syncRes->assertOk();
+        $syncData = collect($syncRes->json('consumers'))->firstWhere('ca_number', $ca);
+
+        $this->assertNotNull($syncData);
+        $this->assertEquals(50, $syncData['smart_average_kwh'], 'mobile sync smart_average_kwh must be pure historical baseline');
+        $this->assertEquals(50, $syncData['base_avg_units']);
+        $this->assertEquals(70, $syncData['tuned_avg_units']);
+
+        // 3. GET /api/v1/automation/queue: smart_average_kwh MUST guarantee pure historical baseline (50)
+        $queueRes = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson("/api/v1/automation/queue?mru_id={$this->mru->id}&cycle=OCT-2026");
+        $queueRes->assertOk();
+        $queueData = collect($queueRes->json('consumers'))->firstWhere('ca_number', $ca);
+
+        $this->assertNotNull($queueData);
+        $this->assertEquals(50, $queueData['smart_average_kwh'], 'automation queue smart_average_kwh must be pure baseline');
+        $this->assertEquals(50, $queueData['base_avg_units']);
+        $this->assertEquals(70, $queueData['tuned_avg_units']);
+    }
 }

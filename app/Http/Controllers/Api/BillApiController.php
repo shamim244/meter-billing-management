@@ -43,6 +43,8 @@ class BillApiController extends Controller
         $sortCol = strtolower(trim((string) $request->input('sort_col', 'ca_number')));
         $sortAsc = filter_var($request->input('sort_asc', true), FILTER_VALIDATE_BOOLEAN);
         $statusSort = strtolower(trim((string) $request->input('status_sort', 'default')));
+        $applyTuning = filter_var($request->input('apply_tuning', false), FILTER_VALIDATE_BOOLEAN)
+            || filter_var($request->input('include_tuning', false), FILTER_VALIDATE_BOOLEAN);
         $perPage = min(max((int) $request->input('per_page', 50), 1), 250);
         $page = max((int) $request->input('page', 1), 1);
 
@@ -192,16 +194,20 @@ class BillApiController extends Controller
             ->get()
             ->groupBy('ca_number');
 
-        $data = $items->map(function (BillRecord $b) use ($consumers, $historicalBills, $meterHistories) {
+        $data = $items->map(function (BillRecord $b) use ($consumers, $historicalBills, $meterHistories, $applyTuning) {
             $consumer = $consumers->get($b->ca_number);
             $history = $historicalBills->get($b->ca_number, collect());
             $mrhForCa = $meterHistories->get($b->ca_number, collect());
 
+            $guardrails = $applyTuning ? [] : ['tuning_enabled' => false];
             $resolved = $this->smartAverageService->resolveWorkingAndSuggestedReading(
                 $b,
                 $consumer,
                 $history,
-                $mrhForCa
+                $mrhForCa,
+                0,
+                [],
+                $guardrails
             );
 
             $workingReading = $resolved['working_reading'] !== null ? (string) $resolved['working_reading'] : $b->working_reading;
@@ -228,6 +234,8 @@ class BillApiController extends Controller
                 'reason_code' => $b->tag,
                 'remark' => $b->remark,
                 'smart_avg_units' => (int) $resolved['smart_average_kwh'],
+                'base_avg_units' => (int) ($resolved['base_avg_units'] ?? $resolved['smart_average_kwh']),
+                'tuned_avg_units' => $resolved['tuned_avg_units'] ?? null,
                 'min_avg_units' => $consumer?->min_avg_units ?? $b->min_avg_units,
                 'max_avg_units' => $consumer?->max_avg_units ?? $b->max_avg_units,
                 'custom_avg_units' => $consumer?->custom_avg_units ?? $b->custom_avg_units,

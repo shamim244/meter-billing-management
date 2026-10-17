@@ -651,6 +651,9 @@ class SmartAverageCalculationService
      * @return array{
      *     previous_reading: int,
      *     smart_average_kwh: int,
+     *     base_avg_units: int,
+     *     tuned_avg_units: int|null,
+     *     effective_avg_units: int,
      *     projected_reading: int,
      *     working_reading: int|null,
      *     suggested_reading: int,
@@ -723,6 +726,8 @@ class SmartAverageCalculationService
             $guardrails
         );
         $avgUnits = max(1, (int) ($avgCalc['avg_units'] ?? 50));
+        $baseUnits = max(1, (int) ($avgCalc['base_units'] ?? $avgUnits));
+        $tunedUnits = ($avgUnits !== $baseUnits) ? $avgUnits : null;
 
         // 3. Projected cumulative meter dial reading (Arbitrage: max(Prev, PDF) + Tuned Avg)
         // Pass 0 as adjustmentPercent because calculateSmartAverage() already applied $adjPercent / $tuningSteps!
@@ -766,7 +771,10 @@ class SmartAverageCalculationService
 
         return [
             'previous_reading' => $prev,
-            'smart_average_kwh' => $avgUnits,
+            'smart_average_kwh' => $baseUnits,
+            'base_avg_units' => $baseUnits,
+            'tuned_avg_units' => $tunedUnits,
+            'effective_avg_units' => $avgUnits,
             'projected_reading' => $projectedReading,
             'working_reading' => $effectiveWorking,
             'suggested_reading' => $suggested,

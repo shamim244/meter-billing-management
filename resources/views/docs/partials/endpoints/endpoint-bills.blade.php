@@ -7,7 +7,7 @@
     </div>
 
     <p class="text-xs text-slate-300 leading-relaxed">
-        Pulls the complete list of consumer bills for any cycle, calculating working readings and invariant states. Supports priority sorting (<code class="font-mono text-cyan-300">pdcs</code>), column sorting, and status filtering (<code class="font-mono text-cyan-300">pending</code>, <code class="font-mono text-cyan-300">doubt</code>, <code class="font-mono text-cyan-300">critical</code>).
+        Pulls the complete list of consumer bills for any cycle, calculating working readings and invariant states. Supports priority sorting (<code class="font-mono text-cyan-300">pdcs</code>), column sorting, status filtering (<code class="font-mono text-cyan-300">pending</code>, <code class="font-mono text-cyan-300">doubt</code>, <code class="font-mono text-cyan-300">critical</code>), and dual-layer averages: <code class="font-mono text-cyan-300">smart_avg_units</code> &amp; <code class="font-mono text-cyan-300">base_avg_units</code> always return pure un-tuned historical OK baseline, with optional <code class="font-mono text-cyan-300">tuned_avg_units</code> for active adjustments (<code class="font-mono text-cyan-300">apply_tuning=true</code>).
     </p>
 
     <!-- Code Snippet Display with Copy Button -->
