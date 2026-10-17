@@ -312,7 +312,11 @@ class OpenApiController extends Controller
                             ['name' => 'mru_id', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string']],
                             ['name' => 'cycle', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string', 'example' => 'SEP-2026']],
                             ['name' => 'limit', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'integer', 'default' => 50]],
+                            ['name' => 'ca', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string'], 'description' => 'Target specific consumer account number in queue'],
                             ['name' => 'apply_tuning', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'boolean', 'default' => false], 'description' => 'Whether to apply batch average tuning to suggested reading (default false: pure baseline)'],
+                            ['name' => 'min_units_floor', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'integer', 'example' => 125], 'description' => 'Minimum average consumption floor (kWh) applied across queue batch'],
+                            ['name' => 'max_units_ceiling', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'integer', 'example' => 200], 'description' => 'Maximum average consumption ceiling (kWh) applied across queue batch'],
+                            ['name' => 'adjustment_percent', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'number', 'example' => 15.0], 'description' => 'Batch adjustment percentage (+/- %) applied across queue batch'],
                         ],
                         'responses' => [
                             '200' => [

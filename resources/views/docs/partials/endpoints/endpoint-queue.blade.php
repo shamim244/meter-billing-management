@@ -7,13 +7,13 @@
     </div>
 
     <p class="text-xs text-slate-300 leading-relaxed">
-        Lightweight FIFO queue endpoint specifically optimized for Python ADB scripts to fetch the next batch of unsubmitted consumers with pre-calculated suggested readings.
+        Lightweight FIFO queue endpoint specifically optimized for Python ADB scripts to fetch the next batch of unsubmitted consumers with pre-calculated suggested readings. Supports batch tuning parameters: <code class="font-mono text-cyan-300">apply_tuning=true</code>, <code class="font-mono text-cyan-300">min_units_floor</code> (minimum consumption floor, e.g. 125 kWh), <code class="font-mono text-cyan-300">max_units_ceiling</code>, <code class="font-mono text-cyan-300">adjustment_percent</code>, and single-consumer targeting (<code class="font-mono text-cyan-300">ca=...</code>).
     </p>
 
     <div class="relative rounded-2xl bg-slate-950 border border-slate-800 p-4 font-mono text-xs overflow-x-auto">
         <pre class="text-slate-200">
-# Pull next 25 consumers in queue for MRU 0244
-curl -X GET "{{ $baseUrl }}/automation/queue?mru_code=0244&limit=25" \
+# Pull next 25 consumers in queue with batch tuning and min floor clamped to 125 kWh
+curl -X GET "{{ $baseUrl }}/automation/queue?mru_code=8&limit=25&apply_tuning=true&min_units_floor=125" \
   -H "Authorization: Bearer {{ $activeKey ?? 'nbp_live_YOUR_KEY' }}"</pre>
     </div>
 </div>

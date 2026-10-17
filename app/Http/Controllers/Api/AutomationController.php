@@ -39,6 +39,13 @@ class AutomationController extends Controller
         $statusFilter = strtolower($request->input('status', 'unsubmitted'));
         $applyTuning = filter_var($request->input('apply_tuning', false), FILTER_VALIDATE_BOOLEAN)
             || filter_var($request->input('include_tuning', false), FILTER_VALIDATE_BOOLEAN);
+        $minUnitsFloor = (int) $request->input('min_units_floor', $request->input('min_floor', 0));
+        $maxUnitsCeiling = (int) $request->input('max_units_ceiling', $request->input('max_ceiling', 0));
+        $adjPercent = (float) $request->input('adjustment_percent', $request->input('adjust_percent', 0));
+
+        if ($minUnitsFloor > 0 || $maxUnitsCeiling > 0 || $adjPercent != 0.0) {
+            $applyTuning = true;
+        }
         $limit = min((int) $request->input('limit', 50), 250);
 
         // Resolve MRU if provided
@@ -101,6 +108,13 @@ class AutomationController extends Controller
             $query->whereRaw('LOWER(review_status) = ?', [$statusFilter]);
         }
 
+        // Optional CA number filtering
+        if ($request->filled('ca')) {
+            $query->where('ca_number', trim((string) $request->input('ca')));
+        } elseif ($request->filled('ca_number')) {
+            $query->where('ca_number', trim((string) $request->input('ca_number')));
+        }
+
         $totalInQueue = (clone $query)->count();
         $bills = $query->orderBy('id', 'asc')->limit($limit)->get();
 
@@ -138,18 +152,22 @@ class AutomationController extends Controller
             ->get()
             ->groupBy('ca_number');
 
-        $formatted = $bills->map(function (BillRecord $bill) use ($consumers, $historicalBills, $meterHistories, $applyTuning) {
+        $formatted = $bills->map(function (BillRecord $bill) use ($consumers, $historicalBills, $meterHistories, $applyTuning, $minUnitsFloor, $maxUnitsCeiling, $adjPercent) {
             $consumer = $consumers->get($bill->ca_number);
             $history = $historicalBills->get($bill->ca_number, collect());
             $mrhForCa = $meterHistories->get($bill->ca_number, collect());
 
-            $guardrails = $applyTuning ? [] : ['tuning_enabled' => false];
+            $guardrails = [
+                'tuning_enabled' => $applyTuning,
+                'min_units_floor' => $applyTuning ? $minUnitsFloor : 0,
+                'max_units_ceiling' => $applyTuning ? $maxUnitsCeiling : 0,
+            ];
             $resolved = $this->smartAverageService->resolveWorkingAndSuggestedReading(
                 $bill,
                 $consumer,
                 $history,
                 $mrhForCa,
-                0,
+                $applyTuning ? $adjPercent : 0,
                 [],
                 $guardrails
             );

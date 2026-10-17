@@ -341,4 +341,68 @@ class BidirectionalAverageTuningGuiAndApiTest extends TestCase
         $this->assertEquals(50, $tunedItem['base_avg_units']);
         $this->assertEquals(60, $tunedItem['tuned_avg_units']);
     }
+
+    public function test_automation_queue_accepts_batch_tuning_floor_and_applies_correct_suggested_reading(): void
+    {
+        $ca = '99050000888';
+
+        ConsumerAccount::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'consumer_name' => 'QUEUE BATCH TUNING CONSUMER',
+            'status' => 'active',
+            'billing_basis' => 'OK',
+        ]);
+
+        BillRecord::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'billing_month' => 9,
+            'billing_year' => 2026,
+            'previous_reading' => '960',
+            'current_reading' => '1015',
+            'units_consumed' => 55,
+            'billing_basis' => 'OK',
+            'review_status' => 'submitted',
+        ]);
+
+        BillRecord::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'billing_month' => 10,
+            'billing_year' => 2026,
+            'previous_reading' => '960',
+            'current_reading' => '1015',
+            'working_reading' => null,
+            'reading_source' => 'auto',
+            'review_status' => 'pending',
+            'billing_basis' => 'OK',
+        ]);
+
+        // 1. Without tuning: baseline is 55, suggested is 1015 + 55 = 1070
+        $baseRes = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson("/api/v1/automation/queue?mru_id={$this->mru->id}&cycle=OCT-2026&ca={$ca}");
+
+        $baseRes->assertOk();
+        $baseData = collect($baseRes->json('consumers'))->firstWhere('ca_number', $ca);
+        $this->assertNotNull($baseData);
+        $this->assertEquals(55, $baseData['smart_average_kwh']);
+        $this->assertEquals(1070, $baseData['suggested_reading']);
+        $this->assertFalse($baseData['is_clamped_min']);
+
+        // 2. With batch tuning floor=125: clamped to 125, suggested is 1015 + 125 = 1140
+        $tunedRes = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson("/api/v1/automation/queue?mru_id={$this->mru->id}&cycle=OCT-2026&ca={$ca}&apply_tuning=true&min_units_floor=125");
+
+        $tunedRes->assertOk();
+        $tunedData = collect($tunedRes->json('consumers'))->firstWhere('ca_number', $ca);
+        $this->assertNotNull($tunedData);
+        $this->assertEquals(55, $tunedData['smart_average_kwh'], 'Pure baseline remains untouched');
+        $this->assertEquals(125, $tunedData['tuned_avg_units']);
+        $this->assertEquals(1140, $tunedData['suggested_reading'], 'Suggested reading must reflect clamped min floor 125');
+        $this->assertTrue($tunedData['is_clamped_min']);
+    }
 }

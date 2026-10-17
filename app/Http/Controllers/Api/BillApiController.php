@@ -45,6 +45,13 @@ class BillApiController extends Controller
         $statusSort = strtolower(trim((string) $request->input('status_sort', 'default')));
         $applyTuning = filter_var($request->input('apply_tuning', false), FILTER_VALIDATE_BOOLEAN)
             || filter_var($request->input('include_tuning', false), FILTER_VALIDATE_BOOLEAN);
+        $minUnitsFloor = (int) $request->input('min_units_floor', $request->input('min_floor', 0));
+        $maxUnitsCeiling = (int) $request->input('max_units_ceiling', $request->input('max_ceiling', 0));
+        $adjPercent = (float) $request->input('adjustment_percent', $request->input('adjust_percent', 0));
+
+        if ($minUnitsFloor > 0 || $maxUnitsCeiling > 0 || $adjPercent != 0.0) {
+            $applyTuning = true;
+        }
         $perPage = min(max((int) $request->input('per_page', 50), 1), 250);
         $page = max((int) $request->input('page', 1), 1);
 
@@ -194,18 +201,22 @@ class BillApiController extends Controller
             ->get()
             ->groupBy('ca_number');
 
-        $data = $items->map(function (BillRecord $b) use ($consumers, $historicalBills, $meterHistories, $applyTuning) {
+        $data = $items->map(function (BillRecord $b) use ($consumers, $historicalBills, $meterHistories, $applyTuning, $minUnitsFloor, $maxUnitsCeiling, $adjPercent) {
             $consumer = $consumers->get($b->ca_number);
             $history = $historicalBills->get($b->ca_number, collect());
             $mrhForCa = $meterHistories->get($b->ca_number, collect());
 
-            $guardrails = $applyTuning ? [] : ['tuning_enabled' => false];
+            $guardrails = [
+                'tuning_enabled' => $applyTuning,
+                'min_units_floor' => $applyTuning ? $minUnitsFloor : 0,
+                'max_units_ceiling' => $applyTuning ? $maxUnitsCeiling : 0,
+            ];
             $resolved = $this->smartAverageService->resolveWorkingAndSuggestedReading(
                 $b,
                 $consumer,
                 $history,
                 $mrhForCa,
-                0,
+                $applyTuning ? $adjPercent : 0,
                 [],
                 $guardrails
             );
