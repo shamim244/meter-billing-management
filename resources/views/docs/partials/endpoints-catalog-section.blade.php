@@ -5,4 +5,5 @@
     @include('docs.partials.endpoints.endpoint-review')
     @include('docs.partials.endpoints.endpoint-batch-sync')
     @include('docs.partials.endpoints.endpoint-queue')
+    @include('docs.partials.endpoints.endpoint-tuning')
 </section>

@@ -43,6 +43,9 @@
                 <a href="#endpoint-queue" class="block px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition">
                     <span class="text-[10px] font-bold text-sky-400 font-mono">GET</span> /automation/queue
                 </a>
+                <a href="#endpoint-tuning" class="block px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition">
+                    <span class="text-[10px] font-bold text-purple-400 font-mono">POST</span> /consumers/{ca}/average-tuning
+                </a>
                 <a href="#endpoint-mrus" class="block px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition">
                     <span class="text-[10px] font-bold text-sky-400 font-mono">GET</span> /mrus
                 </a>

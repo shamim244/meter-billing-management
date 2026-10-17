@@ -58,6 +58,10 @@ class PhaseFourOptimizationTest extends TestCase
         $response = $this->actingAs($this->user)->get('/docs/api');
 
         $response->assertStatus(200);
+        $response->assertSee('endpoint-tuning');
+        $response->assertSee('/consumers/{ca}/average-tuning');
+        $response->assertSee('POST /consumers/10230040377/average-tuning');
+        $response->assertSee('apply_tuning=true');
         $this->assertTrue($response->headers->has('ETag'));
         $etag = $response->headers->get('ETag');
         $this->assertNotEmpty($etag);
