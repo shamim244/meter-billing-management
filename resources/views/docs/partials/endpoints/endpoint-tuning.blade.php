@@ -8,6 +8,7 @@
 
     <p class="text-xs text-slate-300 leading-relaxed">
         Sets permanent consumer-level smart average guardrails in the database and active billing cycle. Configure a Minimum Floor (<code class="font-mono text-cyan-300">min_avg_units</code>), Maximum Ceiling (<code class="font-mono text-cyan-300">max_avg_units</code>), Fixed Override (<code class="font-mono text-cyan-300">custom_avg_units</code>), or bypass flag (<code class="font-mono text-cyan-300">is_avg_excluded</code>).
+        <span class="block mt-1 text-slate-400">💡 <strong>Bidirectional Parity:</strong> Updates made via this API instantly reflect on the Web Dashboard card view, and adjustments made in the browser GUI modal instantly reflect across all API endpoints with zero conflicts.</span>
     </p>
 
     <!-- Code Snippet Display with Copy Button -->
