@@ -136,6 +136,11 @@ class MobileSyncController extends Controller
                 'previous_reading' => $prevReading,
                 'smart_average_kwh' => (int) $smartAvg,
                 'suggested_reading' => $suggestedReading,
+                'min_avg_units' => $consumer->min_avg_units ?? $bill?->min_avg_units,
+                'max_avg_units' => $consumer->max_avg_units ?? $bill?->max_avg_units,
+                'custom_avg_units' => $consumer->custom_avg_units ?? $bill?->custom_avg_units,
+                'is_avg_excluded' => (bool) ($consumer->is_avg_excluded ?? $bill?->is_avg_excluded ?? false),
+                'avg_exclude_reason' => $consumer->avg_exclude_reason ?? $bill?->avg_exclude_reason,
                 'current_bill' => $bill ? [
                     'bill_id' => $bill->id,
                     'working_reading' => $workingReading,
@@ -144,6 +149,10 @@ class MobileSyncController extends Controller
                     'units_consumed' => ($prevReading > 0 && $workingReading !== null && (int) $workingReading >= $prevReading)
                         ? ((int) $workingReading - $prevReading)
                         : ($bill->units_consumed ?? $smartAvg),
+                    'min_avg_units' => $bill->min_avg_units,
+                    'max_avg_units' => $bill->max_avg_units,
+                    'custom_avg_units' => $bill->custom_avg_units,
+                    'is_avg_excluded' => (bool) $bill->is_avg_excluded,
                 ] : null,
             ];
         }

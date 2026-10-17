@@ -213,4 +213,95 @@ class ConsumerApiController extends Controller
             ],
         ]);
     }
+
+    /**
+     * Update individual consumer average tuning preferences, custom unit overrides, and exclusion flags via REST API.
+     */
+    public function updateAverageTuning(Request $request, string $ca): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $isAdmin = method_exists($user, 'hasRole') && $user->hasRole('admin');
+
+        $validated = $request->validate([
+            'custom_avg_units' => 'nullable|integer|min:1|max:5000',
+            'min_avg_units' => 'nullable|integer|min:0|max:5000',
+            'max_avg_units' => 'nullable|integer|min:0|max:5000',
+            'is_avg_excluded' => 'nullable|boolean',
+            'avg_exclude_reason' => 'nullable|string|max:100',
+            'month' => 'nullable|integer|min:1|max:12',
+            'year' => 'nullable|integer|min:2020|max:2035',
+        ]);
+
+        if (! empty($validated['min_avg_units']) && ! empty($validated['max_avg_units']) && (int) $validated['min_avg_units'] > (int) $validated['max_avg_units']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Min Floor ('.$validated['min_avg_units'].' kWh) cannot be greater than Max Ceiling ('.$validated['max_avg_units'].' kWh).',
+            ], 422);
+        }
+
+        $consumer = ConsumerAccount::query()
+            ->where('ca_number', $ca)
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (! $consumer && $isAdmin) {
+            $consumer = ConsumerAccount::query()
+                ->where('ca_number', $ca)
+                ->where('user_id', '!=', 9)
+                ->first();
+        }
+
+        if (! $consumer) {
+            $consumer = ConsumerAccount::create([
+                'user_id' => $user->id,
+                'ca_number' => $ca,
+                'consumer_name' => "Consumer {$ca}",
+                'custom_avg_units' => $validated['custom_avg_units'] ?? null,
+                'min_avg_units' => $validated['min_avg_units'] ?? null,
+                'max_avg_units' => $validated['max_avg_units'] ?? null,
+                'is_avg_excluded' => (bool) ($validated['is_avg_excluded'] ?? false),
+                'avg_exclude_reason' => $validated['avg_exclude_reason'] ?? null,
+            ]);
+        } else {
+            $consumer->update([
+                'custom_avg_units' => array_key_exists('custom_avg_units', $validated) ? $validated['custom_avg_units'] : $consumer->custom_avg_units,
+                'min_avg_units' => array_key_exists('min_avg_units', $validated) ? $validated['min_avg_units'] : $consumer->min_avg_units,
+                'max_avg_units' => array_key_exists('max_avg_units', $validated) ? $validated['max_avg_units'] : $consumer->max_avg_units,
+                'is_avg_excluded' => array_key_exists('is_avg_excluded', $validated) ? (bool) $validated['is_avg_excluded'] : $consumer->is_avg_excluded,
+                'avg_exclude_reason' => array_key_exists('avg_exclude_reason', $validated) ? $validated['avg_exclude_reason'] : $consumer->avg_exclude_reason,
+            ]);
+        }
+
+        // Also sync matching BillRecord for the current cycle if active
+        $month = (int) $request->input('month', 0);
+        $year = (int) $request->input('year', 0);
+        if ($month > 0 && $year > 0) {
+            BillRecord::query()
+                ->where('ca_number', $ca)
+                ->where('billing_month', $month)
+                ->where('billing_year', $year)
+                ->where('user_id', $user->id)
+                ->update([
+                    'custom_avg_units' => $consumer->custom_avg_units,
+                    'min_avg_units' => $consumer->min_avg_units,
+                    'max_avg_units' => $consumer->max_avg_units,
+                    'is_avg_excluded' => $consumer->is_avg_excluded,
+                    'avg_exclude_reason' => $consumer->avg_exclude_reason,
+                ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Average tuning preferences updated for CA {$ca}",
+            'consumer' => [
+                'ca_number' => $consumer->ca_number,
+                'custom_avg_units' => $consumer->custom_avg_units,
+                'min_avg_units' => $consumer->min_avg_units,
+                'max_avg_units' => $consumer->max_avg_units,
+                'is_avg_excluded' => (bool) $consumer->is_avg_excluded,
+                'avg_exclude_reason' => $consumer->avg_exclude_reason,
+            ],
+        ]);
+    }
 }

@@ -642,7 +642,16 @@ class SmartAverageCalculationService
      *     smart_average_kwh: int,
      *     projected_reading: int,
      *     working_reading: int|null,
-     *     suggested_reading: int
+     *     suggested_reading: int,
+     *     is_excluded: bool,
+     *     exclude_reason: string|null,
+     *     is_custom_override: bool,
+     *     is_clamped_min: bool,
+     *     is_clamped_max: bool,
+     *     min_avg_units: int|null,
+     *     max_avg_units: int|null,
+     *     custom_avg_units: int|null,
+     *     smart_average_calc: array<string, mixed>
      * }
      */
     public function resolveWorkingAndSuggestedReading(
@@ -729,6 +738,15 @@ class SmartAverageCalculationService
             'projected_reading' => $projectedReading,
             'working_reading' => $effectiveWorking,
             'suggested_reading' => $suggested,
+            'is_excluded' => (bool) ($avgCalc['is_excluded'] ?? false),
+            'exclude_reason' => $avgCalc['exclude_reason'] ?? null,
+            'is_custom_override' => (bool) ($avgCalc['is_custom_override'] ?? false),
+            'is_clamped_min' => (bool) ($avgCalc['is_clamped_min'] ?? false),
+            'is_clamped_max' => (bool) ($avgCalc['is_clamped_max'] ?? false),
+            'min_avg_units' => $avgCalc['indiv_min_units'] ?? null,
+            'max_avg_units' => $avgCalc['indiv_max_units'] ?? null,
+            'custom_avg_units' => $consumer?->custom_avg_units ?? $bill->custom_avg_units ?? null,
+            'smart_average_calc' => $avgCalc,
         ];
     }
 }

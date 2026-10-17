@@ -227,6 +227,14 @@ class BillApiController extends Controller
                 'review_status' => $b->review_status ?? 'pending',
                 'reason_code' => $b->tag,
                 'remark' => $b->remark,
+                'smart_avg_units' => (int) $resolved['smart_average_kwh'],
+                'min_avg_units' => $consumer?->min_avg_units ?? $b->min_avg_units,
+                'max_avg_units' => $consumer?->max_avg_units ?? $b->max_avg_units,
+                'custom_avg_units' => $consumer?->custom_avg_units ?? $b->custom_avg_units,
+                'is_avg_excluded' => (bool) ($consumer?->is_avg_excluded ?? $b->is_avg_excluded),
+                'avg_exclude_reason' => $consumer?->avg_exclude_reason ?? $b->avg_exclude_reason ?? $resolved['exclude_reason'],
+                'is_clamped_min' => (bool) ($resolved['is_clamped_min'] ?? false),
+                'is_clamped_max' => (bool) ($resolved['is_clamped_max'] ?? false),
             ];
         });
 

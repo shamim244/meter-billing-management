@@ -77,5 +77,7 @@ Route::prefix('v1')->middleware(['api.analytics', 'api.feature'])->group(functio
         Route::get('/consumers/{ca}/history', [ConsumerApiController::class, 'history']);
         Route::post('/consumers/reading', [ConsumerApiController::class, 'updateReading'])
             ->middleware('api.feature:consumer_updates');
+        Route::post('/consumers/{ca}/average-tuning', [ConsumerApiController::class, 'updateAverageTuning'])
+            ->middleware('api.feature:consumer_updates');
     });
 });

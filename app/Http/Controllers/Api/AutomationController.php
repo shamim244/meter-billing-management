@@ -166,6 +166,13 @@ class AutomationController extends Controller
                 'working_reading' => $resolved['working_reading'],
                 'smart_average_kwh' => $resolved['smart_average_kwh'],
                 'suggested_reading' => $resolved['suggested_reading'],
+                'min_avg_units' => $consumer?->min_avg_units ?? $bill->min_avg_units,
+                'max_avg_units' => $consumer?->max_avg_units ?? $bill->max_avg_units,
+                'custom_avg_units' => $consumer?->custom_avg_units ?? $bill->custom_avg_units,
+                'is_avg_excluded' => (bool) ($consumer?->is_avg_excluded ?? $bill->is_avg_excluded ?? false),
+                'avg_exclude_reason' => $consumer?->avg_exclude_reason ?? $bill->avg_exclude_reason ?? ($resolved['exclude_reason'] ?? null),
+                'is_clamped_min' => (bool) ($resolved['is_clamped_min'] ?? false),
+                'is_clamped_max' => (bool) ($resolved['is_clamped_max'] ?? false),
                 'review_status' => $bill->review_status ?? 'unsubmitted',
                 'remark' => $bill->remark,
             ];

@@ -155,6 +155,14 @@ class OpenApiController extends Controller
                                                     'units_consumed' => 300,
                                                     'db_prev_reading' => '500',
                                                     'working_reading' => '800',
+                                                    'smart_avg_units' => 60,
+                                                    'min_avg_units' => 40,
+                                                    'max_avg_units' => 80,
+                                                    'custom_avg_units' => null,
+                                                    'is_avg_excluded' => false,
+                                                    'avg_exclude_reason' => null,
+                                                    'is_clamped_min' => false,
+                                                    'is_clamped_max' => false,
                                                     'review_status' => 'pending',
                                                 ],
                                             ],
@@ -289,12 +297,73 @@ class OpenApiController extends Controller
                                                     'meter_number' => '3805340',
                                                     'previous_reading' => 3400,
                                                     'suggested_reading' => 3446,
+                                                    'smart_average_kwh' => 46,
+                                                    'min_avg_units' => 30,
+                                                    'max_avg_units' => 90,
+                                                    'custom_avg_units' => null,
+                                                    'is_avg_excluded' => false,
+                                                    'is_clamped_min' => false,
+                                                    'is_clamped_max' => false,
                                                 ],
                                             ],
                                         ],
                                     ],
                                 ],
                             ],
+                        ],
+                    ],
+                ],
+                '/consumers/{ca}/average-tuning' => [
+                    'post' => [
+                        'summary' => 'Configure Consumer Smart Average Guardrails & Exclusions',
+                        'description' => 'Updates individual min/max average unit clamping bounds, custom unit overrides, or exclusion flags for a consumer.',
+                        'operationId' => 'updateConsumerAverageTuning',
+                        'parameters' => [
+                            ['name' => 'ca', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string', 'example' => '10230040377'], 'description' => '11-digit Consumer Account Number'],
+                        ],
+                        'requestBody' => [
+                            'required' => true,
+                            'content' => [
+                                'application/json' => [
+                                    'schema' => [
+                                        'type' => 'object',
+                                        'properties' => [
+                                            'custom_avg_units' => ['type' => 'integer', 'nullable' => true, 'example' => 60, 'description' => 'Fixed override unit ceiling (bypasses median calculation)'],
+                                            'min_avg_units' => ['type' => 'integer', 'nullable' => true, 'example' => 35, 'description' => 'Minimum average consumption floor (kWh)'],
+                                            'max_avg_units' => ['type' => 'integer', 'nullable' => true, 'example' => 85, 'description' => 'Maximum average consumption ceiling (kWh)'],
+                                            'is_avg_excluded' => ['type' => 'boolean', 'example' => false, 'description' => 'Exclude this consumer from smart average calculations'],
+                                            'avg_exclude_reason' => ['type' => 'string', 'nullable' => true, 'example' => 'Defective seasonal load'],
+                                            'month' => ['type' => 'integer', 'nullable' => true, 'minimum' => 1, 'maximum' => 12, 'example' => 4],
+                                            'year' => ['type' => 'integer', 'nullable' => true, 'example' => 2026],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                        'responses' => [
+                            '200' => [
+                                'description' => 'Guardrails successfully updated.',
+                                'content' => [
+                                    'application/json' => [
+                                        'example' => [
+                                            'success' => true,
+                                            'message' => 'Average tuning preferences updated for CA 10230040377',
+                                            'consumer' => [
+                                                'ca_number' => '10230040377',
+                                                'custom_avg_units' => 60,
+                                                'min_avg_units' => 35,
+                                                'max_avg_units' => 85,
+                                                'is_avg_excluded' => false,
+                                                'avg_exclude_reason' => null,
+                                            ],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                            '422' => [
+                                'description' => 'Validation error (e.g. Min Floor > Max Ceiling).',
+                            ],
+                            '401' => ['$ref' => '#/components/responses/UnauthorizedError'],
                         ],
                     ],
                 ],

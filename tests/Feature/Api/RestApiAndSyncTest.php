@@ -678,4 +678,129 @@ class RestApiAndSyncTest extends TestCase
         $this->assertEquals(2735, $queueRecord['working_reading']);
         $this->assertEquals(2735, $queueRecord['suggested_reading']);
     }
+
+    public function test_api_bills_and_sync_include_smart_average_guardrail_metadata(): void
+    {
+        $ca = '99010000888';
+
+        $consumer = ConsumerAccount::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'consumer_name' => 'GUARDRAIL API CONSUMER',
+            'status' => 'active',
+            'billing_basis' => 'OK',
+            'min_avg_units' => 30,
+            'max_avg_units' => 60,
+            'custom_avg_units' => 45,
+            'is_avg_excluded' => false,
+        ]);
+
+        BillRecord::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'billing_month' => 10,
+            'billing_year' => 2026,
+            'bill_month_label' => 'OCT, 2026',
+            'previous_reading' => '1000',
+            'working_reading' => '1045',
+            'reading_source' => 'auto',
+            'review_status' => 'pending',
+            'billing_basis' => 'OK',
+            'min_avg_units' => 30,
+            'max_avg_units' => 60,
+            'custom_avg_units' => 45,
+        ]);
+
+        // 1. Verify GET /api/v1/bills
+        $billRes = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson("/api/v1/bills?mru_id={$this->mru->id}&month=10&year=2026&search={$ca}");
+        $billRes->assertStatus(200);
+        $billData = collect($billRes->json('data'))->firstWhere('ca_number', $ca);
+
+        $this->assertNotNull($billData);
+        $this->assertEquals(45, $billData['smart_avg_units']);
+        $this->assertEquals(30, $billData['min_avg_units']);
+        $this->assertEquals(60, $billData['max_avg_units']);
+        $this->assertEquals(45, $billData['custom_avg_units']);
+        $this->assertFalse($billData['is_avg_excluded']);
+
+        // 2. Verify GET /api/v1/sync/mrus/{id}/download
+        $syncRes = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson("/api/v1/sync/mrus/{$this->mru->id}/download");
+        $syncRes->assertStatus(200);
+        $syncData = collect($syncRes->json('consumers'))->firstWhere('ca_number', $ca);
+
+        $this->assertNotNull($syncData);
+        $this->assertEquals(30, $syncData['min_avg_units']);
+        $this->assertEquals(60, $syncData['max_avg_units']);
+        $this->assertEquals(45, $syncData['custom_avg_units']);
+        $this->assertFalse($syncData['is_avg_excluded']);
+        $this->assertEquals(45, $syncData['current_bill']['custom_avg_units']);
+
+        // 3. Verify GET /api/v1/automation/queue
+        $queueRes = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson("/api/v1/automation/queue?mru_id={$this->mru->id}&cycle=OCT-2026");
+        $queueRes->assertStatus(200);
+        $queueData = collect($queueRes->json('consumers'))->firstWhere('ca_number', $ca);
+
+        $this->assertNotNull($queueData);
+        $this->assertEquals(45, $queueData['smart_average_kwh']);
+        $this->assertEquals(30, $queueData['min_avg_units']);
+        $this->assertEquals(60, $queueData['max_avg_units']);
+        $this->assertEquals(45, $queueData['custom_avg_units']);
+        $this->assertFalse($queueData['is_avg_excluded']);
+    }
+
+    public function test_api_can_update_consumer_average_tuning_guardrails(): void
+    {
+        $ca = '99010000999';
+
+        ConsumerAccount::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'consumer_name' => 'API TUNING CONSUMER',
+            'status' => 'active',
+            'billing_basis' => 'OK',
+        ]);
+
+        $res = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->postJson("/api/v1/consumers/{$ca}/average-tuning", [
+                'min_avg_units' => 35,
+                'max_avg_units' => 85,
+                'custom_avg_units' => 60,
+                'is_avg_excluded' => false,
+            ]);
+
+        $res->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('consumer.ca_number', $ca)
+            ->assertJsonPath('consumer.min_avg_units', 35)
+            ->assertJsonPath('consumer.max_avg_units', 85)
+            ->assertJsonPath('consumer.custom_avg_units', 60);
+
+        $consumer = ConsumerAccount::where('user_id', $this->user->id)->where('ca_number', $ca)->first();
+        $this->assertEquals(35, $consumer->min_avg_units);
+        $this->assertEquals(85, $consumer->max_avg_units);
+        $this->assertEquals(60, $consumer->custom_avg_units);
+    }
+
+    public function test_api_average_tuning_rejects_min_greater_than_max(): void
+    {
+        $ca = '99010000999';
+
+        $res = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->postJson("/api/v1/consumers/{$ca}/average-tuning", [
+                'min_avg_units' => 90,
+                'max_avg_units' => 40,
+            ]);
+
+        $res->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonFragment([
+                'message' => 'Min Floor (90 kWh) cannot be greater than Max Ceiling (40 kWh).',
+            ]);
+    }
 }
