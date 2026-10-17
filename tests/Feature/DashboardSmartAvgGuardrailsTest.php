@@ -203,4 +203,99 @@ class DashboardSmartAvgGuardrailsTest extends TestCase
         $this->assertNull($b2->working_reading);
         $this->assertNull($b3->working_reading);
     }
+
+    public function test_tuning_excludes_submitted_and_doubt_consumers_in_dashboard_data(): void
+    {
+        $user = User::factory()->create();
+        $mru = Mru::create(['user_id' => $user->id, 'code' => 'MRU_G2', 'name' => 'Guardrail MRU 2']);
+
+        // Account 1: Normal pending account
+        $c1 = ConsumerAccount::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '99990101',
+            'consumer_name' => 'Pending Consumer',
+            'tariff_category' => 'DS1D',
+            'billing_basis' => 'OK',
+        ]);
+        $b1 = BillRecord::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => $c1->ca_number,
+            'billing_month' => 10,
+            'billing_year' => 2026,
+            'previous_reading' => '1000',
+            'working_reading' => '1050',
+            'units_consumed' => 50,
+            'reading_source' => 'auto',
+            'review_status' => 'pending',
+        ]);
+
+        // Account 2: Submitted account (locked)
+        $c2 = ConsumerAccount::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '99990102',
+            'consumer_name' => 'Submitted Consumer',
+            'tariff_category' => 'DS1D',
+            'billing_basis' => 'OK',
+        ]);
+        $b2 = BillRecord::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => $c2->ca_number,
+            'billing_month' => 10,
+            'billing_year' => 2026,
+            'previous_reading' => '2000',
+            'working_reading' => '2045',
+            'units_consumed' => 45,
+            'reading_source' => 'auto',
+            'review_status' => 'submitted',
+        ]);
+
+        // Account 3: Doubt account
+        $c3 = ConsumerAccount::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => '99990103',
+            'consumer_name' => 'Doubt Consumer',
+            'tariff_category' => 'DS1D',
+            'billing_basis' => 'OK',
+        ]);
+        $b3 = BillRecord::create([
+            'user_id' => $user->id,
+            'mru_id' => $mru->id,
+            'ca_number' => $c3->ca_number,
+            'billing_month' => 10,
+            'billing_year' => 2026,
+            'previous_reading' => '3000',
+            'working_reading' => '3060',
+            'units_consumed' => 60,
+            'reading_source' => 'auto',
+            'review_status' => 'doubt',
+        ]);
+
+        // Apply +50% tuning with exclude_submitted=1 and exclude_critical_doubt=1
+        $res = $this->actingAs($user)->getJson('/dashboard/data?month=10&year=2026&tuning_enabled=1&adjustment_percent=50&exclude_submitted=1&exclude_critical_doubt=1');
+        $res->assertOk();
+
+        $data = collect($res->json('data'))->keyBy('ca_number');
+
+        $itemPending = $data->get('99990101');
+        $itemSubmitted = $data->get('99990102');
+        $itemDoubt = $data->get('99990103');
+
+        // Pending account gets tuned (+50% tuning applied: 50 -> 75 kWh)
+        $this->assertFalse($itemPending['is_avg_excluded']);
+        $this->assertEquals(75, $itemPending['smart_avg_units']);
+
+        // Submitted account is excluded from tuning, preserved at baseline and working reading unmodified
+        $this->assertTrue($itemSubmitted['is_avg_excluded']);
+        $this->assertStringContainsString('Submitted', (string) $itemSubmitted['avg_exclude_reason']);
+        $this->assertEquals('2045', (string) $itemSubmitted['working_reading']);
+
+        // Doubt account is excluded from tuning
+        $this->assertTrue($itemDoubt['is_avg_excluded']);
+        $this->assertStringContainsString('Critical / Doubt', (string) $itemDoubt['avg_exclude_reason']);
+    }
 }

@@ -920,13 +920,14 @@ class MruController extends Controller
                     : null;
 
                 $isManual = ($existingCurrentBill && $existingCurrentBill->reading_source === 'manual');
-                $workingReadingToSave = $isManual
+                $isSubmitted = ($existingCurrentBill && strtolower(trim((string) ($existingCurrentBill->review_status ?? ''))) === 'submitted');
+                $workingReadingToSave = ($isManual || $isSubmitted)
                     ? $existingCurrentBill->working_reading
                     : ($projectedReading !== null ? (string) $projectedReading : null);
 
                 $readingSourceToSave = $isManual ? 'manual' : ($existingCurrentBill?->reading_source ?: 'auto');
                 $reviewStatusToSave = $existingCurrentBill ? ($existingCurrentBill->review_status ?? 'pending') : 'pending';
-                $unitsToSave = $isManual && $existingCurrentBill->units_consumed !== null
+                $unitsToSave = ($isManual || $isSubmitted) && $existingCurrentBill->units_consumed !== null
                     ? $existingCurrentBill->units_consumed
                     : $effectiveUnits;
 

@@ -626,10 +626,11 @@ class DashboardController extends Controller
             ? (int) $request->input('max_units_ceiling', session('dashboard_tuning_max_ceiling', 0))
             : 0;
         $autoExcludeOverposted = (bool) $request->input('auto_exclude_overposted', session('dashboard_tuning_auto_exclude_overposted', true));
+        $excludeSubmitted = (bool) $request->input('exclude_submitted', session('dashboard_tuning_exclude_submitted', true));
         $excludeCriticalDoubt = (bool) $request->input('exclude_critical_doubt', session('dashboard_tuning_exclude_critical_doubt', false));
 
         // Attach review_status, remark, and 4-Box Reading Metrics (ONLY for paginated CAs)
-        $items = $paginatedRecords->map(function ($bill) use ($userStatusModels, $historicalBills, $meterHistories, $basisHistories, $consumers, $month, $year, $adjPercent, $tuningSteps, $colorSafeCeiling, $colorDangerFloor, $unitsSafeCeiling, $unitsDangerFloor, $minUnitsFloor, $maxUnitsCeiling, $autoExcludeOverposted, $excludeCriticalDoubt, $tuningEnabled) {
+        $items = $paginatedRecords->map(function ($bill) use ($userStatusModels, $historicalBills, $meterHistories, $basisHistories, $consumers, $month, $year, $adjPercent, $tuningSteps, $colorSafeCeiling, $colorDangerFloor, $unitsSafeCeiling, $unitsDangerFloor, $minUnitsFloor, $maxUnitsCeiling, $autoExcludeOverposted, $excludeSubmitted, $excludeCriticalDoubt, $tuningEnabled) {
             $st = $userStatusModels[$bill->ca_number] ?? null;
             $bill->review_status = ! empty($bill->review_status) && $bill->review_status !== 'pending' ? $bill->review_status : ($st ? $st->status : ($bill->review_status ?: 'pending'));
             $bill->remark = ! empty($bill->remark) ? $bill->remark : ($st ? ($st->remark ?? '') : '');
@@ -705,6 +706,7 @@ class DashboardController extends Controller
                 $isOverPosted = true;
             }
 
+            $isSubmitted = (strtolower(trim($bill->review_status ?? '')) === 'submitted');
             $isCriticalDoubt = in_array(strtolower(trim($bill->review_status ?? '')), ['critical', 'doubt']);
 
             $guardrails = [
@@ -720,6 +722,8 @@ class DashboardController extends Controller
                 'auto_exclude_overposted' => $autoExcludeOverposted,
                 'is_critical_doubt' => $isCriticalDoubt,
                 'auto_exclude_critical_doubt' => $excludeCriticalDoubt,
+                'is_submitted' => $isSubmitted,
+                'auto_exclude_submitted' => $excludeSubmitted,
             ];
 
             // 2. Box 3: Smart Average Usage Calculation (Outlier-Proof DB-driven delta & OK vs LK vs MD)
@@ -765,7 +769,11 @@ class DashboardController extends Controller
 
             $readingSource = $bill->reading_source ?: 'auto';
 
-            if ($readingSource === 'manual' && ($prevNum <= 0 || (int) $bill->working_reading >= $prevNum)) {
+            if ($isSubmitted) {
+                // Submitted accounts are finalized & locked: NEVER overwrite or re-project working reading
+                $bill->is_manual = false;
+                $bill->is_projected = false;
+            } elseif ($readingSource === 'manual' && ($prevNum <= 0 || (int) $bill->working_reading >= $prevNum)) {
                 $bill->is_manual = true;
                 $bill->is_projected = false;
                 $bill->reading_source = 'manual';
@@ -1232,9 +1240,10 @@ class DashboardController extends Controller
             ? (int) $request->input('max_units_ceiling', session('dashboard_tuning_max_ceiling', 0))
             : 0;
         $autoExcludeOverposted = (bool) $request->input('auto_exclude_overposted', session('dashboard_tuning_auto_exclude_overposted', true));
+        $excludeSubmitted = (bool) $request->input('exclude_submitted', session('dashboard_tuning_exclude_submitted', true));
         $excludeCriticalDoubt = (bool) $request->input('exclude_critical_doubt', session('dashboard_tuning_exclude_critical_doubt', false));
 
-        $result = DB::transaction(function () use ($userId, $isAdmin, $bills, $month, $year, $adjPercent, $tuningSteps, $minUnitsFloor, $maxUnitsCeiling, $autoExcludeOverposted, $excludeCriticalDoubt, $tuningEnabled) {
+        $result = DB::transaction(function () use ($userId, $isAdmin, $bills, $month, $year, $adjPercent, $tuningSteps, $minUnitsFloor, $maxUnitsCeiling, $autoExcludeOverposted, $excludeSubmitted, $excludeCriticalDoubt, $tuningEnabled) {
             $count = 0;
             $skippedExcludedCount = 0;
             $caNumbers = $bills->pluck('ca_number')->unique()->values();
@@ -1246,6 +1255,13 @@ class DashboardController extends Controller
                 ->groupBy('ca_number');
 
             $consumers = ConsumerAccount::whereIn('ca_number', $caNumbers)
+                ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
+                ->get()
+                ->keyBy('ca_number');
+
+            $userStatuses = BillStatus::whereIn('ca_number', $caNumbers)
+                ->where('billing_month', $month)
+                ->where('billing_year', $year)
                 ->when(! $isAdmin && $userId, fn ($q) => $q->where('user_id', $userId))
                 ->get()
                 ->keyBy('ca_number');
@@ -1265,11 +1281,23 @@ class DashboardController extends Controller
                 ->groupBy('ca_number');
 
             foreach ($bills as $bill) {
+                $st = $userStatuses->get($bill->ca_number);
+                $effectiveStatus = ! empty($bill->review_status) && $bill->review_status !== 'pending' ? $bill->review_status : ($st ? $st->status : ($bill->review_status ?: 'pending'));
+                $isSubmitted = (strtolower(trim($effectiveStatus)) === 'submitted');
+                $isCriticalDoubt = in_array(strtolower(trim($effectiveStatus)), ['critical', 'doubt']);
+
                 // Safeguard against overwriting manual custom entries or submitted bills
                 if ($bill->reading_source === 'manual') {
                     continue;
                 }
-                if (strtolower(trim($bill->review_status ?? '')) === 'submitted') {
+                if ($isSubmitted) {
+                    $skippedExcludedCount++;
+
+                    continue;
+                }
+                if ($isCriticalDoubt && $excludeCriticalDoubt) {
+                    $skippedExcludedCount++;
+
                     continue;
                 }
 
@@ -1298,8 +1326,6 @@ class DashboardController extends Controller
                     $isOverPosted = true;
                 }
 
-                $isCriticalDoubt = in_array(strtolower(trim($bill->review_status ?? '')), ['critical', 'doubt']);
-
                 $guardrails = [
                     'tuning_enabled' => $tuningEnabled,
                     'min_units_floor' => $minUnitsFloor,
@@ -1313,6 +1339,8 @@ class DashboardController extends Controller
                     'auto_exclude_overposted' => $autoExcludeOverposted,
                     'is_critical_doubt' => $isCriticalDoubt,
                     'auto_exclude_critical_doubt' => $excludeCriticalDoubt,
+                    'is_submitted' => $isSubmitted,
+                    'auto_exclude_submitted' => $excludeSubmitted,
                 ];
 
                 $avgCalc = $this->smartAverageService->calculateSmartAverage(
@@ -1690,6 +1718,7 @@ class DashboardController extends Controller
             'min_units_floor' => 'nullable|integer|min:0|max:1000',
             'max_units_ceiling' => 'nullable|integer|min:0|max:5000',
             'auto_exclude_overposted' => 'nullable|boolean',
+            'exclude_submitted' => 'nullable|boolean',
             'exclude_critical_doubt' => 'nullable|boolean',
         ]);
 
@@ -1701,6 +1730,7 @@ class DashboardController extends Controller
         $minFloor = $request->has('min_units_floor') ? (int) $request->input('min_units_floor') : null;
         $maxCeiling = $request->has('max_units_ceiling') ? (int) $request->input('max_units_ceiling') : null;
         $autoExcludeOverposted = $request->has('auto_exclude_overposted') ? (bool) $request->input('auto_exclude_overposted') : null;
+        $excludeSubmitted = $request->has('exclude_submitted') ? (bool) $request->input('exclude_submitted') : null;
         $excludeCriticalDoubt = $request->has('exclude_critical_doubt') ? (bool) $request->input('exclude_critical_doubt') : null;
 
         $sessionData = [
@@ -1718,6 +1748,9 @@ class DashboardController extends Controller
         }
         if ($autoExcludeOverposted !== null) {
             $sessionData['dashboard_tuning_auto_exclude_overposted'] = $autoExcludeOverposted;
+        }
+        if ($excludeSubmitted !== null) {
+            $sessionData['dashboard_tuning_exclude_submitted'] = $excludeSubmitted;
         }
         if ($excludeCriticalDoubt !== null) {
             $sessionData['dashboard_tuning_exclude_critical_doubt'] = $excludeCriticalDoubt;
@@ -1745,6 +1778,7 @@ class DashboardController extends Controller
                 'min_units_floor' => $minFloor ?? session('dashboard_tuning_min_floor', 0),
                 'max_units_ceiling' => $maxCeiling ?? session('dashboard_tuning_max_ceiling', 0),
                 'auto_exclude_overposted' => $autoExcludeOverposted ?? session('dashboard_tuning_auto_exclude_overposted', true),
+                'exclude_submitted' => $excludeSubmitted ?? session('dashboard_tuning_exclude_submitted', true),
                 'exclude_critical_doubt' => $excludeCriticalDoubt ?? session('dashboard_tuning_exclude_critical_doubt', false),
                 'tuned_units' => $compounded['tuned_units'],
                 'net_percent' => $compounded['net_percent'],
@@ -1765,6 +1799,7 @@ class DashboardController extends Controller
             'dashboard_tuning_min_floor',
             'dashboard_tuning_max_ceiling',
             'dashboard_tuning_auto_exclude_overposted',
+            'dashboard_tuning_exclude_submitted',
             'dashboard_tuning_exclude_critical_doubt',
         ]);
 

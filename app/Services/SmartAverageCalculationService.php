@@ -411,6 +411,13 @@ class SmartAverageCalculationService
             ? (bool) $guardrails['auto_exclude_critical_doubt']
             : (bool) SystemSetting::get('smart_avg_auto_exclude_critical_doubt', false);
 
+        $isSubmitted = (bool) ($guardrails['is_submitted'] ?? (
+            ($currentBill && strtolower(trim((string) $currentBill->review_status)) === 'submitted')
+        ));
+        $autoExcludeSubmitted = array_key_exists('auto_exclude_submitted', $guardrails)
+            ? (bool) $guardrails['auto_exclude_submitted']
+            : (bool) SystemSetting::get('smart_avg_auto_exclude_submitted', true);
+
         $isExplicitlyExcluded = (bool) ($guardrails['is_avg_excluded'] ?? $consumer?->is_avg_excluded ?? $currentBill?->is_avg_excluded ?? false);
         $explicitReason = $guardrails['avg_exclude_reason'] ?? $consumer?->avg_exclude_reason ?? $currentBill?->avg_exclude_reason ?? null;
 
@@ -420,6 +427,9 @@ class SmartAverageCalculationService
         if ($isExplicitlyExcluded) {
             $isExcluded = true;
             $excludeReason = $explicitReason ?: 'Manually Excluded';
+        } elseif ($isSubmitted && $autoExcludeSubmitted) {
+            $isExcluded = true;
+            $excludeReason = 'Submitted (Locked / Finalized)';
         } elseif ($isOverPosted && $autoExcludeOverposted) {
             $isExcluded = true;
             $excludeReason = 'Over-Posted (Physical < Posted)';
@@ -560,6 +570,7 @@ class SmartAverageCalculationService
             'max_ceiling_applied' => $effectiveMax,
             'indiv_min_units' => $indivMin,
             'indiv_max_units' => $indivMax,
+            'is_submitted' => $isSubmitted,
         ];
     }
 
@@ -660,10 +671,25 @@ class SmartAverageCalculationService
         ?Collection $history = null,
         ?Collection $meterHistory = null,
         float|int $adjPercent = 0,
-        array $tuningSteps = []
+        array $tuningSteps = [],
+        array $guardrails = []
     ): array {
         $month = (int) ($bill->billing_month ?? now()->month);
         $year = (int) ($bill->billing_year ?? now()->year);
+
+        if (empty($guardrails)) {
+            $isSubmitted = strtolower(trim((string) $bill->review_status)) === 'submitted';
+            $isCriticalDoubt = in_array(strtolower(trim((string) $bill->review_status)), ['critical', 'doubt']);
+            $guardrails = [
+                'min_avg_units' => $consumer?->min_avg_units ?? $bill->min_avg_units ?? null,
+                'max_avg_units' => $consumer?->max_avg_units ?? $bill->max_avg_units ?? null,
+                'custom_avg_units' => $consumer?->custom_avg_units ?? $bill->custom_avg_units ?? null,
+                'is_avg_excluded' => (bool) ($consumer?->is_avg_excluded ?? $bill->is_avg_excluded ?? false),
+                'avg_exclude_reason' => $consumer?->avg_exclude_reason ?? $bill->avg_exclude_reason ?? null,
+                'is_submitted' => $isSubmitted,
+                'is_critical_doubt' => $isCriticalDoubt,
+            ];
+        }
 
         // 1. Resolve previous reading using dashboard's exact resolution ladder:
         // Preceding bill working/pdf/prev reading -> MeterReadingHistory -> current bill previous_reading -> Consumer ledger
@@ -693,7 +719,8 @@ class SmartAverageCalculationService
             $history,
             $adjPercent,
             $tuningSteps,
-            $meterHistory
+            $meterHistory,
+            $guardrails
         );
         $avgUnits = max(1, (int) ($avgCalc['avg_units'] ?? 50));
 
@@ -715,8 +742,13 @@ class SmartAverageCalculationService
 
         $readingSource = $bill->reading_source ?: 'auto';
         $isManual = ($readingSource === 'manual');
+        $isSubmitted = ($bill && strtolower(trim((string) $bill->review_status)) === 'submitted');
 
-        if ($isManual && $dbWorking !== null && ($prev <= 0 || $dbWorking >= $prev)) {
+        if ($isSubmitted && $dbWorking !== null) {
+            // Submitted bills are locked/finalized and MUST NOT have their readings re-projected
+            $effectiveWorking = $dbWorking;
+            $suggested = $dbWorking;
+        } elseif ($isManual && $dbWorking !== null && ($prev <= 0 || $dbWorking >= $prev)) {
             $effectiveWorking = $dbWorking;
             $suggested = $dbWorking;
         } else {

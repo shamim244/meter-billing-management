@@ -127,7 +127,8 @@ function dashboardApp() {
                 tuningMinFloor: parseInt(localStorage.getItem('dashboard_tuning_min_floor') || '0', 10),
                 tuningMaxCeiling: parseInt(localStorage.getItem('dashboard_tuning_max_ceiling') || '0', 10),
                 tuningAutoExcludeOverposted: localStorage.getItem('dashboard_tuning_auto_exclude_overposted') !== 'false',
-                tuningExcludeCriticalDoubt: localStorage.getItem('dashboard_tuning_exclude_critical_doubt') === 'true',
+                tuningExcludeSubmitted: localStorage.getItem('dashboard_tuning_exclude_submitted') !== 'false',
+                tuningExcludeCriticalDoubt: localStorage.getItem('dashboard_tuning_exclude_critical_doubt') !== 'false',
                 showIndividualAvgModal: false,
                 activeIndividualBill: null,
                 individualCustomUnits: null,
@@ -714,8 +715,11 @@ function dashboardApp() {
                     if (this.tuningAutoExcludeOverposted !== undefined) {
                         url.searchParams.append('auto_exclude_overposted', this.tuningAutoExcludeOverposted ? '1' : '0');
                     }
-                    if (this.tuningExcludeCriticalDoubt) {
-                        url.searchParams.append('exclude_critical_doubt', '1');
+                    if (this.tuningExcludeSubmitted !== undefined) {
+                        url.searchParams.append('exclude_submitted', this.tuningExcludeSubmitted ? '1' : '0');
+                    }
+                    if (this.tuningExcludeCriticalDoubt !== undefined) {
+                        url.searchParams.append('exclude_critical_doubt', this.tuningExcludeCriticalDoubt ? '1' : '0');
                     }
 
                     // Standard enterprise pagination: 50 records per page for both table and card views
@@ -1291,6 +1295,7 @@ function dashboardApp() {
                             min_units_floor: this.tuningEnabled ? (this.tuningMinFloor || 0) : 0,
                             max_units_ceiling: this.tuningEnabled ? (this.tuningMaxCeiling || 0) : 0,
                             auto_exclude_overposted: this.tuningAutoExcludeOverposted,
+                            exclude_submitted: this.tuningExcludeSubmitted,
                             exclude_critical_doubt: this.tuningExcludeCriticalDoubt
                         })
                     })
@@ -1335,13 +1340,15 @@ function dashboardApp() {
                     this.tuningMinFloor = 0;
                     this.tuningMaxCeiling = 0;
                     this.tuningAutoExcludeOverposted = true;
-                    this.tuningExcludeCriticalDoubt = false;
+                    this.tuningExcludeSubmitted = true;
+                    this.tuningExcludeCriticalDoubt = true;
                     localStorage.removeItem('dashboard_tuning_enabled');
                     localStorage.removeItem('dashboard_avg_tuning_steps');
                     localStorage.setItem('dashboard_avg_adjustment', '0');
                     localStorage.removeItem('dashboard_tuning_min_floor');
                     localStorage.removeItem('dashboard_tuning_max_ceiling');
                     localStorage.removeItem('dashboard_tuning_auto_exclude_overposted');
+                    localStorage.removeItem('dashboard_tuning_exclude_submitted');
                     localStorage.removeItem('dashboard_tuning_exclude_critical_doubt');
                     fetch('/dashboard/tuning/reset', {
                         method: 'POST',
@@ -1361,6 +1368,7 @@ function dashboardApp() {
                     localStorage.setItem('dashboard_tuning_min_floor', String(this.tuningEnabled ? (this.tuningMinFloor || 0) : 0));
                     localStorage.setItem('dashboard_tuning_max_ceiling', String(this.tuningEnabled ? (this.tuningMaxCeiling || 0) : 0));
                     localStorage.setItem('dashboard_tuning_auto_exclude_overposted', String(this.tuningAutoExcludeOverposted));
+                    localStorage.setItem('dashboard_tuning_exclude_submitted', String(this.tuningExcludeSubmitted));
                     localStorage.setItem('dashboard_tuning_exclude_critical_doubt', String(this.tuningExcludeCriticalDoubt));
 
                     // Save to server session
@@ -1379,6 +1387,7 @@ function dashboardApp() {
                             min_units_floor: this.tuningEnabled ? (this.tuningMinFloor || 0) : 0,
                             max_units_ceiling: this.tuningEnabled ? (this.tuningMaxCeiling || 0) : 0,
                             auto_exclude_overposted: this.tuningAutoExcludeOverposted,
+                            exclude_submitted: this.tuningExcludeSubmitted,
                             exclude_critical_doubt: this.tuningExcludeCriticalDoubt
                         })
                     }).catch(e => console.error(e));
