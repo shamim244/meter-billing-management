@@ -123,23 +123,31 @@ class JasperUnicodeExtractor implements BillExtractorInterface
         // 5. Total Amount (supports negative amounts, advance/credit balances, CR suffix, and parentheses)
         $amountFound = null;
 
-        // 5a. Primary 3-line amount block in Jasper postpaid bills before CA number
-        if (preg_match('/([^\r\n:]+?)\s*\r?\n\s*([^\r\n:]+?)\s*\r?\n\s*([^\r\n:]+?)\s*\r?\n\s*:\s*\d{11}\b/u', $cleanText, $m)) {
+        // 5a. Primary 3-line amount block in Jasper postpaid bills before CA number (supports 9 to 12 digit CA numbers)
+        if (preg_match('/([^\r\n:]+?)\s*\r?\n\s*([^\r\n:]+?)\s*\r?\n\s*([^\r\n:]+?)\s*\r?\n\s*:\s*\d{9,12}\b/u', $cleanText, $m)) {
+            $candidate = $this->parseAmount($m[1]) ?? $this->parseAmount($m[2]);
+            if ($candidate !== null) {
+                $amountFound = $candidate;
+            }
+        }
+
+        // 5b. Summary block under 'मीटर पठन विवरणी' and 'वर्तमान बिल' before 'कुल खपत'
+        if ($amountFound === null && preg_match('/मीटर\s*पठन\s*विवरणी[\s\S]{0,100}?वर्तमान\s*बिल\s*\r?\n\s*([^\r\n:]+?)\s*\r?\n\s*([^\r\n:]+?)\s*\r?\n\s*([^\r\n:]+?)\s*\r?\n\s*कुल\s*खपत/u', $cleanText, $m)) {
+            $candidate = $this->parseAmount($m[1]) ?? $this->parseAmount($m[2]);
+            if ($candidate !== null) {
+                $amountFound = $candidate;
+            }
+        }
+
+        // 5c. Breakdown table column match for total amount before energy charges and installment (: 1164.11\n: 148.40)
+        if ($amountFound === null && preg_match('/:\s*([\d,]+\.\d{2})\s*\r?\n\s*:\s*[\d,]+\.\d{2}\s*\r?\n\s*:\s*[\d,]+\.\d{2}\s*0\.00\s*किश्त/u', $cleanText, $m)) {
             $candidate = $this->parseAmount($m[1]);
             if ($candidate !== null) {
                 $amountFound = $candidate;
             }
         }
 
-        // 5b. वर्तमान विपत्र राशि (Current Bill Amount - supports positive and negative amounts)
-        if ($amountFound === null && preg_match('/वर्तमान\s*विपत्र\s*राशि[^\r\n\d\-−–—\(]*([^\r\n]+)/u', $cleanText, $m)) {
-            $candidate = $this->parseAmount($m[1]);
-            if ($candidate !== null) {
-                $amountFound = $candidate;
-            }
-        }
-
-        // 5c. कुल राशि / कुल देय राशि (Total Payable Amount)
+        // 5d. कुल राशि / कुल देय राशि (Total Payable Amount)
         if ($amountFound === null && preg_match('/(?:कुल\s*देय\s*राशि|नियत\s*तिथि\s*तक\s*देय\s*राशि|कुल\s*राशि)\s*[\r\n:]+[^\r\n\d\-−–—\(]*([^\r\n]+)/u', $cleanText, $m)) {
             $candidate = $this->parseAmount($m[1]);
             if ($candidate !== null) {
@@ -147,7 +155,15 @@ class JasperUnicodeExtractor implements BillExtractorInterface
             }
         }
 
-        // 5d. Prepaid Balance (जमा शेष) when credit balance exists
+        // 5e. वर्तमान विपत्र राशि (Current Bill Amount) - standard for prepaid monthly bills
+        if ($amountFound === null && preg_match('/वर्तमान\s*विपत्र\s*राशि[^\r\n\d\-−–—\(]*([^\r\n]+)/u', $cleanText, $m)) {
+            $candidate = $this->parseAmount($m[1]);
+            if ($candidate !== null) {
+                $amountFound = $candidate;
+            }
+        }
+
+        // 5f. Prepaid Balance (जमा शेष) when credit balance exists
         if ($amountFound === null && preg_match('/जमा\s*शेष[^\r\n\d\-−–—\(]*([^\r\n]+)/u', $cleanText, $m)) {
             $candidate = $this->parseAmount($m[1]);
             if ($candidate !== null) {
@@ -155,7 +171,7 @@ class JasperUnicodeExtractor implements BillExtractorInterface
             }
         }
 
-        // 5e. Smart Prepaid net balance fallback (under मीटर पठन विवरणी before कुल खपत)
+        // 5g. Smart Prepaid net balance fallback (under मीटर पठन विवरणी before कुल खपत)
         if ($amountFound === null && preg_match('/मीटर\s*पठन\s*विवरणी\s*\r?\n\s*([^\r\n]+)\s*\r?\n\s*कुल\s*खपत/u', $cleanText, $m)) {
             $candidate = $this->parseAmount($m[1]);
             if ($candidate !== null) {
@@ -232,16 +248,29 @@ class JasperUnicodeExtractor implements BillExtractorInterface
         }
 
         // 11. Financial Breakdown
-        if (preg_match('/(\d+\.\d{2})\s*:\s*(\d+\.\d{2})\s*:\s*(\d+\.\d{2})\s*0\.00\s*किश्त राशि/u', $cleanText, $m)) {
-            $data['energy_charges'] = (float) $m[2];
-            $data['fixed_charges'] = (float) $m[3];
+        if (preg_match('/([\d,]+\.\d{2})\s*:\s*([\d,]+\.\d{2})\s*:\s*([\d,]+\.\d{2})\s*0\.00\s*किश्त राशि/u', $cleanText, $m)) {
+            $data['energy_charges'] = (float) str_replace(',', '', $m[2]);
+            $data['fixed_charges'] = (float) str_replace(',', '', $m[3]);
         }
-        if (preg_match('/(\d+\.\d{2})\s*0\.00\s*:\s*(-?\d+\.\d{2})/u', $cleanText, $m)) {
-            $data['electricity_duty'] = (float) $m[1];
-            $data['government_subsidy'] = (float) $m[2];
+        if (preg_match('/([\d,]+\.\d{2})\s*0\.00\s*:\s*(-?[\d,]+\.\d{2})/u', $cleanText, $m)) {
+            $data['electricity_duty'] = (float) str_replace(',', '', $m[1]);
+            $data['government_subsidy'] = (float) str_replace(',', '', $m[2]);
         }
-        if (preg_match('/(\d+\.\d{2})\s*0\.00(?:\s*:\s*)+मीटर पठन विवरणी/u', $cleanText, $m)) {
-            $data['arrears'] = (float) $m[1];
+        if (preg_match('/([\d,]+\.\d{2})\s*0\.00(?:\s*:\s*)+मीटर पठन विवरणी/u', $cleanText, $m)) {
+            $data['arrears'] = (float) str_replace(',', '', $m[1]);
+        }
+
+        // 11a. Reconciliation safeguard: If total_amount was extracted as 0 or null, but positive arrears exist
+        if (($data['total_amount'] === 0.0 || $data['total_amount'] === null) && $data['arrears'] > 0) {
+            // Check breakdown table total amount column
+            if (preg_match('/:\s*([\d,]+\.\d{2})\s*\r?\n\s*:\s*[\d,]+\.\d{2}\s*\r?\n\s*:\s*[\d,]+\.\d{2}\s*0\.00\s*किश्त/u', $cleanText, $mTot)) {
+                $candidate = $this->parseAmount($mTot[1]);
+                if ($candidate !== null && $candidate > 0) {
+                    $data['total_amount'] = $candidate;
+                }
+            } else {
+                $data['total_amount'] = $data['arrears'];
+            }
         }
 
         // 12. Historical Monthly Consumption (12-Month Ledger)

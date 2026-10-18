@@ -229,4 +229,47 @@ class BillExtractionEngineTest extends TestCase
         // Verify current monthly bill amount was correctly captured
         $this->assertEquals(159.49, $data['total_amount']);
     }
+
+    public function test_jasper_extractor_supports_12_digit_ca_and_comma_separated_arrears(): void
+    {
+        $extractor = app(JasperUnicodeExtractor::class);
+
+        // Synthetic bill text simulating 12-digit CA, 100% subsidy for current month (0.00), and comma arrears (1,152.03)
+        $text = ": NA\n: SHANTI DEVI\n89*****724\n"
+            .": SEP,2026\n"
+            ."1165.00\n"
+            ."1165.00\n"
+            ."1177.00\n"
+            .": 102300319066\n"
+            ."1,152.03 0.00 : : मीटर पठन विवरणी\n"
+            ."वर्तमान विपत्र राशि 0.00\n";
+
+        $data = $extractor->extract($text);
+
+        $this->assertEquals('SHANTI DEVI', $data['consumer_name']);
+        $this->assertEquals(1165.00, $data['total_amount']);
+        $this->assertEquals(1152.03, $data['arrears']);
+    }
+
+    public function test_jasper_extractor_on_live_12_digit_ca_pdf(): void
+    {
+        $pdfPath = file_exists(base_path('apk/bill-pdf/bill_102300319066_09_2026.pdf'))
+            ? base_path('apk/bill-pdf/bill_102300319066_09_2026.pdf')
+            : base_path('docs/bill/102300319066.pdf');
+        if (! file_exists($pdfPath)) {
+            $this->markTestSkipped('Sample 102300319066.pdf not found.');
+        }
+
+        $pdf = @$this->parser->parseFile($pdfPath);
+        $text = @$pdf->getText();
+
+        $data = $this->manager->extract($text, $pdfPath);
+
+        $this->assertEquals('jasper_unicode', $data['detected_format']);
+        $this->assertEquals('SHANTI DEVI', $data['consumer_name']);
+        $this->assertEquals(1165.00, $data['total_amount']);
+        $this->assertEquals(1152.03, $data['arrears']);
+        $this->assertEquals('202609102300319066', $data['bill_number']);
+        $this->assertEquals('OK', $data['billing_basis']);
+    }
 }
