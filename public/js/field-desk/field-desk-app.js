@@ -34,6 +34,7 @@ function fieldDeskApp() {
                 gpsLoading: false,
                 form: {
                     ca_number: '',
+                    consumer_name: '',
                     category_id: String(cfg.defaultCategoryId || '1'),
                     target_date: new Date().toISOString().split('T')[0],
                     priority: 'normal',
@@ -143,6 +144,7 @@ function fieldDeskApp() {
 
                 openCreateModal(ca = '') {
                     this.form.ca_number = ca || this.search || '';
+                    this.form.consumer_name = '';
                     this.form.target_date = new Date().toISOString().split('T')[0];
                     this.form.target_amount = '';
                     this.form.payment_mode = '';
@@ -153,6 +155,41 @@ function fieldDeskApp() {
                     this.form.location_accuracy = null;
                     this.form.save_to_consumer = true;
                     this.modals.create = true;
+                    if (this.form.ca_number) {
+                        this.lookupConsumerInfo();
+                    }
+                },
+
+                async lookupConsumerInfo() {
+                    const ca = (this.form.ca_number || '').trim();
+                    if (!ca || ca.length < 5) return;
+                    try {
+                        const res = await fetch(`/api/field-desk/consumer/${ca}`, {
+                            headers: { 'Accept': 'application/json' }
+                        });
+                        const json = await res.json();
+                        if (json.success && json.consumer) {
+                            if (!this.form.mobile && (json.consumer.clean_mobile || json.consumer.mobile)) {
+                                this.form.mobile = json.consumer.clean_mobile || json.consumer.mobile;
+                            }
+                            if (!this.form.consumer_name && json.consumer.name) {
+                                this.form.consumer_name = json.consumer.name;
+                            }
+                            if (!this.form.mru_id && json.consumer.mru && json.consumer.mru.id) {
+                                this.form.mru_id = String(json.consumer.mru.id);
+                            }
+                            if (!this.form.target_amount && json.consumer.baseline_amount) {
+                                this.form.target_amount = json.consumer.baseline_amount;
+                            }
+                            if (!this.form.latitude && json.consumer.latitude) {
+                                this.form.latitude = json.consumer.latitude;
+                                this.form.longitude = json.consumer.longitude;
+                                this.form.location_accuracy = json.consumer.location_accuracy;
+                            }
+                        }
+                    } catch (e) {
+                        // Silent fallback, do not disrupt user input
+                    }
                 },
 
                 captureGpsLocation(mode = 'create') {
@@ -246,7 +283,7 @@ function fieldDeskApp() {
                 openQuickMobileModal(item) {
                     this.quickMobileForm = {
                         ca_number: item.ca_number,
-                        mobile: item.consumer_mobile || ''
+                        mobile: item.mobile || item.consumer_mobile || ''
                     };
                     this.modals.quickMobile = true;
                 },
@@ -314,7 +351,7 @@ function fieldDeskApp() {
                         target_amount: item.target_amount || '',
                         payment_mode: item.payment_mode || '',
                         private_note: item.private_note || '',
-                        mobile: item.consumer_mobile || '',
+                        mobile: item.mobile || item.consumer_mobile || '',
                         latitude: item.latitude || item.consumer_latitude || '',
                         longitude: item.longitude || item.consumer_longitude || '',
                         location_accuracy: item.location_accuracy || item.consumer_accuracy || null,

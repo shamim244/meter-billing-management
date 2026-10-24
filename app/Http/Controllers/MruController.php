@@ -411,7 +411,16 @@ class MruController extends Controller
             // 2. Cleanly delete database records
             $caNumbers = $mru->consumerAccounts()->pluck('ca_number')->toArray();
             if (! empty($caNumbers)) {
-                BillStatus::where('user_id', $userId)->whereIn('ca_number', $caNumbers)->delete();
+                $otherCaNumbers = ConsumerAccount::where('user_id', $userId)
+                    ->where('mru_id', '!=', $mru->id)
+                    ->whereIn('ca_number', $caNumbers)
+                    ->pluck('ca_number')
+                    ->toArray();
+
+                $casToDelete = array_diff($caNumbers, $otherCaNumbers);
+                if (! empty($casToDelete)) {
+                    BillStatus::where('user_id', $userId)->whereIn('ca_number', $casToDelete)->delete();
+                }
             }
 
             $mru->consumerAccounts()->delete();
@@ -491,10 +500,12 @@ class MruController extends Controller
             'baseline_previous_reading' => 'nullable|integer|min:0',
             'mobile' => 'nullable|string|max:20',
             'address' => 'nullable|string|max:500',
+            'duplicate_action' => 'nullable|string|in:keep_both,transfer,skip',
         ]);
 
         $userId = Auth::id();
         $ca = trim($request->ca_number);
+        $duplicateAction = $request->input('duplicate_action', 'keep_both');
         $baseReading = $request->filled('baseline_previous_reading') ? (int) $request->baseline_previous_reading : null;
 
         $payload = [
@@ -513,12 +524,62 @@ class MruController extends Controller
             $payload['last_working_reading'] = $baseReading;
         }
 
+        // Check if CA already exists in another MRU for this user
+        $existingOtherMru = ConsumerAccount::where('user_id', $userId)
+            ->where('ca_number', $ca)
+            ->where(function ($q) use ($mru) {
+                $q->whereNull('mru_id')->orWhere('mru_id', '!=', $mru->id);
+            })
+            ->with('mru')
+            ->first();
+
+        if ($existingOtherMru && $duplicateAction === 'skip') {
+            $otherName = $existingOtherMru->mru?->name ?? "ID {$existingOtherMru->mru_id}";
+
+            return back()->with('info', "Consumer CA '{$ca}' already exists in MRU '{$otherName}' and was skipped.");
+        }
+
+        if ($existingOtherMru && $duplicateAction === 'transfer') {
+            $otherName = $existingOtherMru->mru?->name ?? "ID {$existingOtherMru->mru_id}";
+            $existingOtherMru->update(array_merge($payload, ['mru_id' => $mru->id]));
+
+            return back()->with('success', "Consumer CA '{$ca}' transferred from MRU '{$otherName}' to MRU '{$mru->name}'.");
+        }
+
+        // 'keep_both' strategy (default):
+        // Inherit missing details from existing account if omitted in the form
+        if ($existingOtherMru) {
+            if (empty($payload['consumer_name']) && ! empty($existingOtherMru->consumer_name)) {
+                $payload['consumer_name'] = $existingOtherMru->consumer_name;
+            }
+            if (empty($payload['meter_no']) && ! empty($existingOtherMru->meter_no)) {
+                $payload['meter_no'] = $existingOtherMru->meter_no;
+            }
+            if (empty($payload['tariff_category']) && ! empty($existingOtherMru->tariff_category)) {
+                $payload['tariff_category'] = $existingOtherMru->tariff_category;
+            }
+            if (empty($payload['billing_basis']) && ! empty($existingOtherMru->billing_basis)) {
+                $payload['billing_basis'] = $existingOtherMru->billing_basis;
+            }
+            if (empty($payload['mobile']) && ! empty($existingOtherMru->mobile)) {
+                $payload['mobile'] = $existingOtherMru->mobile;
+            }
+            if (empty($payload['address']) && ! empty($existingOtherMru->address)) {
+                $payload['address'] = $existingOtherMru->address;
+            }
+        }
+
         ConsumerAccount::updateOrCreate(
-            ['user_id' => $userId, 'ca_number' => $ca],
+            ['user_id' => $userId, 'mru_id' => $mru->id, 'ca_number' => $ca],
             $payload
         );
 
-        return back()->with('success', "Consumer CA '{$ca}' added to MRU '{$mru->name}'.");
+        $msg = "Consumer CA '{$ca}' added to MRU '{$mru->name}'.";
+        if ($existingOtherMru) {
+            $msg .= " (Also retained in MRU '{$existingOtherMru->mru?->name}').";
+        }
+
+        return back()->with('success', $msg);
     }
 
     /**
@@ -530,13 +591,17 @@ class MruController extends Controller
 
         $request->validate([
             'ca_data' => 'required|string',
+            'duplicate_strategy' => 'nullable|string|in:keep_both,transfer,skip',
         ]);
 
         $userId = Auth::id();
+        $duplicateStrategy = $request->input('duplicate_strategy', 'keep_both');
         $rawLines = preg_split('/[\r\n]+/', trim($request->ca_data));
         $importedCount = 0;
+        $skippedCount = 0;
+        $transferredCount = 0;
 
-        DB::transaction(function () use ($rawLines, $mru, $userId, &$importedCount) {
+        DB::transaction(function () use ($rawLines, $mru, $userId, $duplicateStrategy, &$importedCount, &$skippedCount, &$transferredCount) {
             $headerMap = null;
 
             foreach ($rawLines as $line) {
@@ -687,15 +752,80 @@ class MruController extends Controller
                     $payload['address'] = $address;
                 }
 
-                ConsumerAccount::updateOrCreate(
-                    ['user_id' => $userId, 'ca_number' => $ca],
-                    $payload
-                );
+                // Check for existing consumer account in this MRU
+                $existingInThisMru = ConsumerAccount::where('user_id', $userId)
+                    ->where('mru_id', $mru->id)
+                    ->where('ca_number', $ca)
+                    ->first();
+
+                if ($existingInThisMru) {
+                    $existingInThisMru->update($payload);
+                    $importedCount++;
+
+                    continue;
+                }
+
+                // Check if CA already exists in another MRU for this user
+                $existingInOtherMru = ConsumerAccount::where('user_id', $userId)
+                    ->where('ca_number', $ca)
+                    ->where(function ($q) use ($mru) {
+                        $q->whereNull('mru_id')->orWhere('mru_id', '!=', $mru->id);
+                    })
+                    ->first();
+
+                if ($existingInOtherMru) {
+                    if ($duplicateStrategy === 'skip') {
+                        $skippedCount++;
+
+                        continue;
+                    }
+
+                    if ($duplicateStrategy === 'transfer') {
+                        $existingInOtherMru->update(array_merge($payload, ['mru_id' => $mru->id]));
+                        $transferredCount++;
+
+                        continue;
+                    }
+
+                    // Default 'keep_both': inherit missing details if omitted in import
+                    if (! isset($payload['consumer_name']) && ! empty($existingInOtherMru->consumer_name)) {
+                        $payload['consumer_name'] = $existingInOtherMru->consumer_name;
+                    }
+                    if (! isset($payload['meter_no']) && ! empty($existingInOtherMru->meter_no)) {
+                        $payload['meter_no'] = $existingInOtherMru->meter_no;
+                    }
+                    if (! isset($payload['tariff_category']) && ! empty($existingInOtherMru->tariff_category)) {
+                        $payload['tariff_category'] = $existingInOtherMru->tariff_category;
+                    }
+                    if (! isset($payload['billing_basis']) && ! empty($existingInOtherMru->billing_basis)) {
+                        $payload['billing_basis'] = $existingInOtherMru->billing_basis;
+                    }
+                    if (! isset($payload['mobile']) && ! empty($existingInOtherMru->mobile)) {
+                        $payload['mobile'] = $existingInOtherMru->mobile;
+                    }
+                    if (! isset($payload['address']) && ! empty($existingInOtherMru->address)) {
+                        $payload['address'] = $existingInOtherMru->address;
+                    }
+                }
+
+                ConsumerAccount::create(array_merge($payload, [
+                    'user_id' => $userId,
+                    'mru_id' => $mru->id,
+                    'ca_number' => $ca,
+                ]));
                 $importedCount++;
             }
         });
 
-        return back()->with('success', "Successfully imported {$importedCount} consumers into MRU '{$mru->name}'.");
+        $msg = "Successfully processed import for MRU '{$mru->name}': {$importedCount} consumer(s) added/updated.";
+        if ($transferredCount > 0) {
+            $msg .= " {$transferredCount} transferred from other MRUs.";
+        }
+        if ($skippedCount > 0) {
+            $msg .= " {$skippedCount} existing consumer(s) skipped (retained in current MRUs).";
+        }
+
+        return back()->with('success', $msg);
     }
 
     /**

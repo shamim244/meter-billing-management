@@ -19,6 +19,7 @@ class FieldDeskAction extends Model
     protected $fillable = [
         'user_id',
         'ca_number',
+        'mobile',
         'consumer_account_id',
         'category_id',
         'priority',
@@ -160,6 +161,7 @@ class FieldDeskAction extends Model
             $q->whereRaw('LOWER(ca_number) LIKE ?', ["%{$escaped}%"])
                 ->orWhereRaw('LOWER(private_note) LIKE ?', ["%{$escaped}%"])
                 ->orWhereRaw('LOWER(resolution_note) LIKE ?', ["%{$escaped}%"])
+                ->orWhere('mobile', 'LIKE', "%{$escaped}%")
                 ->orWhereHas('consumerAccount', function (Builder $caQ) use ($escaped) {
                     $caQ->whereRaw('LOWER(consumer_name) LIKE ?', ["%{$escaped}%"])
                         ->orWhereRaw('LOWER(mobile) LIKE ?', ["%{$escaped}%"])
@@ -206,6 +208,14 @@ class FieldDeskAction extends Model
     public function isResolved(): bool
     {
         return $this->status === 'completed';
+    }
+
+    /**
+     * Get effective mobile (action's own mobile, or consumer account fallback).
+     */
+    public function getEffectiveMobileAttribute(): ?string
+    {
+        return $this->mobile ?: $this->consumerAccount?->mobile;
     }
 
     /**

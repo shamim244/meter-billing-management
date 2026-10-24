@@ -100,7 +100,7 @@ class FieldDeskController extends Controller
                 'consumer_latitude' => $consumerAcc?->latitude ? (float) $consumerAcc->latitude : null,
                 'consumer_longitude' => $consumerAcc?->longitude ? (float) $consumerAcc->longitude : null,
                 'consumer_accuracy' => $consumerAcc?->location_accuracy ? (float) $consumerAcc->location_accuracy : null,
-                'consumer_mobile' => $consumerAcc?->mobile,
+                'consumer_mobile' => $consumerAcc?->mobile ?: $action->mobile,
                 'category_id' => $action->category_id,
                 'category_name' => $action->category?->name ?? 'Action',
                 'category_code' => $action->category?->code ?? 'general_note',
@@ -165,6 +165,7 @@ class FieldDeskController extends Controller
 
         $validated = $request->validate([
             'ca_number' => ['required', 'string', 'max:50'],
+            'consumer_name' => ['nullable', 'string', 'max:255'],
             'category_id' => ['required', 'integer', 'exists:field_desk_categories,id'],
             'target_date' => ['required', 'date'],
             'priority' => ['nullable', 'in:urgent,high,normal,low'],
@@ -181,53 +182,75 @@ class FieldDeskController extends Controller
             'mobile' => ['nullable', 'string', 'max:20'],
         ]);
 
-        // Auto-link consumer account if exists, or auto-create from existing BillRecord
+        $caNumber = trim($validated['ca_number']);
+        $cleanMobile = ! empty($validated['mobile'])
+            ? ($this->fieldDeskService->sanitizeMobile($validated['mobile']) ?: trim($validated['mobile']))
+            : null;
+
+        // Auto-link consumer account if exists, or auto-create from existing BillRecord or user inputs
         $consumer = ConsumerAccount::withoutGlobalScopes()
             ->where('user_id', $userId)
-            ->where('ca_number', $validated['ca_number'])
+            ->where('ca_number', $caNumber)
             ->first();
 
         if (! $consumer) {
             $bill = BillRecord::withoutGlobalScopes()
                 ->where('user_id', $userId)
-                ->where('ca_number', $validated['ca_number'])
+                ->where('ca_number', $caNumber)
                 ->latest()
                 ->first();
 
-            if ($bill) {
-                $consumer = ConsumerAccount::create([
-                    'user_id' => $userId,
-                    'ca_number' => trim($validated['ca_number']),
-                    'mru_id' => $bill->mru_id,
-                    'consumer_name' => $bill->consumer_name ?: ('Consumer '.trim($validated['ca_number'])),
-                    'meter_no' => $bill->meter_no,
-                    'tariff_category' => $bill->tariff_category ?? 'DS-II',
-                    'billing_basis' => $bill->billing_basis ?? 'OK',
-                    'baseline_amount' => $bill->total_amount,
-                ]);
+            $consumerName = $validated['consumer_name']
+                ?? ($bill?->consumer_name ?: ('Consumer '.$caNumber));
+
+            $consumer = ConsumerAccount::create([
+                'user_id' => $userId,
+                'ca_number' => $caNumber,
+                'mru_id' => $validated['mru_id'] ?? ($bill?->mru_id ?? null),
+                'consumer_name' => $consumerName,
+                'meter_no' => $bill?->meter_no ?? null,
+                'tariff_category' => $bill?->tariff_category ?? 'DS-II',
+                'billing_basis' => $bill?->billing_basis ?? 'OK',
+                'baseline_amount' => $bill?->total_amount ?? (isset($validated['target_amount']) && $validated['target_amount'] !== '' ? (float) $validated['target_amount'] : 0.00),
+                'mobile' => $cleanMobile,
+                'latitude' => isset($validated['latitude']) ? (float) $validated['latitude'] : null,
+                'longitude' => isset($validated['longitude']) ? (float) $validated['longitude'] : null,
+                'location_accuracy' => isset($validated['location_accuracy']) && is_numeric($validated['location_accuracy']) ? (float) $validated['location_accuracy'] : null,
+                'location_updated_at' => (isset($validated['latitude']) && isset($validated['longitude'])) ? now() : null,
+                'status' => 'active',
+            ]);
+        } else {
+            $changed = false;
+            if ($cleanMobile && (empty($consumer->mobile) || $cleanMobile !== $consumer->mobile)) {
+                $consumer->mobile = $cleanMobile;
+                $changed = true;
             }
-        }
-
-        // Save mobile number to consumer if passed
-        if (! empty($validated['mobile']) && $consumer) {
-            $consumer->mobile = $this->fieldDeskService->sanitizeMobile($validated['mobile']) ?: trim($validated['mobile']);
-            $consumer->save();
-        }
-
-        // Save GPS coordinates to consumer if requested
-        $saveToConsumer = $request->boolean('save_to_consumer', true);
-        if (isset($validated['latitude']) && isset($validated['longitude']) && $consumer && $saveToConsumer) {
-            $consumer->latitude = (float) $validated['latitude'];
-            $consumer->longitude = (float) $validated['longitude'];
-            $consumer->location_accuracy = isset($validated['location_accuracy']) && is_numeric($validated['location_accuracy']) ? (float) $validated['location_accuracy'] : null;
-            $consumer->location_updated_at = now();
-            $consumer->save();
+            if (! empty($validated['consumer_name']) && (empty($consumer->consumer_name) || str_starts_with($consumer->consumer_name, 'Consumer '))) {
+                $consumer->consumer_name = trim($validated['consumer_name']);
+                $changed = true;
+            }
+            if (! empty($validated['mru_id']) && empty($consumer->mru_id)) {
+                $consumer->mru_id = (int) $validated['mru_id'];
+                $changed = true;
+            }
+            $saveToConsumer = $request->boolean('save_to_consumer', true);
+            if ($saveToConsumer && isset($validated['latitude']) && isset($validated['longitude'])) {
+                $consumer->latitude = (float) $validated['latitude'];
+                $consumer->longitude = (float) $validated['longitude'];
+                $consumer->location_accuracy = isset($validated['location_accuracy']) && is_numeric($validated['location_accuracy']) ? (float) $validated['location_accuracy'] : null;
+                $consumer->location_updated_at = now();
+                $changed = true;
+            }
+            if ($changed) {
+                $consumer->save();
+            }
         }
 
         $action = new FieldDeskAction;
         $action->user_id = $userId;
-        $action->ca_number = trim($validated['ca_number']);
-        $action->consumer_account_id = $consumer?->id;
+        $action->ca_number = $caNumber;
+        $action->mobile = $cleanMobile ?: $consumer->mobile;
+        $action->consumer_account_id = $consumer->id;
         $action->category_id = (int) $validated['category_id'];
         $action->priority = $validated['priority'] ?? 'normal';
         $action->target_date = $validated['target_date'];
@@ -241,7 +264,7 @@ class FieldDeskController extends Controller
         $action->location_accuracy = isset($validated['location_accuracy']) && is_numeric($validated['location_accuracy']) ? (float) $validated['location_accuracy'] : null;
         $action->status = 'open';
         $action->reschedule_count = 0;
-        $action->mru_id = $validated['mru_id'] ?? $consumer?->mru_id;
+        $action->mru_id = $validated['mru_id'] ?? $consumer->mru_id;
         $action->billing_month = $validated['billing_month'] ?? null;
         $action->billing_year = $validated['billing_year'] ?? null;
         $action->save();
@@ -265,6 +288,8 @@ class FieldDeskController extends Controller
                 'effective_longitude' => $action->effective_longitude,
                 'location_accuracy' => $action->effective_accuracy,
                 'map_link' => $action->map_link,
+                'mobile' => $this->fieldDeskService->resolveConsumerMobile($action),
+                'consumer_mobile' => $action->consumerAccount?->mobile ?: $action->mobile,
             ]),
         ], 201);
     }
@@ -306,6 +331,8 @@ class FieldDeskController extends Controller
                 'effective_longitude' => $action->effective_longitude,
                 'location_accuracy' => $action->effective_accuracy,
                 'map_link' => $action->map_link,
+                'mobile' => $this->fieldDeskService->resolveConsumerMobile($action),
+                'consumer_mobile' => $action->consumerAccount?->mobile ?: $action->mobile,
             ]),
             'mobile' => $mobile,
             'consumer' => $action->consumerAccount ? [
@@ -379,10 +406,37 @@ class FieldDeskController extends Controller
             $action->location_accuracy = isset($validated['location_accuracy']) && is_numeric($validated['location_accuracy']) ? (float) $validated['location_accuracy'] : null;
         }
 
+        $cleanMobile = ! empty($validated['mobile'])
+            ? ($this->fieldDeskService->sanitizeMobile($validated['mobile']) ?: trim($validated['mobile']))
+            : null;
+
+        if (array_key_exists('mobile', $validated)) {
+            $action->mobile = $cleanMobile;
+        }
+
         // Also update consumer if mobile or coordinates passed
         $consumer = $action->consumerAccount;
-        if (! empty($validated['mobile']) && $consumer) {
-            $consumer->mobile = $this->fieldDeskService->sanitizeMobile($validated['mobile']) ?: trim($validated['mobile']);
+        if (! $consumer) {
+            $consumer = ConsumerAccount::withoutGlobalScopes()
+                ->where('user_id', $userId)
+                ->where('ca_number', $action->ca_number)
+                ->first();
+
+            if (! $consumer) {
+                $consumer = ConsumerAccount::create([
+                    'user_id' => $userId,
+                    'ca_number' => $action->ca_number,
+                    'mru_id' => $action->mru_id,
+                    'consumer_name' => 'Consumer '.$action->ca_number,
+                    'mobile' => $cleanMobile ?: $action->mobile,
+                    'status' => 'active',
+                ]);
+            }
+            $action->consumer_account_id = $consumer->id;
+        }
+
+        if ($cleanMobile) {
+            $consumer->mobile = $cleanMobile;
             $consumer->save();
         }
 
@@ -437,6 +491,8 @@ class FieldDeskController extends Controller
                 'effective_longitude' => $action->effective_longitude,
                 'location_accuracy' => $action->effective_accuracy,
                 'map_link' => $action->map_link,
+                'mobile' => $this->fieldDeskService->resolveConsumerMobile($action),
+                'consumer_mobile' => $action->consumerAccount?->mobile ?: $action->mobile,
             ]),
         ]);
     }
@@ -682,23 +738,17 @@ class FieldDeskController extends Controller
                 ->latest()
                 ->first();
 
-            if ($bill) {
-                $consumer = ConsumerAccount::create([
-                    'user_id' => $userId,
-                    'ca_number' => $ca,
-                    'mru_id' => $bill->mru_id,
-                    'consumer_name' => $bill->consumer_name ?: ('Consumer '.$ca),
-                    'meter_no' => $bill->meter_no,
-                    'tariff_category' => $bill->tariff_category ?? 'DS-II',
-                    'billing_basis' => $bill->billing_basis ?? 'OK',
-                    'baseline_amount' => $bill->total_amount,
-                ]);
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Consumer account not found for CA: '.$ca,
-                ], 404);
-            }
+            $consumer = ConsumerAccount::create([
+                'user_id' => $userId,
+                'ca_number' => $ca,
+                'mru_id' => $bill?->mru_id,
+                'consumer_name' => $bill?->consumer_name ?: ('Consumer '.$ca),
+                'meter_no' => $bill?->meter_no,
+                'tariff_category' => $bill?->tariff_category ?? 'DS-II',
+                'billing_basis' => $bill?->billing_basis ?? 'OK',
+                'baseline_amount' => $bill?->total_amount ?? 0.00,
+                'status' => 'active',
+            ]);
         }
 
         if (array_key_exists('mobile', $validated)) {
@@ -724,6 +774,14 @@ class FieldDeskController extends Controller
         }
 
         $consumer->save();
+
+        FieldDeskAction::withoutGlobalScopes()
+            ->where('user_id', $userId)
+            ->where('ca_number', $ca)
+            ->update([
+                'consumer_account_id' => $consumer->id,
+                'mobile' => $consumer->mobile,
+            ]);
 
         return response()->json([
             'success' => true,

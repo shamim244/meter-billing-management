@@ -836,4 +836,51 @@ class FieldDeskSystemTest extends TestCase
         $this->assertNotNull($action->category_id);
         $this->assertDatabaseHas('field_desk_categories', ['id' => $action->category_id]);
     }
+
+    public function test_new_consumer_without_mru_stores_mobile_coordinates_and_creates_consumer_account(): void
+    {
+        $targetDate = Carbon::today()->addDays(2)->toDateString();
+
+        $response = $this->actingAs($this->agent)->postJson(route('api.field-desk.store'), [
+            'ca_number' => '10999888777',
+            'category_id' => FieldDeskCategory::first()->id,
+            'target_date' => $targetDate,
+            'priority' => 'high',
+            'target_amount' => 1500.00,
+            'mobile' => '9876543210',
+            'latitude' => 25.12345678,
+            'longitude' => 85.12345678,
+            'location_accuracy' => 5.0,
+        ]);
+
+        $response->assertStatus(201)->assertJson(['success' => true]);
+
+        // Assert consumer account was created with mobile and coordinates
+        $this->assertDatabaseHas('consumer_accounts', [
+            'user_id' => $this->agent->id,
+            'ca_number' => '10999888777',
+            'mobile' => '9876543210',
+        ]);
+
+        // Assert action is linked to consumer account
+        $action = FieldDeskAction::where('ca_number', '10999888777')->first();
+        $this->assertNotNull($action);
+        $this->assertNotNull($action->consumer_account_id);
+        $this->assertEquals('9876543210', $action->consumerAccount->mobile);
+    }
+
+    public function test_quick_mobile_creates_consumer_if_not_exists(): void
+    {
+        $response = $this->actingAs($this->agent)->postJson('/api/field-desk/consumer/10777666555/contact', [
+            'mobile' => '9876543210',
+        ]);
+
+        $response->assertStatus(200)->assertJson(['success' => true]);
+
+        $this->assertDatabaseHas('consumer_accounts', [
+            'user_id' => $this->agent->id,
+            'ca_number' => '10777666555',
+            'mobile' => '9876543210',
+        ]);
+    }
 }

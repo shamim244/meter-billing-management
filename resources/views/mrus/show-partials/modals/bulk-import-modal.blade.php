@@ -25,6 +25,42 @@
                 <span>Detected Lines: <strong class="font-mono text-slate-900 dark:text-white" x-text="detectedLinesCount">0</strong></span>
                 <span class="text-slate-400">Non-numeric headers skipped</span>
             </div>
+
+            <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                    <label class="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        If CAs exist in another MRU:
+                    </label>
+                    <span class="text-[10px] text-blue-600 dark:text-cyan-400 font-semibold">Flexible Mode</span>
+                </div>
+
+                <div class="space-y-1.5 text-xs">
+                    <label class="flex items-start gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition">
+                        <input type="radio" name="duplicate_strategy" value="keep_both" checked class="mt-0.5 text-blue-600 focus:ring-blue-500">
+                        <div>
+                            <span class="font-bold text-slate-900 dark:text-white">Keep in Both MRUs</span>
+                            <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400">Recommended</span>
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400">Keep intact in existing MRU and also add to this MRU. Consumer appears in both lists.</p>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition">
+                        <input type="radio" name="duplicate_strategy" value="skip" class="mt-0.5 text-blue-600 focus:ring-blue-500">
+                        <div>
+                            <span class="font-bold text-slate-900 dark:text-white">Skip Existing</span>
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400">Only import new CAs. Leave existing CAs in their current MRUs without changes.</p>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition">
+                        <input type="radio" name="duplicate_strategy" value="transfer" class="mt-0.5 text-blue-600 focus:ring-blue-500">
+                        <div>
+                            <span class="font-bold text-slate-900 dark:text-white">Transfer / Move</span>
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400">Move CAs from their current MRU to this MRU.</p>
+                        </div>
+                    </label>
+                </div>
+            </div>
             <div class="pt-4 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-2.5 border-t border-slate-100 dark:border-slate-800">
                 <button type="button" @click="showImportModal = false" class="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-center">Cancel</button>
                 <button type="submit" class="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition text-center">Import CAs</button>

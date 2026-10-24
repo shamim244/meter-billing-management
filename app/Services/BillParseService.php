@@ -106,7 +106,14 @@ class BillParseService
                 // Smart Master Account Synchronization
                 $masterAccount = ConsumerAccount::where('user_id', $userId)
                     ->where('ca_number', $ca)
+                    ->when($record->mru_id, fn ($q) => $q->where('mru_id', $record->mru_id))
                     ->first();
+
+                if (! $masterAccount) {
+                    $masterAccount = ConsumerAccount::where('user_id', $userId)
+                        ->where('ca_number', $ca)
+                        ->first();
+                }
 
                 if (! $masterAccount) {
                     // 1. First Time: Auto-Register into Master List
@@ -162,7 +169,7 @@ class BillParseService
                         $changed = true;
                     }
 
-                    if ($record->mru_id && $masterAccount->mru_id !== $record->mru_id) {
+                    if ($record->mru_id && empty($masterAccount->mru_id)) {
                         $masterAccount->mru_id = $record->mru_id;
                         $changed = true;
                     }
@@ -349,7 +356,14 @@ class BillParseService
 
                 $masterAccount = ConsumerAccount::where('user_id', $userId)
                     ->where('ca_number', $ca)
+                    ->when($record->mru_id, fn ($q) => $q->where('mru_id', $record->mru_id))
                     ->first();
+
+                if (! $masterAccount) {
+                    $masterAccount = ConsumerAccount::where('user_id', $userId)
+                        ->where('ca_number', $ca)
+                        ->first();
+                }
 
                 if (! $masterAccount) {
                     $masterAccount = ConsumerAccount::create([
@@ -393,7 +407,7 @@ class BillParseService
                         $masterAccount->baseline_amount = (float) $extracted['total_amount'];
                         $changed = true;
                     }
-                    if ($record->mru_id && $masterAccount->mru_id !== $record->mru_id) {
+                    if ($record->mru_id && empty($masterAccount->mru_id)) {
                         $masterAccount->mru_id = $record->mru_id;
                         $changed = true;
                     }

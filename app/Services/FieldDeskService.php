@@ -236,7 +236,15 @@ class FieldDeskService
      */
     public function resolveConsumerMobile(FieldDeskAction $action): ?string
     {
-        // 1. Direct from consumerAccount relation
+        // 1. Direct from action's own mobile column
+        if (! empty($action->mobile)) {
+            $clean = $this->sanitizeMobile($action->mobile);
+            if ($clean) {
+                return $clean;
+            }
+        }
+
+        // 2. Direct from consumerAccount relation
         if ($action->consumerAccount && ! empty($action->consumerAccount->mobile)) {
             $clean = $this->sanitizeMobile($action->consumerAccount->mobile);
             if ($clean) {
@@ -244,7 +252,7 @@ class FieldDeskService
             }
         }
 
-        // 2. Query consumer account by ca_number if not linked
+        // 3. Query consumer account by ca_number if not linked
         if (! $action->consumer_account_id) {
             $account = ConsumerAccount::withoutGlobalScopes()
                 ->where('user_id', $action->user_id)

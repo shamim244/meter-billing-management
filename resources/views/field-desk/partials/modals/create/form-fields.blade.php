@@ -1,13 +1,20 @@
-<!-- CA Number & Mobile Grid -->
-<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+<!-- CA Number, Name & Mobile Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
     <div>
         <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Consumer CA Number *</label>
         <input type="text"
                x-model="form.ca_number"
-               @change="if(form.ca_number) openCreateModal(form.ca_number)"
+               @change="if(form.ca_number) lookupConsumerInfo()"
                required
                placeholder="e.g. 10230041576"
                class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-emerald-500">
+    </div>
+    <div>
+        <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Consumer Name</label>
+        <input type="text"
+               x-model="form.consumer_name"
+               placeholder="Full name"
+               class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500">
     </div>
     <div>
         <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Consumer Mobile (Optional)</label>
