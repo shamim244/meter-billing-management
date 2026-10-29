@@ -6,21 +6,30 @@ use App\Http\Controllers\Controller;
 use App\Models\BillRecord;
 use App\Models\BillStatus;
 use App\Models\ConsumerAccount;
+use App\Models\FieldDeskAction;
+use App\Models\FieldDeskCategory;
 use App\Models\MeterReadingHistory;
 use App\Models\Mru;
 use App\Models\User;
+use App\Services\FieldDeskService;
 use App\Services\MeterReadingHistoryService;
 use App\Services\SmartAverageCalculationService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use ZipArchive;
 
 class MobileSyncController extends Controller
 {
     public function __construct(
         protected MeterReadingHistoryService $meterHistoryService,
         protected SmartAverageCalculationService $smartAverageService,
+        protected FieldDeskService $fieldDeskService,
     ) {}
 
     /**
@@ -467,6 +476,323 @@ class MobileSyncController extends Controller
             'total_received' => count($readings),
             'synced_count' => $syncedCount,
             'failed_count' => $failedCount,
+            'errors' => $errors,
+        ]);
+    }
+
+    /**
+     * SYNC-IN: Download all bill PDFs for a specific MRU packaged as a ZIP archive.
+     */
+    public function billsArchive(Request $request, int|string $mruId): StreamedResponse|JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $userId = $user->id;
+
+        $mru = Mru::where('user_id', $userId)
+            ->where(fn ($q) => $q->where('id', $mruId)->orWhere('code', $mruId)->orWhere('name', $mruId))
+            ->first();
+
+        if (! $mru) {
+            return response()->json([
+                'success' => false,
+                'message' => 'MRU not found or not assigned to your account.',
+            ], 404);
+        }
+
+        // Determine active cycle or fetch all latest bills for this MRU
+        $latestBill = BillRecord::where('user_id', $userId)
+            ->where('mru_id', $mru->id)
+            ->orderByDesc('billing_year')
+            ->orderByDesc('billing_month')
+            ->first();
+
+        $activeMonth = $latestBill ? (int) $latestBill->billing_month : now()->month;
+        $activeYear = $latestBill ? (int) $latestBill->billing_year : now()->year;
+
+        $bills = BillRecord::where('user_id', $userId)
+            ->where('mru_id', $mru->id)
+            ->where('billing_month', $activeMonth)
+            ->where('billing_year', $activeYear)
+            ->get();
+
+        if ($bills->isEmpty()) {
+            $bills = BillRecord::where('user_id', $userId)
+                ->where('mru_id', $mru->id)
+                ->orderByDesc('billing_year')
+                ->orderByDesc('billing_month')
+                ->get()
+                ->unique('ca_number');
+        }
+
+        $zipFileName = 'NBPDCL_MRU_'.$mru->code.'_Bills.zip';
+        $zipTempPath = tempnam(sys_get_temp_dir(), 'mru_pdf_zip_');
+
+        try {
+            $zip = new ZipArchive;
+            if ($zip->open($zipTempPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+                return response()->json(['error' => 'Failed to initialize ZIP archive.'], 500);
+            }
+
+            $addedFiles = 0;
+            foreach ($bills as $bill) {
+                $content = null;
+                if (! empty($bill->pdf_path) && Storage::disk('local')->exists($bill->pdf_path)) {
+                    $content = Storage::disk('local')->get($bill->pdf_path);
+                } elseif (! empty($bill->pdf_path) && File::exists(storage_path('app/'.$bill->pdf_path))) {
+                    $content = File::get(storage_path('app/'.$bill->pdf_path));
+                } elseif (! empty($bill->pdf_path) && File::exists($bill->pdf_path)) {
+                    $content = File::get($bill->pdf_path);
+                } elseif (! empty($bill->pdf_filename) && File::exists(storage_path("app/bills/{$userId}/{$mru->code}/{$bill->pdf_filename}"))) {
+                    $content = File::get(storage_path("app/bills/{$userId}/{$mru->code}/{$bill->pdf_filename}"));
+                }
+
+                if ($content !== null) {
+                    $zip->addFromString("{$bill->ca_number}.pdf", $content);
+                    $addedFiles++;
+                }
+            }
+
+            // Always write an archive manifest so zip is never empty and includes metadata
+            $manifest = [
+                'mru_id' => $mru->id,
+                'mru_code' => $mru->code,
+                'mru_name' => $mru->name,
+                'total_bills' => $bills->count(),
+                'archived_pdfs' => $addedFiles,
+                'cycle_month' => $activeMonth,
+                'cycle_year' => $activeYear,
+                'generated_at' => now()->toIso8601String(),
+            ];
+            $zip->addFromString('manifest.json', json_encode($manifest, JSON_PRETTY_PRINT));
+
+            $zip->close();
+
+            return response()->streamDownload(function () use ($zipTempPath) {
+                try {
+                    $stream = fopen($zipTempPath, 'r');
+                    fpassthru($stream);
+                    fclose($stream);
+                } finally {
+                    if (file_exists($zipTempPath)) {
+                        @unlink($zipTempPath);
+                    }
+                }
+            }, $zipFileName, [
+                'Content-Type' => 'application/zip',
+            ]);
+        } catch (\Throwable $e) {
+            if (file_exists($zipTempPath)) {
+                @unlink($zipTempPath);
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * SYNC-OUT: Batch upload offline field desk actions, phone numbers, notes from Flutter app.
+     */
+    public function uploadBatchFieldDesk(Request $request): JsonResponse
+    {
+        $request->validate([
+            'items' => 'nullable|array',
+            'actions' => 'nullable|array',
+        ]);
+
+        /** @var User $user */
+        $user = $request->user();
+        $userId = $user->id;
+
+        $items = $request->input('items', $request->input('actions', []));
+        if (empty($items) && is_array($request->all()) && ! empty($request->all()) && isset($request->all()[0])) {
+            $items = $request->all();
+        }
+
+        if (empty($items)) {
+            return response()->json([
+                'success' => true,
+                'message' => 'No field desk items to sync.',
+                'total_received' => 0,
+                'synced_count' => 0,
+                'failed_count' => 0,
+                'errors' => [],
+            ]);
+        }
+
+        FieldDeskCategory::ensureDefaultsExist();
+        $defaultCategory = FieldDeskCategory::active()->ordered()->first();
+        $allCategories = FieldDeskCategory::all();
+
+        $syncedCount = 0;
+        $failedCount = 0;
+        $errors = [];
+        $savedActionIds = [];
+
+        DB::beginTransaction();
+        try {
+            foreach ($items as $index => $item) {
+                $caNumber = isset($item['ca_number']) ? trim((string) $item['ca_number']) : null;
+                if (! $caNumber) {
+                    $errors[] = ['index' => $index, 'error' => 'ca_number is required'];
+                    $failedCount++;
+
+                    continue;
+                }
+
+                $rawMobile = $item['mobile'] ?? null;
+                $cleanMobile = ! empty($rawMobile)
+                    ? ($this->fieldDeskService->sanitizeMobile($rawMobile) ?: trim((string) $rawMobile))
+                    : null;
+
+                $latitude = isset($item['latitude']) && is_numeric($item['latitude']) ? (float) $item['latitude'] : null;
+                $longitude = isset($item['longitude']) && is_numeric($item['longitude']) ? (float) $item['longitude'] : null;
+                $accuracy = isset($item['location_accuracy']) && is_numeric($item['location_accuracy']) ? (float) $item['location_accuracy'] : null;
+                $note = $item['private_note'] ?? $item['note'] ?? $item['remark'] ?? null;
+
+                // 1. Consumer Account update or auto-link
+                $consumer = ConsumerAccount::withoutGlobalScopes()
+                    ->where('user_id', $userId)
+                    ->where('ca_number', $caNumber)
+                    ->first();
+
+                if (! $consumer) {
+                    $bill = BillRecord::withoutGlobalScopes()
+                        ->where('user_id', $userId)
+                        ->where('ca_number', $caNumber)
+                        ->latest()
+                        ->first();
+
+                    $consumerName = $item['consumer_name']
+                        ?? ($bill?->consumer_name ?: ('Consumer '.$caNumber));
+
+                    $consumer = ConsumerAccount::create([
+                        'user_id' => $userId,
+                        'ca_number' => $caNumber,
+                        'mru_id' => $item['mru_id'] ?? ($bill?->mru_id ?? null),
+                        'consumer_name' => $consumerName,
+                        'meter_no' => $bill?->meter_no ?? null,
+                        'tariff_category' => $bill?->tariff_category ?? 'DS-II',
+                        'billing_basis' => $bill?->billing_basis ?? 'OK',
+                        'baseline_amount' => $bill?->total_amount ?? 0.00,
+                        'mobile' => $cleanMobile,
+                        'latitude' => $latitude,
+                        'longitude' => $longitude,
+                        'location_accuracy' => $accuracy,
+                        'location_updated_at' => ($latitude !== null && $longitude !== null) ? now() : null,
+                        'status' => 'active',
+                    ]);
+                } else {
+                    $changed = false;
+                    if ($cleanMobile && (empty($consumer->mobile) || $cleanMobile !== $consumer->mobile)) {
+                        $consumer->mobile = $cleanMobile;
+                        $changed = true;
+                    }
+                    if ($latitude !== null && $longitude !== null) {
+                        $consumer->latitude = $latitude;
+                        $consumer->longitude = $longitude;
+                        $consumer->location_accuracy = $accuracy;
+                        $consumer->location_updated_at = now();
+                        $changed = true;
+                    }
+                    if (! empty($item['mru_id']) && empty($consumer->mru_id)) {
+                        $consumer->mru_id = (int) $item['mru_id'];
+                        $changed = true;
+                    }
+                    if ($changed) {
+                        $consumer->save();
+                    }
+                }
+
+                // 2. Resolve category
+                $categoryId = null;
+                if (! empty($item['category_id']) && $allCategories->firstWhere('id', (int) $item['category_id'])) {
+                    $categoryId = (int) $item['category_id'];
+                } elseif (! empty($item['category_code'])) {
+                    $cat = $allCategories->firstWhere('code', trim($item['category_code']));
+                    $categoryId = $cat ? $cat->id : null;
+                }
+                if (! $categoryId) {
+                    $categoryId = $defaultCategory ? $defaultCategory->id : 1;
+                }
+
+                // 3. Create or update FieldDeskAction
+                $actionId = $item['id'] ?? null;
+                $action = null;
+                if ($actionId) {
+                    $action = FieldDeskAction::where('user_id', $userId)->where('id', $actionId)->first();
+                }
+
+                if (! $action) {
+                    $action = new FieldDeskAction;
+                    $action->user_id = $userId;
+                    $action->ca_number = $caNumber;
+                    $action->reschedule_count = 0;
+                }
+
+                $targetDate = ! empty($item['target_date']) ? Carbon::parse($item['target_date'])->toDateString() : now()->toDateString();
+                $status = $item['status'] ?? 'open';
+
+                $action->consumer_account_id = $consumer->id;
+                $action->category_id = $categoryId;
+                $action->priority = in_array($item['priority'] ?? '', ['urgent', 'high', 'normal', 'low']) ? $item['priority'] : 'normal';
+                $action->target_date = $targetDate;
+                if (! $action->original_target_date) {
+                    $action->original_target_date = $targetDate;
+                }
+                $action->target_amount = isset($item['target_amount']) && is_numeric($item['target_amount']) ? (float) $item['target_amount'] : null;
+                $action->collected_amount = isset($item['collected_amount']) && is_numeric($item['collected_amount']) ? (float) $item['collected_amount'] : 0.00;
+                $action->payment_mode = $item['payment_mode'] ?? null;
+                $action->private_note = $note;
+                $action->mobile = $cleanMobile ?: $consumer->mobile;
+                $action->latitude = $latitude;
+                $action->longitude = $longitude;
+                $action->location_accuracy = $accuracy;
+                $action->status = in_array($status, ['open', 'completed', 'rescheduled']) ? $status : 'open';
+                $action->mru_id = $item['mru_id'] ?? $consumer->mru_id;
+                $action->billing_month = $item['billing_month'] ?? null;
+                $action->billing_year = $item['billing_year'] ?? null;
+
+                if ($action->status === 'completed' && empty($action->resolved_at)) {
+                    $action->resolved_at = now();
+                    $action->resolution_note = $note;
+                }
+
+                $action->save();
+
+                // Log activity
+                $this->fieldDeskService->logActivity(
+                    $action,
+                    $action->wasRecentlyCreated ? 'created' : 'updated',
+                    $note ?: 'Synced from Flutter Field App',
+                    [
+                        'recorded_at' => $item['recorded_at'] ?? now()->toIso8601String(),
+                        'sync_source' => 'flutter_mobile',
+                    ],
+                    $userId
+                );
+
+                $savedActionIds[] = $action->id;
+                $syncedCount++;
+            }
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('Batch field desk sync failed: '.$e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Batch field desk sync failed: '.$e->getMessage(),
+            ], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Successfully synced {$syncedCount} field desk actions.",
+            'total_received' => count($items),
+            'synced_count' => $syncedCount,
+            'failed_count' => $failedCount,
+            'action_ids' => $savedActionIds,
             'errors' => $errors,
         ]);
     }

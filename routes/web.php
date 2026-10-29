@@ -26,6 +26,7 @@ use App\Http\Controllers\Admin\AdminUsageReportController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\AdminWalletController;
 use App\Http\Controllers\AgentReferralController;
+use App\Http\Controllers\AppDownloadController;
 use App\Http\Controllers\BillController;
 use App\Http\Controllers\ConsumerController;
 use App\Http\Controllers\DashboardController;
@@ -54,6 +55,10 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function () {
     return view('welcome');
 });
+
+// Direct APK Download Portal for Mobile Meter Reader App
+Route::get('/download/app', [AppDownloadController::class, 'index'])->name('download.app');
+Route::get('/download/app/apk', [AppDownloadController::class, 'downloadApk'])->name('download.app.apk');
 
 Route::get('/docs/api', [DocsController::class, 'api'])->name('docs.api');
 
