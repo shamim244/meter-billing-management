@@ -35,6 +35,7 @@ class MruApiController extends Controller
 
         return response()->json([
             'success' => true,
+            'data' => $mrus,
             'mrus' => $mrus,
         ]);
     }
