@@ -545,6 +545,8 @@ class MobileSyncController extends Controller
                     $content = File::get($bill->pdf_path);
                 } elseif (! empty($bill->pdf_filename) && File::exists(storage_path("app/bills/{$userId}/{$mru->code}/{$bill->pdf_filename}"))) {
                     $content = File::get(storage_path("app/bills/{$userId}/{$mru->code}/{$bill->pdf_filename}"));
+                } elseif (File::exists(storage_path("app/users/{$userId}/pdfs/{$activeYear}/{$activeMonth}/{$mru->code}/{$bill->ca_number}.pdf"))) {
+                    $content = File::get(storage_path("app/users/{$userId}/pdfs/{$activeYear}/{$activeMonth}/{$mru->code}/{$bill->ca_number}.pdf"));
                 }
 
                 if ($content !== null) {

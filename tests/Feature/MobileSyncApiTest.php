@@ -222,4 +222,134 @@ class MobileSyncApiTest extends TestCase
         $response->assertSee('NBPDCL Field Reader');
         $response->assertSee('Download APK');
     }
+
+    public function test_upload_batch_readings_updates_bills_and_consumers(): void
+    {
+        $ca = '505050505';
+
+        ConsumerAccount::create([
+            'user_id' => $this->user->id,
+            'ca_number' => $ca,
+            'mru_id' => $this->mru->id,
+            'consumer_name' => 'Batch Test Consumer',
+            'status' => 'active',
+        ]);
+
+        $bill = BillRecord::create([
+            'user_id' => $this->user->id,
+            'ca_number' => $ca,
+            'mru_id' => $this->mru->id,
+            'billing_month' => 8,
+            'billing_year' => 2026,
+            'previous_reading' => 500,
+            'working_reading' => null,
+            'review_status' => 'unsubmitted',
+        ]);
+
+        $payload = [
+            'mru_id' => $this->mru->id,
+            'readings' => [
+                [
+                    'ca_number' => $ca,
+                    'working_reading' => 580,
+                    'status' => 'Submitted',
+                    'remark' => 'Meter display crystal clear',
+                    'recorded_at' => now()->toIso8601String(),
+                ],
+            ],
+        ];
+
+        $response = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->postJson('/api/v1/sync/readings/batch', $payload);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('synced_count', 1);
+
+        $bill->refresh();
+        $this->assertEquals('580', (string) $bill->working_reading);
+        $this->assertEquals('Submitted', $bill->review_status);
+        $this->assertEquals(80, (int) $bill->units_consumed);
+        $this->assertEquals('Meter display crystal clear', $bill->remark);
+
+        $consumer = ConsumerAccount::where('user_id', $this->user->id)->where('ca_number', $ca)->first();
+        $this->assertEquals('580', (string) $consumer->last_working_reading);
+    }
+
+    public function test_upload_batch_readings_with_null_working_reading_preserves_reading(): void
+    {
+        $ca = '606060606';
+
+        $consumer = ConsumerAccount::create([
+            'user_id' => $this->user->id,
+            'ca_number' => $ca,
+            'mru_id' => $this->mru->id,
+            'consumer_name' => 'Locked House Consumer',
+            'last_working_reading' => '450',
+            'status' => 'active',
+        ]);
+
+        $bill = BillRecord::create([
+            'user_id' => $this->user->id,
+            'ca_number' => $ca,
+            'mru_id' => $this->mru->id,
+            'billing_month' => 8,
+            'billing_year' => 2026,
+            'previous_reading' => 450,
+            'working_reading' => '450',
+            'review_status' => 'unsubmitted',
+        ]);
+
+        $payload = [
+            'mru_id' => $this->mru->id,
+            'readings' => [
+                [
+                    'ca_number' => $ca,
+                    'working_reading' => null,
+                    'status' => 'Locked',
+                    'remark' => 'Main gate locked, nobody home',
+                    'recorded_at' => now()->toIso8601String(),
+                ],
+            ],
+        ];
+
+        $response = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->postJson('/api/v1/sync/readings/batch', $payload);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('synced_count', 1);
+
+        $bill->refresh();
+        $this->assertEquals('Locked', $bill->review_status);
+        // Working reading must NOT be overwritten with "0"
+        $this->assertEquals('450', (string) $bill->working_reading);
+
+        $consumer->refresh();
+        $this->assertEquals('450', (string) $consumer->last_working_reading);
+    }
+
+    public function test_apk_download_route_streams_package_file(): void
+    {
+        $apkPath = public_path('downloads/nbpdcl-field-reader.apk');
+        $dir = dirname($apkPath);
+        if (! File::isDirectory($dir)) {
+            File::makeDirectory($dir, 0755, true);
+        }
+
+        $existed = File::exists($apkPath);
+        if (! $existed) {
+            File::put($apkPath, 'PK dummy apk content');
+        }
+
+        try {
+            $response = $this->get('/download/app/apk');
+            $response->assertStatus(200);
+            $response->assertHeader('content-type', 'application/vnd.android.package-archive');
+        } finally {
+            if (! $existed) {
+                @unlink($apkPath);
+            }
+        }
+    }
 }
