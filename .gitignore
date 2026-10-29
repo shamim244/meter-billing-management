@@ -36,6 +36,7 @@ rr
 .rr.yaml
 rr.exe
 apk/
+/public/downloads/*.apk
 public/VHOST-TEST.txt
 .agents/php_brotli*
 *.dll
