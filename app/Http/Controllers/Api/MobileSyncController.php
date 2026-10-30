@@ -112,6 +112,13 @@ class MobileSyncController extends Controller
             ->get()
             ->keyBy('ca_number');
 
+        $activeFieldDeskActions = FieldDeskAction::with('category')
+            ->where('user_id', $userId)
+            ->whereIn('ca_number', $caNumbers)
+            ->whereIn('status', ['open', 'rescheduled'])
+            ->get()
+            ->keyBy('ca_number');
+
         $applyTuning = filter_var($request->input('apply_tuning', false), FILTER_VALIDATE_BOOLEAN)
             || filter_var($request->input('include_tuning', false), FILTER_VALIDATE_BOOLEAN);
 
@@ -121,6 +128,7 @@ class MobileSyncController extends Controller
             $history = $historicalBills->get($consumer->ca_number, collect());
             $mrhForCa = $meterHistories->get($consumer->ca_number, collect());
             $st = $billStatuses->get($consumer->ca_number);
+            $fda = $activeFieldDeskActions->get($consumer->ca_number);
 
             $effectiveStatus = ! empty($bill?->review_status) && ! in_array(strtolower(trim($bill->review_status)), ['pending', 'unsubmitted'])
                 ? $bill->review_status
@@ -195,8 +203,34 @@ class MobileSyncController extends Controller
                     'custom_avg_units' => $bill?->custom_avg_units,
                     'is_avg_excluded' => (bool) ($bill?->is_avg_excluded ?? false),
                 ],
+                'field_desk' => $fda ? [
+                    'id' => $fda->id,
+                    'category_id' => $fda->category_id,
+                    'category_code' => $fda->category?->code ?? 'general_note',
+                    'category_name' => $fda->category?->name ?? 'General',
+                    'category_icon' => $fda->category?->icon ?? '📋',
+                    'category_color' => $fda->category?->color ?? '#10b981',
+                    'priority' => $fda->priority,
+                    'target_date' => $fda->target_date ? $fda->target_date->toDateString() : null,
+                    'target_amount' => $fda->target_amount ? (float) $fda->target_amount : null,
+                    'collected_amount' => $fda->collected_amount ? (float) $fda->collected_amount : null,
+                    'private_note' => $fda->private_note,
+                    'status' => $fda->status,
+                    'is_due_today' => $fda->isDueToday(),
+                    'is_overdue' => $fda->isOverdue(),
+                    'is_upcoming' => $fda->isUpcoming(),
+                ] : null,
             ];
         }
+
+        FieldDeskCategory::ensureDefaultsExist();
+        $categories = FieldDeskCategory::active()->ordered()->get()->map(fn ($c) => [
+            'id' => $c->id,
+            'code' => $c->code,
+            'name' => $c->name,
+            'icon' => $c->icon,
+            'color' => $c->color,
+        ]);
 
         return response()->json([
             'success' => true,
@@ -213,6 +247,7 @@ class MobileSyncController extends Controller
                 'month' => $activeMonth,
                 'year' => $activeYear,
             ],
+            'field_desk_categories' => $categories,
             'consumers' => $consumerPayload,
         ]);
     }
