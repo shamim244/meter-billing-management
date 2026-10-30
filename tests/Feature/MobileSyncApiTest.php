@@ -329,6 +329,42 @@ class MobileSyncApiTest extends TestCase
         $this->assertEquals('450', (string) $consumer->last_working_reading);
     }
 
+    public function test_download_mru_payload_returns_effective_review_status_and_contact_info(): void
+    {
+        $ca = '101010999';
+        ConsumerAccount::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'consumer_name' => 'Amit Sharma',
+            'mobile' => '9876543210',
+            'latitude' => 25.5941,
+            'longitude' => 85.1376,
+        ]);
+
+        BillRecord::create([
+            'user_id' => $this->user->id,
+            'mru_id' => $this->mru->id,
+            'ca_number' => $ca,
+            'billing_month' => 8,
+            'billing_year' => 2026,
+            'consumer_name' => 'Amit Sharma',
+            'review_status' => 'Critical',
+            'tag' => 'defective',
+            'remark' => 'Meter glass broken',
+        ]);
+
+        $response = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson("/api/v1/sync/mrus/{$this->mru->id}/download");
+
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('consumers.0.mobile', '9876543210')
+            ->assertJsonPath('consumers.0.current_bill.review_status', 'Critical')
+            ->assertJsonPath('consumers.0.current_bill.tag', 'defective')
+            ->assertJsonPath('consumers.0.current_bill.remark', 'Meter glass broken');
+    }
+
     public function test_apk_download_route_streams_package_file(): void
     {
         $apkPath = public_path('downloads/nbpdcl-field-reader.apk');

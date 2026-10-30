@@ -105,6 +105,13 @@ class MobileSyncController extends Controller
             ->get()
             ->groupBy('ca_number');
 
+        $billStatuses = BillStatus::where('user_id', $userId)
+            ->whereIn('ca_number', $caNumbers)
+            ->where('billing_month', $activeMonth)
+            ->where('billing_year', $activeYear)
+            ->get()
+            ->keyBy('ca_number');
+
         $applyTuning = filter_var($request->input('apply_tuning', false), FILTER_VALIDATE_BOOLEAN)
             || filter_var($request->input('include_tuning', false), FILTER_VALIDATE_BOOLEAN);
 
@@ -113,6 +120,13 @@ class MobileSyncController extends Controller
             $bill = $activeBills->get($consumer->ca_number);
             $history = $historicalBills->get($consumer->ca_number, collect());
             $mrhForCa = $meterHistories->get($consumer->ca_number, collect());
+            $st = $billStatuses->get($consumer->ca_number);
+
+            $effectiveStatus = ! empty($bill?->review_status) && ! in_array(strtolower(trim($bill->review_status)), ['pending', 'unsubmitted'])
+                ? $bill->review_status
+                : ($st ? $st->status : ($bill?->review_status ?: 'unsubmitted'));
+            $effectiveTag = $bill?->tag ?: ($st?->tag);
+            $effectiveRemark = $bill?->remark ?: ($st?->remark);
 
             if ($bill) {
                 $guardrails = $applyTuning ? [] : ['tuning_enabled' => false];
@@ -164,19 +178,23 @@ class MobileSyncController extends Controller
                 'custom_avg_units' => $consumer->custom_avg_units ?? $bill?->custom_avg_units,
                 'is_avg_excluded' => (bool) ($consumer->is_avg_excluded ?? $bill?->is_avg_excluded ?? false),
                 'avg_exclude_reason' => $consumer->avg_exclude_reason ?? $bill?->avg_exclude_reason,
-                'current_bill' => $bill ? [
-                    'bill_id' => $bill->id,
+                'mobile' => $consumer->mobile,
+                'latitude' => $consumer->latitude ? (float) $consumer->latitude : null,
+                'longitude' => $consumer->longitude ? (float) $consumer->longitude : null,
+                'current_bill' => [
+                    'bill_id' => $bill?->id,
                     'working_reading' => $workingReading,
-                    'review_status' => $bill->review_status ?? 'unsubmitted',
-                    'remark' => $bill->remark,
+                    'review_status' => $effectiveStatus,
+                    'tag' => $effectiveTag,
+                    'remark' => $effectiveRemark,
                     'units_consumed' => ($prevReading > 0 && $workingReading !== null && (int) $workingReading >= $prevReading)
                         ? ((int) $workingReading - $prevReading)
-                        : ($bill->units_consumed ?? $smartAvg),
-                    'min_avg_units' => $bill->min_avg_units,
-                    'max_avg_units' => $bill->max_avg_units,
-                    'custom_avg_units' => $bill->custom_avg_units,
-                    'is_avg_excluded' => (bool) $bill->is_avg_excluded,
-                ] : null,
+                        : ($bill?->units_consumed ?? $smartAvg),
+                    'min_avg_units' => $bill?->min_avg_units,
+                    'max_avg_units' => $bill?->max_avg_units,
+                    'custom_avg_units' => $bill?->custom_avg_units,
+                    'is_avg_excluded' => (bool) ($bill?->is_avg_excluded ?? false),
+                ],
             ];
         }
 
@@ -357,10 +375,20 @@ class MobileSyncController extends Controller
                 $consumer = $existingConsumers->get($ca);
                 $isSubmitted = (strtolower($status) === 'submitted');
 
-                $meta = null;
+                $metaArr = [];
                 if ($recordedAt !== null) {
-                    $meta = json_encode(['recorded_at' => $recordedAt]);
+                    $metaArr['recorded_at'] = $recordedAt;
                 }
+                if (! empty($item['latitude'])) {
+                    $metaArr['latitude'] = (float) $item['latitude'];
+                }
+                if (! empty($item['longitude'])) {
+                    $metaArr['longitude'] = (float) $item['longitude'];
+                }
+                if (! empty($item['photo_path'])) {
+                    $metaArr['photo_path'] = $item['photo_path'];
+                }
+                $meta = ! empty($metaArr) ? json_encode($metaArr) : null;
 
                 $meterHistoriesToUpsert[$ca] = [
                     'user_id' => $bill->user_id,
