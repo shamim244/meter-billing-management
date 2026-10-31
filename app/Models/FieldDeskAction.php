@@ -61,6 +61,9 @@ class FieldDeskAction extends Model
     protected static function booted(): void
     {
         static::saving(function (FieldDeskAction $action) {
+            if (empty($action->original_target_date) && ! empty($action->target_date)) {
+                $action->original_target_date = $action->target_date;
+            }
             if ($action->status === 'completed' && empty($action->resolved_at)) {
                 $action->resolved_at = now();
             } elseif ($action->isDirty('status') && $action->status !== 'completed') {

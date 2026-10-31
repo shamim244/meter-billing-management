@@ -70,6 +70,7 @@ Route::prefix('v1')->middleware(['api.analytics', 'api.feature'])->group(functio
         Route::middleware('api.feature:mobile_sync')->group(function () {
             Route::get('/sync/mrus/{mruId}/download', [MobileSyncController::class, 'downloadMruPayload']);
             Route::get('/sync/mrus/{mruId}/bills-archive', [MobileSyncController::class, 'billsArchive']);
+            Route::get('/sync/field-desk', [MobileSyncController::class, 'downloadFieldDeskAgenda']);
             Route::post('/sync/readings/batch', [MobileSyncController::class, 'uploadBatchReadings'])->middleware('throttle:api.batch');
             Route::post('/sync/field-desk/batch', [MobileSyncController::class, 'uploadBatchFieldDesk'])->middleware('throttle:api.batch');
         });

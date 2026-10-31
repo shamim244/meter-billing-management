@@ -861,4 +861,90 @@ class MobileSyncController extends Controller
             'errors' => $errors,
         ]);
     }
+
+    /**
+     * SYNC-IN: Download all FieldDesk agenda items for the user across all MRUs and Global consumers.
+     */
+    public function downloadFieldDeskAgenda(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $userId = $user->id;
+
+        $timeline = $request->query('timeline', 'all');
+        $mruId = $request->query('mru_id');
+
+        $query = FieldDeskAction::withoutGlobalScopes()
+            ->where('user_id', $userId)
+            ->with(['category', 'consumerAccount', 'mru']);
+
+        if (! empty($mruId)) {
+            if ($mruId === 'global' || $mruId === '0') {
+                $query->whereNull('mru_id');
+            } else {
+                $query->where('mru_id', (int) $mruId);
+            }
+        }
+
+        $today = Carbon::today();
+        match ($timeline) {
+            'today' => $query->whereIn('status', ['open', 'rescheduled'])->whereDate('target_date', $today),
+            'overdue' => $query->whereIn('status', ['open', 'rescheduled'])->whereDate('target_date', '<', $today),
+            'upcoming' => $query->whereIn('status', ['open', 'rescheduled'])->whereDate('target_date', '>', $today),
+            'resolved' => $query->where('status', 'completed'),
+            default => null,
+        };
+
+        $actions = $query->orderBy('target_date', 'asc')->get();
+        $counts = $this->fieldDeskService->getSummaryCounts($userId);
+
+        FieldDeskCategory::ensureDefaultsExist();
+        $categories = FieldDeskCategory::active()->ordered()->get()->map(fn ($c) => [
+            'id' => $c->id,
+            'code' => $c->code,
+            'name' => $c->name,
+            'icon' => $c->icon,
+            'color' => $c->color,
+        ]);
+
+        $items = $actions->map(function (FieldDeskAction $action) {
+            $consumer = $action->consumerAccount;
+
+            return [
+                'id' => $action->id,
+                'ca_number' => $action->ca_number,
+                'consumer_name' => $consumer?->consumer_name ?? 'Consumer '.$action->ca_number,
+                'mobile' => $action->mobile ?: ($consumer?->mobile ?? null),
+                'mru_id' => $action->mru_id,
+                'mru_code' => $action->mru?->code ?? 'Global',
+                'mru_name' => $action->mru?->name ?? 'Global / Unassigned',
+                'category_id' => $action->category_id,
+                'category_code' => $action->category?->code ?? 'general_note',
+                'category_name' => $action->category?->name ?? 'General',
+                'category_icon' => $action->category?->icon ?? '📋',
+                'category_color' => $action->category?->color ?? '#10b981',
+                'priority' => $action->priority ?? 'normal',
+                'target_date' => $action->target_date ? $action->target_date->toDateString() : null,
+                'target_amount' => $action->target_amount ? (float) $action->target_amount : null,
+                'collected_amount' => $action->collected_amount ? (float) $action->collected_amount : null,
+                'private_note' => $action->private_note,
+                'status' => $action->status ?? 'open',
+                'latitude' => $action->latitude ? (float) $action->latitude : ($consumer?->latitude ? (float) $consumer->latitude : null),
+                'longitude' => $action->longitude ? (float) $action->longitude : ($consumer?->longitude ? (float) $consumer->longitude : null),
+                'location_accuracy' => $action->location_accuracy ? (float) $action->location_accuracy : null,
+                'is_due_today' => $action->isDueToday(),
+                'is_overdue' => $action->isOverdue(),
+                'is_upcoming' => $action->isUpcoming(),
+                'created_at' => $action->created_at?->toIso8601String(),
+                'updated_at' => $action->updated_at?->toIso8601String(),
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'counts' => $counts,
+            'categories' => $categories,
+            'actions' => $items,
+        ]);
+    }
 }

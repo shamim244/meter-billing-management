@@ -388,4 +388,51 @@ class MobileSyncApiTest extends TestCase
             }
         }
     }
+
+    public function test_download_field_desk_agenda_returns_mru_and_global_actions(): void
+    {
+        $category = FieldDeskCategory::first();
+
+        // 1. MRU-linked Field Desk Action
+        FieldDeskAction::create([
+            'user_id' => $this->user->id,
+            'ca_number' => '11112222',
+            'mru_id' => $this->mru->id,
+            'category_id' => $category->id,
+            'target_date' => now()->addDays(2)->toDateString(),
+            'target_amount' => 1200.00,
+            'status' => 'open',
+            'private_note' => 'MRU specific follow-up',
+        ]);
+
+        // 2. Global / Unassigned Field Desk Action (mru_id = null)
+        FieldDeskAction::create([
+            'user_id' => $this->user->id,
+            'ca_number' => '99990000',
+            'mru_id' => null,
+            'category_id' => $category->id,
+            'target_date' => now()->toDateString(),
+            'target_amount' => 500.00,
+            'status' => 'open',
+            'private_note' => 'Global walk-in consumer note',
+        ]);
+
+        $response = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->getJson('/api/v1/sync/field-desk');
+
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonCount(2, 'actions');
+
+        $actions = collect($response->json('actions'));
+        $globalAction = $actions->firstWhere('ca_number', '99990000');
+        $mruAction = $actions->firstWhere('ca_number', '11112222');
+
+        $this->assertNotNull($globalAction);
+        $this->assertNull($globalAction['mru_id']);
+        $this->assertEquals('Global', $globalAction['mru_code']);
+
+        $this->assertNotNull($mruAction);
+        $this->assertEquals($this->mru->id, $mruAction['mru_id']);
+    }
 }
