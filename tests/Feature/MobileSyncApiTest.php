@@ -435,4 +435,94 @@ class MobileSyncApiTest extends TestCase
         $this->assertNotNull($mruAction);
         $this->assertEquals($this->mru->id, $mruAction['mru_id']);
     }
+
+    public function test_store_new_consumer_creates_account_and_notes(): void
+    {
+        $payload = [
+            'ca_number' => 'WALK_9901',
+            'consumer_name' => 'Offline Walkin Consumer',
+            'meter_number' => 'MTR-OFF-9901',
+            'mobile' => '9876543210',
+            'address' => 'Near Kali Mandir, Ward 4',
+            'category' => 'DS-II',
+            'sanctioned_load' => '2 KW',
+            'initial_reading' => 125.0,
+            'notes' => 'New meter installed on electric pole',
+            'mru_id' => $this->mru->id,
+        ];
+
+        $response = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->postJson('/api/v1/sync/consumers/new', $payload);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('consumer.ca_number', 'WALK_9901');
+
+        $this->assertDatabaseHas('consumer_accounts', [
+            'user_id' => $this->user->id,
+            'ca_number' => 'WALK_9901',
+            'consumer_name' => 'Offline Walkin Consumer',
+            'meter_no' => 'MTR-OFF-9901',
+            'tariff_category' => 'DS-II',
+            'mru_id' => $this->mru->id,
+            'baseline_previous_reading' => 125,
+        ]);
+
+        $this->assertDatabaseHas('field_desk_actions', [
+            'user_id' => $this->user->id,
+            'ca_number' => 'WALK_9901',
+        ]);
+    }
+
+    public function test_upload_batch_inspections_records_inspections_and_swaps(): void
+    {
+        $consumer = ConsumerAccount::create([
+            'user_id' => $this->user->id,
+            'ca_number' => 'INSP_8801',
+            'consumer_name' => 'Inspection Test Consumer',
+            'meter_no' => 'MTR-8801',
+            'mru_id' => $this->mru->id,
+        ]);
+
+        $payload = [
+            'inspections' => [
+                [
+                    'ca_number' => 'INSP_8801',
+                    'inspection_type' => 'inspection',
+                    'dial_reading' => 540.5,
+                    'seal_status' => 'intact',
+                    'display_condition' => 'normal',
+                    'notes' => 'Routine physical check OK',
+                    'inspected_at' => now()->toIso8601String(),
+                ],
+                [
+                    'ca_number' => 'INSP_8801',
+                    'inspection_type' => 'meter_swap',
+                    'meter_serial_old' => 'MTR-8801',
+                    'final_reading_old' => 545.0,
+                    'meter_serial_new' => 'MTR-NEW-999',
+                    'initial_reading_new' => 0.0,
+                    'notes' => 'Smart meter upgraded',
+                    'inspected_at' => now()->toIso8601String(),
+                ],
+            ],
+        ];
+
+        $response = $this->withHeader('X-API-Key', $this->plainApiKey)
+            ->postJson('/api/v1/sync/inspections', $payload);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('synced_count', 2);
+
+        $this->assertDatabaseHas('meter_inspections', [
+            'user_id' => $this->user->id,
+            'ca_number' => 'INSP_8801',
+            'physical_reading' => '540.5',
+        ]);
+
+        $consumer->refresh();
+        $this->assertEquals('MTR-NEW-999', $consumer->meter_no);
+        $this->assertEquals('0', (string) $consumer->last_physical_reading);
+    }
 }

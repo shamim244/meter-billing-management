@@ -73,6 +73,8 @@ Route::prefix('v1')->middleware(['api.analytics', 'api.feature'])->group(functio
             Route::get('/sync/field-desk', [MobileSyncController::class, 'downloadFieldDeskAgenda']);
             Route::post('/sync/readings/batch', [MobileSyncController::class, 'uploadBatchReadings'])->middleware('throttle:api.batch');
             Route::post('/sync/field-desk/batch', [MobileSyncController::class, 'uploadBatchFieldDesk'])->middleware('throttle:api.batch');
+            Route::post('/sync/consumers/new', [MobileSyncController::class, 'storeNewConsumer'])->middleware('throttle:api.batch');
+            Route::post('/sync/inspections', [MobileSyncController::class, 'uploadBatchInspections'])->middleware('throttle:api.batch');
         });
 
         // 4. Consumer Search, Reading History Ledger & Single Updates

@@ -8,15 +8,17 @@ use App\Models\BillStatus;
 use App\Models\ConsumerAccount;
 use App\Models\FieldDeskAction;
 use App\Models\FieldDeskCategory;
+use App\Models\MeterInspection;
 use App\Models\MeterReadingHistory;
 use App\Models\Mru;
 use App\Models\User;
 use App\Services\FieldDeskService;
 use App\Services\MeterReadingHistoryService;
+use App\Services\Reading\ReadingGapReconciliationService;
 use App\Services\SmartAverageCalculationService;
-use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -30,7 +32,10 @@ class MobileSyncController extends Controller
         protected MeterReadingHistoryService $meterHistoryService,
         protected SmartAverageCalculationService $smartAverageService,
         protected FieldDeskService $fieldDeskService,
-    ) {}
+        protected ?ReadingGapReconciliationService $readingGapService = null,
+    ) {
+        $this->readingGapService = $readingGapService ?? app(ReadingGapReconciliationService::class);
+    }
 
     /**
      * SYNC-IN: Download all data for a specific MRU to store locally in the Flutter SQLite database.
@@ -945,6 +950,189 @@ class MobileSyncController extends Controller
             'counts' => $counts,
             'categories' => $categories,
             'actions' => $items,
+        ]);
+    }
+
+    /**
+     * OFFLINE-TO-SERVER: Store newly registered or walk-in consumer from mobile field workstation.
+     */
+    public function storeNewConsumer(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'ca_number' => 'required|string|max:50',
+            'consumer_name' => 'required|string|max:150',
+            'meter_number' => 'nullable|string|max:50',
+            'mobile' => 'nullable|string|max:20',
+            'address' => 'nullable|string|max:255',
+            'mru_id' => 'nullable|integer',
+            'category' => 'nullable|string|max:50',
+            'sanctioned_load' => 'nullable|string|max:50',
+            'initial_reading' => 'nullable|numeric',
+            'notes' => 'nullable|string|max:500',
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
+            'recorded_at' => 'nullable|date',
+        ]);
+
+        $mruId = ! empty($validated['mru_id']) ? (int) $validated['mru_id'] : null;
+
+        $consumer = ConsumerAccount::updateOrCreate(
+            [
+                'user_id' => $user->id,
+                'ca_number' => trim($validated['ca_number']),
+            ],
+            [
+                'consumer_name' => trim($validated['consumer_name']),
+                'meter_no' => $validated['meter_number'] ?? '',
+                'tariff_category' => $validated['category'] ?? 'DS-II',
+                'mobile' => $validated['mobile'] ?? null,
+                'address' => $validated['address'] ?? '',
+                'mru_id' => $mruId,
+                'baseline_previous_reading' => isset($validated['initial_reading']) ? (int) $validated['initial_reading'] : 0,
+                'last_working_reading' => isset($validated['initial_reading']) ? (string) $validated['initial_reading'] : null,
+                'last_physical_reading' => isset($validated['initial_reading']) ? (string) $validated['initial_reading'] : null,
+                'last_inspected_at' => isset($validated['initial_reading']) ? now() : null,
+                'latitude' => $validated['latitude'] ?? null,
+                'longitude' => $validated['longitude'] ?? null,
+                'status' => 'active',
+            ]
+        );
+
+        if (! empty($validated['notes'])) {
+            $defaultCategory = FieldDeskCategory::where('code', 'general_note')->first();
+            $action = FieldDeskAction::create([
+                'user_id' => $user->id,
+                'consumer_account_id' => $consumer->id,
+                'ca_number' => $consumer->ca_number,
+                'mru_id' => $mruId,
+                'category_id' => $defaultCategory?->id,
+                'priority' => 'normal',
+                'target_date' => now()->toDateString(),
+                'private_note' => 'Offline walk-in registered: '.$validated['notes'],
+                'status' => 'open',
+            ]);
+
+            $this->fieldDeskService->logActivity(
+                $action,
+                'created',
+                'Offline walk-in registered: '.$validated['notes'],
+                ['sync_source' => 'flutter_mobile'],
+                $user->id
+            );
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Consumer registered successfully.',
+            'consumer' => [
+                'id' => $consumer->id,
+                'ca_number' => $consumer->ca_number,
+                'consumer_name' => $consumer->consumer_name,
+                'meter_number' => $consumer->meter_no,
+                'category' => $consumer->tariff_category,
+                'mru_id' => $consumer->mru_id,
+            ],
+        ], 201);
+    }
+
+    /**
+     * OFFLINE-TO-SERVER: Upload batch meter inspections and meter swaps recorded in the field.
+     */
+    public function uploadBatchInspections(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'inspections' => 'required|array',
+            'inspections.*.ca_number' => 'required|string',
+            'inspections.*.inspection_type' => 'nullable|string|in:inspection,meter_swap',
+            'inspections.*.physical_reading' => 'nullable|numeric',
+            'inspections.*.dial_reading' => 'nullable|numeric',
+            'inspections.*.notes' => 'nullable|string|max:500',
+            'inspections.*.inspected_at' => 'nullable|date',
+            'inspections.*.seal_status' => 'nullable|string|max:50',
+            'inspections.*.display_condition' => 'nullable|string|max:50',
+            'inspections.*.meter_serial_old' => 'nullable|string|max:50',
+            'inspections.*.final_reading_old' => 'nullable|numeric',
+            'inspections.*.meter_serial_new' => 'nullable|string|max:50',
+            'inspections.*.initial_reading_new' => 'nullable|numeric',
+        ]);
+
+        $syncedCount = 0;
+        $gapService = $this->readingGapService ?? app(ReadingGapReconciliationService::class);
+
+        foreach ($validated['inspections'] as $inspData) {
+            $caNumber = trim($inspData['ca_number']);
+            $consumer = ConsumerAccount::where('user_id', $user->id)
+                ->where('ca_number', $caNumber)
+                ->first();
+
+            $reading = $inspData['dial_reading'] ?? $inspData['physical_reading'] ?? $inspData['final_reading_old'] ?? 0;
+            $inspectedAt = ! empty($inspData['inspected_at']) ? Carbon::parse($inspData['inspected_at']) : now();
+            $notes = $inspData['notes'] ?? '';
+            $isSwap = ($inspData['inspection_type'] ?? '') === 'meter_swap';
+
+            if ($isSwap) {
+                if ($consumer) {
+                    $gapService->recordMeterReplacement(
+                        consumer: $consumer,
+                        initialReading: $inspData['initial_reading_new'] ?? 0,
+                        date: $inspectedAt,
+                        oldMeterFinalReading: isset($inspData['final_reading_old']) ? (string) $inspData['final_reading_old'] : null,
+                        newMeterNo: $inspData['meter_serial_new'] ?? null,
+                        notes: $notes,
+                        user: $user,
+                    );
+                } else {
+                    $auditNote = 'Meter Replacement: ';
+                    if (! empty($inspData['meter_serial_new'])) {
+                        $auditNote .= "New Meter: {$inspData['meter_serial_new']}. ";
+                    }
+                    if (isset($inspData['final_reading_old'])) {
+                        $auditNote .= "Old Final Reading: {$inspData['final_reading_old']}. ";
+                    }
+                    if (! empty($notes)) {
+                        $auditNote .= "Notes: {$notes}";
+                    }
+
+                    MeterInspection::create([
+                        'user_id' => $user->id,
+                        'ca_number' => $caNumber,
+                        'physical_reading' => (string) ($inspData['initial_reading_new'] ?? 0),
+                        'inspected_at' => $inspectedAt,
+                        'notes' => trim($auditNote),
+                    ]);
+                }
+            } else {
+                if ($consumer) {
+                    $gapService->recordPhysicalInspection(
+                        consumer: $consumer,
+                        reading: $reading,
+                        date: $inspectedAt,
+                        notes: trim($notes),
+                        user: $user,
+                    );
+                } else {
+                    MeterInspection::create([
+                        'user_id' => $user->id,
+                        'ca_number' => $caNumber,
+                        'physical_reading' => (string) $reading,
+                        'inspected_at' => $inspectedAt,
+                        'notes' => trim($notes),
+                    ]);
+                }
+            }
+            $syncedCount++;
+        }
+
+        return response()->json([
+            'success' => true,
+            'synced_count' => $syncedCount,
+            'message' => "Successfully synced {$syncedCount} inspection(s).",
         ]);
     }
 }
