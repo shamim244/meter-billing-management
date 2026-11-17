@@ -1,9 +1,13 @@
 name: Deploy to Dedicated VPS
 
 on:
-  push:
-    branches:
-      - main
+  # Inactive by default: Automatic push is disabled until you provision a live VPS.
+  # To re-enable automatic push deployments in the future, simply uncomment the lines below:
+  # push:
+  #   branches:
+  #     - main
+
+  # Allows manual deployment from GitHub Actions tab whenever you are ready
   workflow_dispatch:
     inputs:
       force_rebuild:
