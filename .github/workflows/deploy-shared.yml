@@ -1,0 +1,126 @@
+name: Deploy to Shared Hosting
+
+on:
+  push:
+    branches:
+      - production-shared
+  workflow_dispatch:
+    inputs:
+      run_migrations:
+        description: 'Run database migrations (php artisan migrate --force)?'
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: deploy-shared
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build Assets & Deploy to Shared Hosting
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # ==========================================
+      # 1. Setup PHP & Install Composer Packages
+      # ==========================================
+      - name: Setup PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_mysql, bcmath, zip, gd, sockets
+          coverage: none
+
+      - name: Cache Composer Dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ runner.os }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-
+
+      - name: Install Composer Dependencies (Production)
+        run: |
+          composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+
+      # ==========================================
+      # 2. Setup Bun & Compile Vite Frontend Assets
+      # ==========================================
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install NPM/Bun Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Production Assets (Vite)
+        run: bun run build
+
+      - name: Prune node_modules before deployment
+        run: rm -rf node_modules
+
+      # ==========================================
+      # 3. Deploy to Shared Hosting via SSH & Rsync
+      # Safe Rsync: Explicitly protects live storage, uploads, and .env
+      # ==========================================
+      - name: Deploy files via Rsync
+        uses: easingthemes/ssh-deploy@v5.1.0
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.SHARED_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.SHARED_HOST }}
+          REMOTE_USER: ${{ secrets.SHARED_USERNAME }}
+          REMOTE_PORT: ${{ secrets.SHARED_PORT || '22' }}
+          TARGET: ${{ secrets.SHARED_APP_DIR }}
+          ARGS: "-rlvz --no-perms --no-owner --no-group"
+          EXCLUDE: >-
+            /.git/,
+            /.github/,
+            /.env,
+            /.env.*,
+            /tests/,
+            /storage/,
+            /public/storage,
+            /node_modules/
+
+      # ==========================================
+      # 4. Post-Deployment Commands on Shared Host
+      # ==========================================
+      - name: Run Post-Deploy Artisan Commands on Shared Host
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SHARED_HOST }}
+          username: ${{ secrets.SHARED_USERNAME }}
+          key: ${{ secrets.SHARED_SSH_KEY }}
+          port: ${{ secrets.SHARED_PORT || 22 }}
+          script_stop: true
+          envs: RUN_MIGRATIONS
+          RUN_MIGRATIONS: ${{ inputs.run_migrations != false }}
+          script: |
+            set -e
+            echo "🚀 Finalizing Shared Hosting deployment in ${{ secrets.SHARED_APP_DIR }}..."
+            cd ${{ secrets.SHARED_APP_DIR }}
+
+            # Ensure permissions on writable folders without touching files
+            chmod -R 775 bootstrap/cache 2>/dev/null || true
+
+            # Create storage symlink only if it does not already exist
+            if [ ! -L "public/storage" ]; then
+              php artisan storage:link 2>/dev/null || true
+            fi
+
+            # Run safe database migrations if enabled
+            if [ "$RUN_MIGRATIONS" = "true" ]; then
+              echo "🗄️ Running safe migrations..."
+              php artisan migrate --force --no-interaction
+            fi
+
+            # Clear and refresh application caches
+            echo "⚡ Refreshing caches..."
+            php artisan optimize:clear
+
+            echo "✅ Shared Hosting deployment completed safely!"

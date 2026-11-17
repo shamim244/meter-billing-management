@@ -1,0 +1,72 @@
+name: Deploy to Dedicated VPS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Rebuild Docker containers from scratch (--build)?'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  deploy-vps:
+    name: Deploy to VPS (Docker Compose)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH to Dedicated VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script_stop: true
+          envs: FORCE_REBUILD
+          FORCE_REBUILD: ${{ inputs.force_rebuild || 'false' }}
+          script: |
+            set -e
+            echo "🚀 Starting VPS Deployment in ${{ secrets.VPS_APP_DIR }}..."
+            cd ${{ secrets.VPS_APP_DIR }}
+
+            # 1. Fetch latest changes from GitHub
+            echo "📥 Pulling latest code..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            # 2. Check if Docker rebuild is requested or Dockerfile changed
+            if [ "$FORCE_REBUILD" = "true" ]; then
+              echo "🔨 Rebuilding containers as requested..."
+              docker compose up -d --build
+            else
+              echo "🔄 Starting/updating containers..."
+              docker compose up -d
+            fi
+
+            # 3. Install/Update PHP Dependencies inside container
+            echo "📦 Updating Composer dependencies..."
+            docker compose exec -T app composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+
+            # 4. Run database migrations safely
+            echo "🗄️ Running migrations..."
+            docker compose exec -T app php artisan migrate --force --no-interaction
+
+            # 5. Refresh cache and restart background workers
+            echo "⚡ Clearing framework caches..."
+            docker compose exec -T app php artisan optimize:clear
+
+            echo "🔁 Restarting application & queue workers..."
+            docker compose restart app queue scheduler
+
+            echo "✅ VPS Deployment completed successfully!"
